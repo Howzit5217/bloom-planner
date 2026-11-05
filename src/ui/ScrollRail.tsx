@@ -2,12 +2,15 @@ import { View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { scrollTo, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/theme/theme';
-import { Icon } from './Icon';
 
-const THUMB_H = 56;
-const THUMB_W = 48;
-/** How much of the handle tucks past the screen's edge, as in the game. */
-const TUCK = 12;
+/** The handle: a soft white tile, a little taller than wide, centred on the bar. */
+const THUMB_W = 54;
+const THUMB_H = 62;
+/** The bar: a thin lavender line with round ends. */
+const BAR_W = 4;
+/** Gap between the bar and the screen's edge. */
+const EDGE = 14;
+const LANE = THUMB_W;
 
 export interface Rail {
   y: SharedValue<number>;
@@ -37,15 +40,29 @@ export function useScrollRail(): Rail {
   return { y, content, view, vis, dragging, track };
 }
 
+/** One chevron as two thick, round-ended strokes meeting at a point (up or down). */
+function Chevron({ up, color }: { up: boolean; color: string }) {
+  const len = 13;
+  const thick = 4;
+  const tilt = up ? 40 : -40;
+  return (
+    <View style={{ width: 20, height: 11, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute', left: 1.5, width: len, height: thick, borderRadius: thick / 2, backgroundColor: color, transform: [{ rotate: `${-tilt}deg` }] }} />
+      <View style={{ position: 'absolute', right: 1.5, width: len, height: thick, borderRadius: thick / 2, backgroundColor: color, transform: [{ rotate: `${tilt}deg` }] }} />
+    </View>
+  );
+}
+
 /**
- * A scroll bar like Pikmin Bloom's: a thin lavender track down the right edge and a soft white
- * handle with up and down arrows that you can drag to fly through a long page.
+ * A scroll bar like Pikmin Bloom's: a thin lavender bar down the right of the page and a soft
+ * white handle centred on it, with an up and a down arrow, that you can drag to fly through a
+ * long page. Long pages only; it shows while scrolling and fades a moment after.
  */
 export function ScrollRail({ rail, scrollRef, top = 8, bottom = 8 }: { rail: Rail; scrollRef: AnimatedRef<any>; top?: number; bottom?: number }) {
   const { c } = useTheme();
   const start = useSharedValue(0);
-  const lavender = c.dark ? '#7075BE' : '#BFC2F2';
-  const arrow = c.dark ? '#A9ADF0' : '#A6AAEE';
+  const lavender = c.dark ? '#6F74C2' : '#C3C6F4';
+  const arrow = c.dark ? '#A7ABF2' : '#AEB2F0';
 
   const pan = usePanGesture({
     onActivate: () => {
@@ -78,34 +95,35 @@ export function ScrollRail({ rail, scrollRef, top = 8, bottom = 8 }: { rail: Rai
   });
 
   return (
-    <Animated.View pointerEvents="box-none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[{ position: 'absolute', right: 0, top, bottom, width: THUMB_W }, box]}>
-      <View pointerEvents="none" style={{ position: 'absolute', right: 3, top: 0, bottom: 0, width: 4, borderRadius: 2, backgroundColor: lavender }} />
+    <Animated.View
+      pointerEvents="box-none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      // A lane as wide as the handle, its middle on the bar: the handle always sits centred on it.
+      style={[{ position: 'absolute', right: EDGE - (LANE - BAR_W) / 2, top, bottom, width: LANE, alignItems: 'center' }, box]}
+    >
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, width: BAR_W, borderRadius: BAR_W / 2, backgroundColor: lavender }} />
       <GestureDetector gesture={pan}>
         <Animated.View
-          hitSlop={{ left: 12, top: 8, bottom: 8 }}
+          hitSlop={{ left: 10, right: 10, top: 8, bottom: 8 }}
           style={[
             {
               position: 'absolute',
               top: 0,
-              right: -TUCK,
-              width: THUMB_W + TUCK,
+              width: THUMB_W,
               height: THUMB_H,
-              borderRadius: THUMB_H / 2,
-              backgroundColor: c.card,
+              borderRadius: 22,
+              backgroundColor: c.dark ? c.card : '#FFFFFF',
               alignItems: 'center',
               justifyContent: 'center',
-              paddingRight: TUCK,
-              boxShadow: `0px 4px 16px 0px ${c.dark ? 'rgba(0,0,0,0.45)' : 'rgba(90,80,140,0.16)'}`,
+              gap: 7,
+              boxShadow: c.dark ? '0px 6px 22px 0px rgba(0,0,0,0.5)' : '0px 6px 24px 0px rgba(110,110,170,0.16), 0px 1px 3px 0px rgba(110,110,170,0.10)',
             },
             thumb,
           ]}
         >
-          <View style={{ marginBottom: -7 }}>
-            <Icon name="chevron-up" size={22} color={arrow} />
-          </View>
-          <View style={{ marginTop: -7 }}>
-            <Icon name="chevron-down" size={22} color={arrow} />
-          </View>
+          <Chevron up color={arrow} />
+          <Chevron up={false} color={arrow} />
         </Animated.View>
       </GestureDetector>
     </Animated.View>

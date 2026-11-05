@@ -37,6 +37,23 @@
         overscroll-behavior: none;
         -webkit-tap-highlight-color: transparent;
       }
+      /* A tap or click shows just the button: no focus box. Keyboard focus keeps a soft green ring. */
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      :focus:not(:focus-visible) {
+        outline: none;
+      }
+      [role='button']:focus-visible,
+      [role='switch']:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #5ba85a;
+        outline-offset: 2px;
+      }
+      input,
+      textarea {
+        outline: none;
+      }
       /* These styles make the root element full-height */
       #root {
         display: flex;

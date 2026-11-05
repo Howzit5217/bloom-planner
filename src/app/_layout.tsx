@@ -8,7 +8,7 @@ import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { MAX_APP_WIDTH } from '@/ui/layout';
-import { InstallHint } from '@/features/shared/InstallHint';
+import { HomeScreenOnly } from '@/features/shared/HomeScreenOnly';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useLifecycle } from '@/hooks/useLifecycle';
@@ -61,22 +61,23 @@ function Root() {
   return (
     <View style={{ flex: 1, backgroundColor: wide ? c.canvasDeep : c.canvas, alignItems: 'center' }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      {profile ? <Housekeeping /> : null}
-      <View style={{ flex: 1, width: '100%', maxWidth: MAX_APP_WIDTH, backgroundColor: c.canvas, overflow: 'hidden', boxShadow: wide ? `0px 0px 40px 0px ${c.shadow}` : undefined }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas }, animation: 'fade' }}>
-        <Stack.Protected guard={!profile}>
-          <Stack.Screen name="onboarding" />
-        </Stack.Protected>
-        <Stack.Protected guard={!!profile}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="climate" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="location" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="seasons" options={{ animation: 'slide_from_right' }} />
-        </Stack.Protected>
-      </Stack>
-      <InstallHint />
-      </View>
-      <CelebrationHost />
+      <HomeScreenOnly>
+        {profile ? <Housekeeping /> : null}
+        <View style={{ flex: 1, width: '100%', maxWidth: MAX_APP_WIDTH, backgroundColor: c.canvas, overflow: 'hidden', boxShadow: wide ? `0px 0px 40px 0px ${c.shadow}` : undefined }}>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas }, animation: 'fade' }}>
+            <Stack.Protected guard={!profile}>
+              <Stack.Screen name="onboarding" />
+            </Stack.Protected>
+            <Stack.Protected guard={!!profile}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="climate" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="location" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="seasons" options={{ animation: 'slide_from_right' }} />
+            </Stack.Protected>
+          </Stack>
+        </View>
+        <CelebrationHost />
+      </HomeScreenOnly>
     </View>
   );
 }

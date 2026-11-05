@@ -27,6 +27,12 @@
     }
   }
   * { box-sizing: border-box; }
+  /* Tapping a button shows just the button: no browser tap highlight or focus box. Keyboard focus
+     keeps a soft rounded outline in the app's green. */
+  html { -webkit-tap-highlight-color: transparent; }
+  a, button { -webkit-tap-highlight-color: transparent; outline: none; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--leaf); outline-offset: 3px; border-radius: 999px; }
+  .card a:focus-visible, .steps a:focus-visible, footer a:focus-visible { border-radius: 6px; }
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 17px/1.55 Nunito, system-ui, sans-serif; }
   a { color: var(--leaf-deep); font-weight: 700; }
@@ -86,8 +92,8 @@
           Download for Android
         </a>
         <a class="btn quiet" href="app/">
-          <span class="mdi mdi-apple" aria-hidden="true"></span>
-          Open on iPhone
+          <span class="mdi mdi-web" aria-hidden="true"></span>
+          Web App
         </a>
       </div>
       <div class="fine" id="release-line">Free. No ads, no account, no tracking.</div>
@@ -145,14 +151,14 @@
       </ol>
     </section>
 
-    <section id="iphone">
-      <h2>On iPhone</h2>
+    <section id="web">
+      <h2>Web App for iPhone and Computers</h2>
       <ol class="steps">
-        <li><span>Open <a href="app/">Bloom Planner on the web</a> in <strong>Safari</strong>. It's the same app, running in the browser: nothing to download.</span></li>
-        <li><span>Tap the Share button <span class="share mdi mdi-export-variant" aria-label="Share"></span> and choose <strong>Add to Home Screen</strong>.</span></li>
-        <li><span>Open it from the home screen. It runs full screen with its own icon, and your log stays on your iPhone.</span></li>
+        <li><span>Open <a href="app/">the web app</a>. On iPhone, use <strong>Safari</strong>.</span></li>
+        <li><span>Add it to the home screen. On iPhone, tap Share <span class="share mdi mdi-export-variant" aria-label="Share"></span> and then <strong>Add to Home Screen</strong>. On a computer, choose <strong>Install</strong> (Chrome, Edge) or <strong>Add to Dock</strong> (Safari).</span></li>
+        <li><span>Open it from the new icon. It runs full screen with its own icon, and only from there, so your log stays in one place.</span></li>
       </ol>
-      <p class="fine" style="margin-top: 14px">The web version has everything except evening reminders, which only the Android app can send. It also works on a computer, in any modern browser.</p>
+      <p class="fine" style="margin-top: 14px">The web app has everything except evening reminders, which only the Android app can send.</p>
     </section>
   </div>
 

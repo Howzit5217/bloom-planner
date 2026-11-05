@@ -28,17 +28,19 @@ published it shows a "Version X is ready" card on Home; tap it, download, and in
 Your log is kept. Corrected level data (`src/data/bloom-levels.json`) is picked up automatically,
 without reinstalling.
 
-### iPhone (and computers)
+### Web app (iPhone and computers)
 
-The same app runs on the web, with nothing to download:
+The same app runs on the web, with nothing to download. It runs only from the home screen (or as
+an installed app on a computer); in a browser tab it shows how to add it:
 
-1. Open **https://howzit5217.github.io/bloom-planner/app/** in Safari.
-2. Tap **Share**, then **Add to Home Screen**. (The app shows these two taps too.)
-3. Open it from the home screen: full screen, its own icon, no browser bars.
+1. Open **https://howzit5217.github.io/bloom-planner/app/** (on iPhone, in Safari).
+2. iPhone: tap **Share**, then **Add to Home Screen**. Computer: **Install** (Chrome, Edge) or
+   **Add to Dock** (Safari).
+3. Open it from the new icon: full screen, its own icon, no browser bars.
 
-Add it before setting up: Safari keeps a home-screen app's data apart from the browser's. The web
-version has everything except evening reminders, which only the Android app can send. On a
-computer it works in any modern browser, in a phone-width column; Chrome and Edge offer **Install**.
+Only from the icon, so the log lives in one place (Safari keeps a home-screen app's data apart from
+the browser's). Everything works except evening reminders, which only the Android app can send.
+`npx expo start` (development) skips the home-screen check.
 
 ## How the maths works
 
