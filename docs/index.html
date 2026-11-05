@@ -71,6 +71,7 @@
   .btn.quiet { background: var(--tile); color: var(--ink); }
   .btn svg { width: 24px; height: 24px; }
   .fine { margin-top: 12px; font-size: 14px; color: var(--ink-soft); }
+  .fine .release { font-weight: 700; color: var(--ink); margin-bottom: 2px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 10px 0 30px; }
   .card { background: var(--card); border-radius: 26px; padding: 22px; box-shadow: 0 4px 14px var(--shadow); }
   .card h3 { font-size: 21px; margin: 10px 0 4px; }
@@ -114,7 +115,10 @@
           Web App
         </a>
       </div>
-      <div class="fine" id="release-line">Free. No ads. No account. No tracking.</div>
+      <div class="fine">
+        <div class="release" id="release-version" hidden></div>
+        <div>Free. No ads. No account. No tracking.</div>
+      </div>
     </div>
 
     <section>
@@ -351,7 +355,10 @@
       if (!apk) return;
       document.getElementById('get-android').href = apk.browser_download_url;
       var mb = (apk.size / 1048576).toFixed(0);
-      document.getElementById('release-line').textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB · Free. No ads. No account. No tracking.';
+      // The version and size, from the newest release every time, on a line of their own.
+      var line = document.getElementById('release-version');
+      line.textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB';
+      line.hidden = false;
     })
     .catch(function () {});
 

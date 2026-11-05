@@ -1,10 +1,11 @@
 import { Canvas, Group, Path, rect, Skia, Text, type SkFont, type SkPath } from '@shopify/react-native-skia';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Text as RNText, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useDerivedValue, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import { fmt } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { font as fonts } from '@/theme/tokens';
+import { nextOnLoop, turnsOff } from './digitLoop';
 import { useGameFont } from './gameFont';
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
 }
 
 const DIGITS = '0123456789';
+/** The places drawn on each digit's wheel: a little over two turns of 0-9 round the usual 0..9. */
+const LOOP = Array.from({ length: 26 }, (_, i) => i - 8);
 
 interface Layout {
   width: number;
@@ -147,20 +150,37 @@ function GlyphOutline({ ch, x, y, font, sw, stroke }: { ch: string; x: number; y
   );
 }
 
-function DigitSlot({ x, w, digit, l, font, fill, stroke, index, rollIn, outline }: { x: number; w: number; digit: number; l: Layout; font: SkFont; fill: string; stroke: string; index: number; rollIn: boolean; outline: boolean }) {
+function DigitSlot({ x, w, digit, dir, l, font, fill, stroke, index, rollIn, outline }: { x: number; w: number; digit: number; dir: -1 | 0 | 1; l: Layout; font: SkFont; fill: string; stroke: string; index: number; rollIn: boolean; outline: boolean }) {
+  // The digit's place on its wheel (see digitLoop): it rolls the short way round, the same spring.
   const pos = useSharedValue(rollIn ? 0 : digit);
+  const place = useRef(rollIn ? 0 : digit);
+  const first = useRef(true);
   useEffect(() => {
-    pos.value = withDelay(index * 35, withSpring(digit, { damping: 15, stiffness: 110 }));
-  }, [digit, index, pos]);
-  const transform = useDerivedValue(() => [{ translateY: -pos.value * l.lineH }]);
+    let from = place.current;
+    // Back near 0..9 in whole turns (the same digit shows), so the drawn strip always covers it.
+    const off = turnsOff(from);
+    if (off !== 0) {
+      from -= off;
+      pos.set(pos.get() - off);
+    }
+    // Rolling in, a number counts up from 0; after that each digit rolls the way the number moved.
+    const to = first.current && rollIn ? digit : nextOnLoop(from, digit, dir);
+    first.current = false;
+    place.current = to;
+    pos.set(withDelay(index * 35, withSpring(to, { damping: 15, stiffness: 110 })));
+    // dir only says which way to roll a change of digit; it never starts a roll on its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [digit, index, pos, rollIn]);
+  const transform = useDerivedValue(() => [{ translateY: -(pos.value - LOOP[0]) * l.lineH }]);
   return (
     <Group clip={rect(x - l.sw, 0, w + l.sw * 2, l.height)}>
       <Group transform={transform}>
-        {DIGITS.split('').map((d, k) => {
+        {LOOP.map((k) => {
+          const d = DIGITS[((k % 10) + 10) % 10];
           const dx = x + (w - font.measureText(d).width) / 2;
-          const y = l.baseline + k * l.lineH;
+          const y = l.baseline + (k - LOOP[0]) * l.lineH;
           return (
-            <Group key={d}>
+            <Group key={k}>
               {outline ? <GlyphOutline ch={d} x={dx} y={y} font={font} sw={l.sw} stroke={stroke} /> : null}
               <Text x={dx} y={y} text={d} font={font} color={fill} />
             </Group>
@@ -176,6 +196,9 @@ export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = f
   const { c } = useTheme();
   const font = useGameFont(size);
   const text = format(value);
+  // Which way the number last moved, so every digit rolls that way round its wheel.
+  const [moved, setMoved] = useState({ value, dir: 0 as -1 | 0 | 1 });
+  if (value !== moved.value) setMoved({ value, dir: value > moved.value ? 1 : -1 });
   const l = useMemo(() => (font ? layout(font, text, size) : null), [font, text, size]);
   const f = fill ?? c.gameYellow;
   const s = stroke ?? c.gameOutline;
@@ -192,7 +215,7 @@ export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = f
       <Canvas style={{ width: l.width, height: l.height }}>
         {l.slots.map((slot) => {
           if (slot.digit != null) {
-            return <DigitSlot key={slot.key} x={slot.x} w={slot.w} digit={slot.digit} l={l} font={font} fill={f} stroke={s} index={digitIndex++} rollIn={rollIn} outline={outline} />;
+            return <DigitSlot key={slot.key} x={slot.x} w={slot.w} digit={slot.digit} dir={moved.dir} l={l} font={font} fill={f} stroke={s} index={digitIndex++} rollIn={rollIn} outline={outline} />;
           }
           return (
             <Group key={slot.key}>
