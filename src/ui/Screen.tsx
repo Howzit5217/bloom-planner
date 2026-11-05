@@ -1,8 +1,10 @@
 import { useIsFocused } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, RefreshControl, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
 import { EdgeFade } from './EdgeFade';
@@ -26,20 +28,31 @@ export function FocusFade({ children }: { children: ReactNode }) {
 }
 
 const PULL_FULL = 110;
+/** Home: where the field meets the sky, below the safe area (about the middle of the level badge). */
+const HORIZON = 190;
 /** Where the paper pages' sheet starts, below the safe area: the meadow strip shows above it. */
 const SHEET_TOP = 66;
 
+/** Light status-bar text under a night or stormy sky; the theme's otherwise. Only the focused page sets it. */
+function SkyStatusBar() {
+  const { isDark } = useTheme();
+  const look = useSkyLook();
+  const focused = useIsFocused();
+  return focused ? <StatusBar style={look.darkSky || isDark ? 'light' : 'dark'} /> : null;
+}
+
 /**
- * The paper pages' look: a strip of meadow along the top and a cream sheet over it that holds the
- * page. Everything scrolls inside the sheet, so nothing slides over the meadow or the status bar.
+ * The paper pages' look: a strip of sky and field along the top and a cream sheet over it that
+ * holds the page. Everything scrolls inside the sheet, so nothing slides over the sky or the status bar.
  */
 export function PaperSheet({ children }: { children: ReactNode }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   return (
     <View style={{ flex: 1, backgroundColor: c.canvas }}>
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, opacity: c.dark ? 0.9 : 1 }}>
-        <Meadow height={insets.top + SHEET_TOP + 26} density={1.2} />
+      <SkyStatusBar />
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
+        <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} />
       </View>
       <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>
         {children}
@@ -66,6 +79,7 @@ interface Props {
  */
 export function Screen({ children, backdrop = 'paper', onRefresh, header, bottomExtra }: Props) {
   const { c } = useTheme();
+  const look = useSkyLook();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const growth = useSharedValue(0);
@@ -90,6 +104,10 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
 
   const sprout = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: 0.7 + 0.3 * shown.value }] }));
   const rail = useScrollRail();
+  // Home: the sky scrolls away with the page until only the flower field is left.
+  const skyH = insets.top + HORIZON;
+  const scene = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.min(skyH, Math.max(0, rail.y.value)) }] }));
+  const skyFade = useAnimatedStyle(() => ({ opacity: 1 - Math.min(1, Math.max(0, rail.y.value) / skyH) }));
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const pullGrows = !!onRefresh && Platform.OS === 'ios';
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -133,10 +151,12 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   if (backdrop === 'paper') return <PaperSheet>{scroller}</PaperSheet>;
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.meadowBottom }}>
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-        <Meadow height={height + 40} density={0.95} />
-      </View>
+    <View style={{ flex: 1, backgroundColor: look.groundNear }}>
+      <SkyStatusBar />
+      {/* Sky behind the level badge, the field from there down; tall enough to fill once the sky has gone. */}
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0 }, scene]}>
+        <Meadow height={height + skyH + 40} horizon={skyH} density={1.05} />
+      </Animated.View>
       {onRefresh ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 2, left: 0, right: 0, alignItems: 'center', zIndex: 2 }, sprout]}>
           <Seedling growth={growth} size={70} />
@@ -144,7 +164,10 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
       ) : null}
       {scroller}
       {/* Cards scroll up under a soft fade, never into the clock and battery. */}
-      <EdgeFade edge="top" color={c.meadowTop} height={insets.top + 14} />
+      <EdgeFade edge="top" color={look.groundFar} height={insets.top + 14} />
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 15 }, skyFade]}>
+        <EdgeFade edge="top" color={look.top} height={insets.top + 14} />
+      </Animated.View>
       {bottomExtra}
     </View>
   );

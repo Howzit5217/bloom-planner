@@ -58,7 +58,7 @@ export default function Progress() {
     </Card>,
     <Card key="timeline">
       <T v="h3">{t('Level Timeline')}</T>
-      <T v="small" soft style={{ marginBottom: 8 }}>
+      <T v="small" soft style={{ marginBottom: 12 }}>
         {t('Dates with ~ are projected.')}
       </T>
       <View style={{ marginHorizontal: -18 }}>

@@ -19,6 +19,11 @@ import { Stepper } from '@/ui/Stepper';
 import { T } from '@/ui/T';
 import { useT } from '@/i18n';
 
+const customActive = (dash: Dashboard) => !!dash.custom && !dash.custom.reached && !dash.custom.passed;
+/** Whether Home shows the new-goal card, or the custom goal's progress. */
+export const showsNewGoal = (dash: Dashboard) => (dash.phase === 'maxed' ? !customActive(dash) : dash.phase === 'goalReached' || dash.phase === 'datePassed');
+export const showsCustomGoal = (dash: Dashboard) => dash.phase === 'maxed' && customActive(dash);
+
 /**
  * Asks for the next goal once one is done (or its date has gone by). Below the top level that's a
  * level and a date; at the top level it's the user's own steps and flowers by a date.

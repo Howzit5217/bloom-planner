@@ -10,6 +10,10 @@ bike, and when each level should land, with your local weather built in. Missed 
 in later. Reached the goal? It asks for the next one, and at the top level the goal is your own
 steps and flowers by a date.
 
+Behind it all, a field of grass and flowers under a sky that follows the real sunrise, sunset and
+weather where you play (worked out on the phone, with current weather from Open-Meteo); without a
+location, a clear day from 6:30 to 18:30.
+
 It speaks the same ten languages as Pikmin Bloom, plans for walking only if you don't bike, and
 grades every goal with a flower: white for an easy plan, then yellow, red, and blue for the hardest.
 

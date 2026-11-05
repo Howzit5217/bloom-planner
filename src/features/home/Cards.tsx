@@ -247,6 +247,10 @@ function Big({ value, label }: { value: number; label: string }) {
 }
 
 /** How much movement today's targets imply. */
+/** Whether each Home card has anything to show: Home leaves out the rest, so the gaps stay even. */
+export const showsTimeCard = (dash: Dashboard) => dash.phase === 'active' && dash.plan.status === 'ok';
+export const showsMilestoneCard = (dash: Dashboard) => dash.phase === 'active' && (dash.replay.readyToLevel || (!!dash.nextMilestone && dash.plan.status === 'ok'));
+
 export function TimeCard({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
   const { t } = useT();
