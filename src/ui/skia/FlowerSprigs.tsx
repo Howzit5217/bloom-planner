@@ -6,7 +6,7 @@ import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { FlowerHead } from './FlowerHead';
 import { leafPath, mixHex, stemPath } from './shapes';
-import { geometry, layout, leafAngle, sideLayout, type Sprig } from './sprigLayout';
+import { geometry, headOf, layout, leafAngle, sideLayout, type Sprig } from './sprigLayout';
 
 /** Pikmin Bloom's flower colours for the sprigs: red, yellow, white and blue. */
 export const SPRIG_COLORS = (c: Palette) => [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
@@ -49,7 +49,7 @@ function SprigView({ s, grow, clock, c }: { s: Sprig; grow: SharedValue<number>;
         const p = pointAt(l.at);
         return <Leaf key={i} path={leaf} x={p.x} y={p.y} angle={leafAngle(p.along, l.side)} side={l.side} size={l.size} at={l.at} delay={s.delay} grow={grow} color={leafColor} />;
       })}
-      <FlowerHead r={s.r} color={s.color} rot={s.rot} transform={head} />
+      <FlowerHead r={headOf(s)} color={s.color} rot={s.rot} transform={head} />
     </Group>
   );
 }

@@ -12,7 +12,10 @@ export interface Sprig {
   len: number;
   lean: number;
   bend: number;
+  /** The sprig's scale: its stem's width and its leaves go by it, and its head too unless `headR`. */
   r: number;
+  /** The head's radius, when it's bigger than `r` (the side sprigs' heads are 1.6 times). */
+  headR?: number;
   color: string;
   rot: number;
   delay: number;
@@ -26,13 +29,17 @@ export interface Sprig {
 
 type Draft = Omit<Sprig, 'leafLen' | 'leafWid' | 'stemW'>;
 
+/** A sprig's head radius. */
+export const headOf = (s: Pick<Sprig, 'r' | 'headR'>) => s.headR ?? s.r;
+
 /** Give a sprig its own leaf shape and stem, and fit its leaves below the head so they always show. */
 function finish(d: Draft, rand: () => number): Sprig {
   const leafLen = 1.45 + rand() * 0.45;
   const leafWid = 0.3 + rand() * 0.14;
   const stemW = 0.36 + rand() * 0.14;
-  // A leaf's tip rises about 0.62 of its length; keep that below the head, with a little air.
-  const room = (at: number) => (1 - at) * d.len - d.r * 1.2;
+  // A leaf's tip rises about 0.62 of its length; keep that below the head, with a little air (a
+  // big head may just overlap a leaf's tip, as if the leaf were tucked behind it).
+  const room = (at: number) => (1 - at) * d.len - Math.max(d.r * 1.2, headOf(d) * 0.85);
   const leaves: Sprig['leaves'] = [];
   for (const l of [...d.leaves].sort((a, b) => a.at - b.at)) {
     const at = Math.max(0.16, Math.min(l.at, 0.85));
@@ -86,7 +93,7 @@ export interface Disc {
 /** A sprig roughly as a few discs (head, stem, leaves) on the canvas, to keep sprigs off each other. */
 export function discsOf(s: Sprig): Disc[] {
   const g = geometry(s);
-  const out: Disc[] = [{ x: s.x + g.top.x, y: s.y + g.top.y, r: s.r * 1.05, head: true }];
+  const out: Disc[] = [{ x: s.x + g.top.x, y: s.y + g.top.y, r: headOf(s) * 1.05, head: true }];
   const stemR = Math.max(3.5, s.r * s.stemW) / 2 + 1;
   for (let i = 1; i <= 12; i++) {
     const p = g.pointAt(i / 13);
@@ -184,9 +191,12 @@ export function sideLayout(w: number, h: number, seed: number, colors: string[])
   const rand = rng(seed);
   const { left, right } = sideCounts(seed, h);
   const n = left + right;
-  // Head heights, top to bottom: spread over the lower part of the page, a little uneven.
-  const top = Math.max(h * 0.2, 34);
-  const bottom = h * 0.78;
+  // Fuller heads, 1.6 times the stem's scale (the stems stay as they were), as the page's room allows.
+  const headMax = Math.min(39, h * 0.21);
+  // Head heights, top to bottom: spread over the lower part of the page, a little uneven, and
+  // every head clear of the top and bottom (with room to sway).
+  const top = Math.max(h * 0.2, headMax + 7);
+  const bottom = Math.min(h * 0.78, h - headMax - 6);
   const spacing = (bottom - top) / n;
   const wobble = Math.max(0, spacing - 46);
   const heights = Array.from({ length: n }, (_, i) => top + spacing * (i + 0.5) + (rand() - 0.5) * wobble);
@@ -215,6 +225,7 @@ export function sideLayout(w: number, h: number, seed: number, colors: string[])
     const x = dir === 1 ? -4 : w + 4;
     for (let attempt = 0; attempt < 40; attempt++) {
       const r = Math.min(17 + rand() * 7, h * 0.14);
+      const headR = Math.min(r * 1.6, headMax);
       const lean = dir * (0.72 + rand() * 0.5);
       const rise = Math.cos(lean);
       // Short and long, so the heads reach in by different amounts; the base stays low on the edge.
@@ -224,6 +235,8 @@ export function sideLayout(w: number, h: number, seed: number, colors: string[])
       if (hy + rise * len > yMax) len = (yMax - hy) / rise;
       if (hy + rise * len < yMin) len = (yMin - hy) / rise;
       if (len < r * 2.2 || len > w * 0.36) continue;
+      // Far enough in that the whole head is on the screen (the base is just off its edge).
+      if (Math.abs(Math.sin(lean)) * len < headR + 8) continue;
       const s = finish(
         {
           x,
@@ -232,6 +245,7 @@ export function sideLayout(w: number, h: number, seed: number, colors: string[])
           lean,
           bend: dir * (0.3 + rand() * 0.32),
           r,
+          headR,
           color: colors[ci],
           rot: rand() * Math.PI,
           delay: 0.12 * i + rand() * 0.1,

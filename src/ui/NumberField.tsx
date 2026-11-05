@@ -76,10 +76,12 @@ export function NumberField({ label, value, onChange, placeholder, hint, size = 
           placeholderTextColor={c.inkSoft + '88'}
           maxLength={12}
           selectionColor={c.leaf}
-          style={{ flex: 1, fontFamily: font.heading, fontSize: fs, color: c.leafDeep, paddingVertical: 6, includeFontPadding: false }}
+          // minWidth 0: on the web an input is about 20 characters wide by default, which pushed the
+          // unit off the edge of the screen.
+          style={{ flex: 1, minWidth: 0, fontFamily: font.heading, fontSize: fs, color: c.leafDeep, paddingVertical: 6, includeFontPadding: false }}
         />
         {suffix ? (
-          <T v="smallBold" soft>
+          <T v="smallBold" soft style={{ flexShrink: 0, marginLeft: 10 }}>
             {suffix}
           </T>
         ) : null}

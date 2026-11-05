@@ -710,6 +710,7 @@ function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: str
       onPress={onPress}
       style={({ pressed }) => ({
         flexDirection: 'row',
+        alignItems: 'center',
         gap: 14,
         padding: 18,
         borderRadius: radius.card,
@@ -721,11 +722,14 @@ function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: str
       <Animated.View style={[{ width: 52, height: 52, borderRadius: 26, backgroundColor: on ? c.leaf : c.canvasDeep, alignItems: 'center', justifyContent: 'center' }, popStyle]}>
         <Icon name={icon} size={28} color={on ? '#FFFFFF' : c.leafDeep} />
       </Animated.View>
-      <View style={{ flex: 1, gap: 4 }}>
+      {/* Centered beside the icon; a title on its own has no empty line under it. */}
+      <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
         <T v="h3">{title}</T>
-        <T v="small" soft>
-          {text}
-        </T>
+        {text ? (
+          <T v="small" soft>
+            {text}
+          </T>
+        ) : null}
       </View>
     </Pressable>
   );
