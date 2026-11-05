@@ -8,6 +8,7 @@ import { questOf } from '@/engine/quest';
 import type { Dashboard } from '@/engine/summary';
 import type { DayEntry, OutMode } from '@/engine/types';
 import { QUEST_ICON, questToGoLabel } from '@/features/shared/quest';
+import { ScreenshotButton } from '@/features/shared/ScreenshotButton';
 import { useApp } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { font, radius } from '@/theme/tokens';
@@ -43,6 +44,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const { t } = useT();
   const save = useApp((s) => s.saveEntry);
   const profile = useApp((s) => s.profile);
+  const updateProfile = useApp((s) => s.updateProfile);
   const entries = useApp((s) => s.entries);
   // The top level the game has right now (130 today; more as they're released).
   const maxLevel = useApp((s) => s.table.maxLevel);
@@ -203,6 +205,24 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
           </View>
         ) : (
           <View style={{ gap: 14 }}>
+            {/* A profile screenshot fills in what's left, and a level-up if the game is past the log. */}
+            <ScreenshotButton
+              name={profile?.playerName ?? null}
+              onName={(n) => void updateProfile({ playerName: n })}
+              req={dash.req}
+              maxLevel={maxLevel}
+              onRead={(shot) => {
+                if (shot.level != null && shot.level > baseLevel) {
+                  setLeveled(true);
+                  setNewLevel(Math.min(maxLevel, shot.level));
+                }
+                if (shot.stepsToGo != null && shot.stepsToGo > 0) setSyncSteps(shot.stepsToGo);
+                if (shot.flowersToGo != null) setSyncFlowers(shot.flowersToGo);
+                if (shot.quest) setQuestLeft(shot.quest.toGo);
+                // The daily log keeps these under More, in Match the game.
+                if (!left) setMore(true);
+              }}
+            />
             {!isToday && profile ? <DateField label={t('Day')} value={date} onChange={onPickDay} minimumDate={fromKey(profile.startDate)} maximumDate={fromKey(dash.today)} /> : null}
             {targetLine ? (
               <T v="small" soft>

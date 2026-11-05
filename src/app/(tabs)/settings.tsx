@@ -33,6 +33,7 @@ import { FlowerAccent } from '@/ui/skia/FlowerAccent';
 import { Stepper } from '@/ui/Stepper';
 import { T } from '@/ui/T';
 import { fmtClock, TimeWheel } from '@/ui/TimeWheel';
+import { TextField } from '@/ui/TextField';
 import { Toggle } from '@/ui/Toggle';
 import { LANGS, tk, useT } from '@/i18n';
 
@@ -95,6 +96,7 @@ export default function Settings() {
   const [timeSheet, setTimeSheet] = useState(false);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
   const [checking, setChecking] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
   // A goal change is checked first: a reasonable one saves (a moment after you stop sliding),
   // an unreasonable one stays here as a draft with the earliest date that would work.
   const [goalDraft, setGoalDraft] = useState<{
@@ -195,6 +197,16 @@ export default function Settings() {
       </Section>
 
       <Section title={t('Daily Log')} icon="notebook-edit-outline">
+        <TextField
+          label={t('Your name in Pikmin Bloom')}
+          value={nameDraft ?? profile.playerName ?? ''}
+          onChange={(v) => {
+            setNameDraft(v);
+            void st.updateProfile({ playerName: v.trim() || null });
+          }}
+          placeholder={t('As on your profile')}
+          hint={t('Screenshots of your profile are checked against this name.')}
+        />
         <Segmented<LogMode>
           label={t('Log each day by')}
           value={st.settings.logMode}

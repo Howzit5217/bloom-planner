@@ -20,6 +20,8 @@ import { SeasonSliders } from '@/features/shared/SeasonSliders';
 import { useApp } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
+import { ScreenshotButton } from '@/features/shared/ScreenshotButton';
+import { TextField } from '@/ui/TextField';
 import { Card } from '@/ui/Card';
 import { DateField } from '@/ui/DateField';
 import { EdgeFade } from '@/ui/EdgeFade';
@@ -114,6 +116,7 @@ export function Wizard() {
   const [climatePick, setClimatePick] = useState<ClimateResult | null>(null);
   const [seasons, setSeasons] = useState<{ rates: SeasonRate[]; location: PlayLocation | null; climate: ClimateCache | null } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [playerName, setPlayerName] = useState('');
 
   const next = req(level + 1)!;
   // A blank field means nothing entered yet: show the ring empty, not full.
@@ -229,6 +232,7 @@ export function Wizard() {
       },
       createdAt: new Date().toISOString(),
       startDate: today,
+      playerName: playerName.trim() || null,
     };
     const s = seasons ?? { rates: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const })), location: null, climate: null };
     await complete({ profile, seasonRates: s.rates, location: s.location, climate: s.climate });
@@ -256,6 +260,24 @@ export function Wizard() {
         return (
           <View>
             <Title sub={t('The level on your profile right now.')}>{t('Where Are You Now?')}</Title>
+            <View style={{ gap: 12, marginBottom: 16 }}>
+              <TextField label={t('Your name in Pikmin Bloom')} value={playerName} onChange={setPlayerName} placeholder={t('As on your profile')} />
+              {/* A screenshot of the profile fills in the level, and what's left on the next page. */}
+              <ScreenshotButton
+                name={playerName.trim() || null}
+                onName={setPlayerName}
+                req={req}
+                maxLevel={table.maxLevel}
+                onRead={(shot) => {
+                  if (shot.level != null && shot.level < table.maxLevel) pickLevel(shot.level);
+                  setRemainingMode(true);
+                  if (shot.stepsToGo != null) setStepsVal(shot.stepsToGo);
+                  if (shot.flowersToGo != null) setFlowersVal(shot.flowersToGo);
+                  // Up to level 100 the profile's total carries a head start into the next level.
+                  if (shot.totalSteps != null && shot.level != null && req(shot.level + 1)?.stepsMode === 'lifetime') setLifetime(shot.totalSteps);
+                }}
+              />
+            </View>
             <Stepper label={t('Current level')} value={level} min={1} max={table.maxLevel - 1} onChange={pickLevel} />
             <Card style={{ marginTop: 18 }}>
               <T v="bodyBold">

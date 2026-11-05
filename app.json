@@ -51,6 +51,14 @@
       "expo-web-browser",
       "expo-sharing",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Bloom Planner opens the screenshot you pick, to read your level and what's left. It stays on your phone.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",

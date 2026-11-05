@@ -113,6 +113,8 @@ export interface Profile {
   startDate: string;
   /** At the top level: the user's own steps-and-flowers goal. */
   customGoal?: CustomGoal | null;
+  /** The player's name in Pikmin Bloom: screenshots are checked against it. */
+  playerName?: string | null;
 }
 
 /** A goal past the top level: so many steps and flowers between two dates (yyyy-MM-dd, inclusive). */
