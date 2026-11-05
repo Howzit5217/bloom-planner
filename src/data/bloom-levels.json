@@ -1,0 +1,1211 @@
+{
+ "$schema": "bloom-levels/2",
+ "version": 2,
+ "description": "Pikmin Bloom level-up requirements. Each entry is what must be done WHILE AT level-1 to REACH that level. 'steps' and 'flowers' are per-level amounts. 'cumulativeSteps' (levels 3-100) is the lifetime total the game asks for ('Walk a total of X steps').",
+ "sourceUrl": "https://www.pikminwiki.com/Level",
+ "retrieved": "2026-11-04",
+ "maxLevel": 130,
+ "rules": {
+  "stepsCarryOver": "Levels 3-100 use a lifetime step total, so extra steps count toward the next level. From level 101 the task is 'Walk X steps' at that level: extra steps do NOT carry over (confirmed by players on the official Pikmin Bloom support forum, 2026-01, and consistent with the game).",
+  "flowersCarryOver": "Never. Every 'Plant X flowers' task counts only flowers planted while at that level."
+ },
+ "notes": [
+  "Levels 1-100: checked row by row against the wiki on 2026-11-04 (steps, lifetime totals, flowers, tasks). All match.",
+  "Level 111: verified in the game (Lv 110 profile shows Walk 479,200 steps / Plant 294,900 flowers).",
+  "Levels 113-123: the wiki lists these one row early. Its rows 110 and 112-122 were added by players recording what their profile showed AT that level, which is the requirement for the NEXT level. This file shifts them to the level they unlock. The wiki's row 111 (479,300) was a +500/+300 guess and is not used.",
+  "Levels 110, 112 and 124-130 are estimates from a single growth model that reproduces every observed 101+ value: requirement(L) = floor100(base x 1.0009875^(L-101)), base 474,577 steps / 292,069 flowers. It matches all 21 flower values exactly and all step values within 100.",
+  "The level cap rose from 100 to 130 on 2025-05-12 (wiki, citing @PikminBloom).",
+  "The app lets the user override any level with what the game actually shows."
+ ],
+ "extrapolation": {
+  "method": "geometric",
+  "anchorLevel": 101,
+  "stepsBase": 474577,
+  "flowersBase": 292069,
+  "ratio": 1.0009875,
+  "rounding": "floor100"
+ },
+ "levels": [
+  {
+   "level": 1,
+   "flowers": 0,
+   "task": "Tutorial",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 0
+  },
+  {
+   "level": 2,
+   "flowers": 0,
+   "task": "Tutorial",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 0
+  },
+  {
+   "level": 3,
+   "flowers": 0,
+   "task": "Grow 3 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 500,
+   "cumulativeSteps": 500
+  },
+  {
+   "level": 4,
+   "flowers": 0,
+   "task": "Complete 1 expedition",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 1000,
+   "cumulativeSteps": 1500
+  },
+  {
+   "level": 5,
+   "flowers": 0,
+   "task": "Grow a Blue Seedling",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 1500,
+   "cumulativeSteps": 3000
+  },
+  {
+   "level": 6,
+   "flowers": 0,
+   "task": "Grow 1 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 2000,
+   "cumulativeSteps": 5000
+  },
+  {
+   "level": 7,
+   "flowers": 10,
+   "task": "Pick 20 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 2500,
+   "cumulativeSteps": 7500
+  },
+  {
+   "level": 8,
+   "flowers": 0,
+   "task": "Grow a Purple Seedling",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 3000,
+   "cumulativeSteps": 10500
+  },
+  {
+   "level": 9,
+   "flowers": 0,
+   "task": "Destroy 1 mushroom",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 3500,
+   "cumulativeSteps": 14000
+  },
+  {
+   "level": 10,
+   "flowers": 0,
+   "task": "Grow a White Seedling",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 4000,
+   "cumulativeSteps": 18000
+  },
+  {
+   "level": 11,
+   "flowers": 0,
+   "task": "Grow a Pink Seedling",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 5000,
+   "cumulativeSteps": 23000
+  },
+  {
+   "level": 12,
+   "flowers": 0,
+   "task": "Grow a Gray Seedling",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 6000,
+   "cumulativeSteps": 29000
+  },
+  {
+   "level": 13,
+   "flowers": 100,
+   "task": "Pick 50 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 7000,
+   "cumulativeSteps": 36000
+  },
+  {
+   "level": 14,
+   "flowers": 0,
+   "task": "Complete 3 expedition(s)",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 8000,
+   "cumulativeSteps": 44000
+  },
+  {
+   "level": 15,
+   "flowers": 0,
+   "task": "Destroy 3 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 9000,
+   "cumulativeSteps": 53000
+  },
+  {
+   "level": 16,
+   "flowers": 0,
+   "task": "Grow 3 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 10000,
+   "cumulativeSteps": 63000
+  },
+  {
+   "level": 17,
+   "flowers": 0,
+   "task": "Complete 5 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 11000,
+   "cumulativeSteps": 74000
+  },
+  {
+   "level": 18,
+   "flowers": 200,
+   "task": "Pick 100 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 12000,
+   "cumulativeSteps": 86000
+  },
+  {
+   "level": 19,
+   "flowers": 0,
+   "task": "Destroy 3 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 13000,
+   "cumulativeSteps": 99000
+  },
+  {
+   "level": 20,
+   "flowers": 0,
+   "task": "Grow 5 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 14000,
+   "cumulativeSteps": 113000
+  },
+  {
+   "level": 21,
+   "flowers": 0,
+   "task": "Complete 10 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 15000,
+   "cumulativeSteps": 128000
+  },
+  {
+   "level": 22,
+   "flowers": 0,
+   "task": "Pick 150 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 16000,
+   "cumulativeSteps": 144000
+  },
+  {
+   "level": 23,
+   "flowers": 500,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 17000,
+   "cumulativeSteps": 161000
+  },
+  {
+   "level": 24,
+   "flowers": 0,
+   "task": "Grow 5 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 18000,
+   "cumulativeSteps": 179000
+  },
+  {
+   "level": 25,
+   "flowers": 0,
+   "task": "Destroy 5 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 19000,
+   "cumulativeSteps": 198000
+  },
+  {
+   "level": 26,
+   "flowers": 0,
+   "task": "Pick 200 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 20000,
+   "cumulativeSteps": 218000
+  },
+  {
+   "level": 27,
+   "flowers": 1500,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 21000,
+   "cumulativeSteps": 239000
+  },
+  {
+   "level": 28,
+   "flowers": 0,
+   "task": "Complete 10 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 22000,
+   "cumulativeSteps": 261000
+  },
+  {
+   "level": 29,
+   "flowers": 0,
+   "task": "Pick 250 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 23000,
+   "cumulativeSteps": 284000
+  },
+  {
+   "level": 30,
+   "flowers": 3000,
+   "task": "Clear 7 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 24000,
+   "cumulativeSteps": 308000
+  },
+  {
+   "level": 31,
+   "flowers": 0,
+   "task": "Grow 5 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 25000,
+   "cumulativeSteps": 333000
+  },
+  {
+   "level": 32,
+   "flowers": 0,
+   "task": "Pick 300 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 26000,
+   "cumulativeSteps": 359000
+  },
+  {
+   "level": 33,
+   "flowers": 6000,
+   "task": "Grow 10 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 27000,
+   "cumulativeSteps": 386000
+  },
+  {
+   "level": 34,
+   "flowers": 0,
+   "task": "Complete 15 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 28000,
+   "cumulativeSteps": 414000
+  },
+  {
+   "level": 35,
+   "flowers": 0,
+   "task": "Grow 10 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 29000,
+   "cumulativeSteps": 443000
+  },
+  {
+   "level": 36,
+   "flowers": 0,
+   "task": "Pick 350 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 30000,
+   "cumulativeSteps": 473000
+  },
+  {
+   "level": 37,
+   "flowers": 8000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 31000,
+   "cumulativeSteps": 504000
+  },
+  {
+   "level": 38,
+   "flowers": 0,
+   "task": "Grow 10 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 32000,
+   "cumulativeSteps": 536000
+  },
+  {
+   "level": 39,
+   "flowers": 0,
+   "task": "Pick 400 flower petals",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 33000,
+   "cumulativeSteps": 569000
+  },
+  {
+   "level": 40,
+   "flowers": 10000,
+   "task": "Clear 10 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 34000,
+   "cumulativeSteps": 603000
+  },
+  {
+   "level": 41,
+   "flowers": 0,
+   "task": "Grow 15 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 35000,
+   "cumulativeSteps": 638000
+  },
+  {
+   "level": 42,
+   "flowers": 11000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 36000,
+   "cumulativeSteps": 674000
+  },
+  {
+   "level": 43,
+   "flowers": 12000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 37000,
+   "cumulativeSteps": 711000
+  },
+  {
+   "level": 44,
+   "flowers": 0,
+   "task": "Grow 15 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 38000,
+   "cumulativeSteps": 749000
+  },
+  {
+   "level": 45,
+   "flowers": 12000,
+   "task": "Complete 15 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 39000,
+   "cumulativeSteps": 788000
+  },
+  {
+   "level": 46,
+   "flowers": 0,
+   "task": "Grow 20 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 40000,
+   "cumulativeSteps": 828000
+  },
+  {
+   "level": 47,
+   "flowers": 13000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 41000,
+   "cumulativeSteps": 869000
+  },
+  {
+   "level": 48,
+   "flowers": 0,
+   "task": "Grow 20 Pikmin",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 42000,
+   "cumulativeSteps": 911000
+  },
+  {
+   "level": 49,
+   "flowers": 14000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 44000,
+   "cumulativeSteps": 955000
+  },
+  {
+   "level": 50,
+   "flowers": 14000,
+   "task": "Clear 15 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 45000,
+   "cumulativeSteps": 1000000
+  },
+  {
+   "level": 51,
+   "flowers": 15000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 47000,
+   "cumulativeSteps": 1047000
+  },
+  {
+   "level": 52,
+   "flowers": 16000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 50000,
+   "cumulativeSteps": 1097000
+  },
+  {
+   "level": 53,
+   "flowers": 16000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 53000,
+   "cumulativeSteps": 1150000
+  },
+  {
+   "level": 54,
+   "flowers": 17000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 56000,
+   "cumulativeSteps": 1206000
+  },
+  {
+   "level": 55,
+   "flowers": 18000,
+   "task": "Complete 20 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 59000,
+   "cumulativeSteps": 1265000
+  },
+  {
+   "level": 56,
+   "flowers": 19000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 62000,
+   "cumulativeSteps": 1327000
+  },
+  {
+   "level": 57,
+   "flowers": 20000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 65000,
+   "cumulativeSteps": 1392000
+  },
+  {
+   "level": 58,
+   "flowers": 21000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 68000,
+   "cumulativeSteps": 1460000
+  },
+  {
+   "level": 59,
+   "flowers": 22000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 70000,
+   "cumulativeSteps": 1530000
+  },
+  {
+   "level": 60,
+   "flowers": 23000,
+   "task": "Clear 20 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 75000,
+   "cumulativeSteps": 1605000
+  },
+  {
+   "level": 61,
+   "flowers": 25000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 80000,
+   "cumulativeSteps": 1685000
+  },
+  {
+   "level": 62,
+   "flowers": 26000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 85000,
+   "cumulativeSteps": 1770000
+  },
+  {
+   "level": 63,
+   "flowers": 28000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 90000,
+   "cumulativeSteps": 1860000
+  },
+  {
+   "level": 64,
+   "flowers": 29000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 95000,
+   "cumulativeSteps": 1955000
+  },
+  {
+   "level": 65,
+   "flowers": 31000,
+   "task": "Complete 30 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 100000,
+   "cumulativeSteps": 2055000
+  },
+  {
+   "level": 66,
+   "flowers": 32000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 105000,
+   "cumulativeSteps": 2160000
+  },
+  {
+   "level": 67,
+   "flowers": 34000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 110000,
+   "cumulativeSteps": 2270000
+  },
+  {
+   "level": 68,
+   "flowers": 35000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 115000,
+   "cumulativeSteps": 2385000
+  },
+  {
+   "level": 69,
+   "flowers": 37000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 120000,
+   "cumulativeSteps": 2505000
+  },
+  {
+   "level": 70,
+   "flowers": 38000,
+   "task": "Clear 25 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 125000,
+   "cumulativeSteps": 2630000
+  },
+  {
+   "level": 71,
+   "flowers": 40000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 130000,
+   "cumulativeSteps": 2760000
+  },
+  {
+   "level": 72,
+   "flowers": 41000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 135000,
+   "cumulativeSteps": 2895000
+  },
+  {
+   "level": 73,
+   "flowers": 43000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 140000,
+   "cumulativeSteps": 3035000
+  },
+  {
+   "level": 74,
+   "flowers": 44000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 145000,
+   "cumulativeSteps": 3180000
+  },
+  {
+   "level": 75,
+   "flowers": 46000,
+   "task": "Complete 40 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 150000,
+   "cumulativeSteps": 3330000
+  },
+  {
+   "level": 76,
+   "flowers": 47000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 155000,
+   "cumulativeSteps": 3485000
+  },
+  {
+   "level": 77,
+   "flowers": 49000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 160000,
+   "cumulativeSteps": 3645000
+  },
+  {
+   "level": 78,
+   "flowers": 50000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 165000,
+   "cumulativeSteps": 3810000
+  },
+  {
+   "level": 79,
+   "flowers": 52000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 170000,
+   "cumulativeSteps": 3980000
+  },
+  {
+   "level": 80,
+   "flowers": 55000,
+   "task": "Clear 30 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 180000,
+   "cumulativeSteps": 4160000
+  },
+  {
+   "level": 81,
+   "flowers": 58000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 190000,
+   "cumulativeSteps": 4350000
+  },
+  {
+   "level": 82,
+   "flowers": 61000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 200000,
+   "cumulativeSteps": 4550000
+  },
+  {
+   "level": 83,
+   "flowers": 64000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 210000,
+   "cumulativeSteps": 4760000
+  },
+  {
+   "level": 84,
+   "flowers": 67000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 220000,
+   "cumulativeSteps": 4980000
+  },
+  {
+   "level": 85,
+   "flowers": 70000,
+   "task": "Complete 60 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 230000,
+   "cumulativeSteps": 5210000
+  },
+  {
+   "level": 86,
+   "flowers": 73000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 240000,
+   "cumulativeSteps": 5450000
+  },
+  {
+   "level": 87,
+   "flowers": 76000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 250000,
+   "cumulativeSteps": 5700000
+  },
+  {
+   "level": 88,
+   "flowers": 79000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 260000,
+   "cumulativeSteps": 5960000
+  },
+  {
+   "level": 89,
+   "flowers": 82000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 270000,
+   "cumulativeSteps": 6230000
+  },
+  {
+   "level": 90,
+   "flowers": 85000,
+   "task": "Clear 40 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 280000,
+   "cumulativeSteps": 6510000
+  },
+  {
+   "level": 91,
+   "flowers": 88000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 290000,
+   "cumulativeSteps": 6800000
+  },
+  {
+   "level": 92,
+   "flowers": 91000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 300000,
+   "cumulativeSteps": 7100000
+  },
+  {
+   "level": 93,
+   "flowers": 94000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 310000,
+   "cumulativeSteps": 7410000
+  },
+  {
+   "level": 94,
+   "flowers": 97000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 320000,
+   "cumulativeSteps": 7730000
+  },
+  {
+   "level": 95,
+   "flowers": 100000,
+   "task": "Complete 90 expeditions",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 330000,
+   "cumulativeSteps": 8060000
+  },
+  {
+   "level": 96,
+   "flowers": 105000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 340000,
+   "cumulativeSteps": 8400000
+  },
+  {
+   "level": 97,
+   "flowers": 110000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 360000,
+   "cumulativeSteps": 8760000
+  },
+  {
+   "level": 98,
+   "flowers": 115000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 380000,
+   "cumulativeSteps": 9140000
+  },
+  {
+   "level": 99,
+   "flowers": 120000,
+   "task": "",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 400000,
+   "cumulativeSteps": 9540000
+  },
+  {
+   "level": 100,
+   "flowers": 140000,
+   "task": "Clear 50 mushrooms",
+   "stepsMode": "lifetime",
+   "source": "wiki",
+   "steps": 460000,
+   "cumulativeSteps": 10000000
+  },
+  {
+   "level": 101,
+   "steps": 474000,
+   "flowers": 292000,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 101,
+   "note": "Wiki value. The growth pattern of later levels predicts 474,500 steps here."
+  },
+  {
+   "level": 102,
+   "steps": 475000,
+   "flowers": 292300,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 102
+  },
+  {
+   "level": 103,
+   "steps": 475400,
+   "flowers": 292600,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 103
+  },
+  {
+   "level": 104,
+   "steps": 475900,
+   "flowers": 292900,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 104
+  },
+  {
+   "level": 105,
+   "steps": 476400,
+   "flowers": 293200,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 105
+  },
+  {
+   "level": 106,
+   "steps": 476900,
+   "flowers": 293500,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 106
+  },
+  {
+   "level": 107,
+   "steps": 477300,
+   "flowers": 293800,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 107
+  },
+  {
+   "level": 108,
+   "steps": 477800,
+   "flowers": 294000,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 108
+  },
+  {
+   "level": 109,
+   "steps": 478300,
+   "flowers": 294300,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 109
+  },
+  {
+   "level": 110,
+   "steps": 478800,
+   "flowers": 294600,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed anywhere. Estimated from the growth pattern (the wiki first listed exactly this, then overwrote it with level 111's numbers)."
+  },
+  {
+   "level": 111,
+   "steps": 479200,
+   "flowers": 294900,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "game",
+   "wikiRow": 110,
+   "note": "Verified in-game 2026-11-04: at Lv 110 the profile reads 'Walk 479,200 steps / Plant 294,900 flowers'. The wiki lists these one row early (row 110)."
+  },
+  {
+   "level": 112,
+   "steps": 479700,
+   "flowers": 295200,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed anywhere. Estimated from the growth pattern. (The wiki's row 111 value, 479,300, was a +500 guess and contradicts the game.)"
+  },
+  {
+   "level": 113,
+   "steps": 480200,
+   "flowers": 295500,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 112,
+   "note": "Wiki row 112. Those rows were recorded by players while AT level 112, so they are the requirements to REACH 113."
+  },
+  {
+   "level": 114,
+   "steps": 480700,
+   "flowers": 295800,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 113,
+   "note": "Wiki row 113. Those rows were recorded by players while AT level 113, so they are the requirements to REACH 114."
+  },
+  {
+   "level": 115,
+   "steps": 481100,
+   "flowers": 296100,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 114,
+   "note": "Wiki row 114. Those rows were recorded by players while AT level 114, so they are the requirements to REACH 115."
+  },
+  {
+   "level": 116,
+   "steps": 481600,
+   "flowers": 296400,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 115,
+   "note": "Wiki row 115. Those rows were recorded by players while AT level 115, so they are the requirements to REACH 116."
+  },
+  {
+   "level": 117,
+   "steps": 482100,
+   "flowers": 296700,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 116,
+   "note": "Wiki row 116. Those rows were recorded by players while AT level 116, so they are the requirements to REACH 117."
+  },
+  {
+   "level": 118,
+   "steps": 482600,
+   "flowers": 297000,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 117,
+   "note": "Wiki row 117. Those rows were recorded by players while AT level 117, so they are the requirements to REACH 118."
+  },
+  {
+   "level": 119,
+   "steps": 483000,
+   "flowers": 297300,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 118,
+   "note": "Wiki row 118. Those rows were recorded by players while AT level 118, so they are the requirements to REACH 119."
+  },
+  {
+   "level": 120,
+   "steps": 483500,
+   "flowers": 297500,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 119,
+   "note": "Wiki row 119. Those rows were recorded by players while AT level 119, so they are the requirements to REACH 120."
+  },
+  {
+   "level": 121,
+   "steps": 484000,
+   "flowers": 297800,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 120,
+   "note": "Wiki row 120. Those rows were recorded by players while AT level 120, so they are the requirements to REACH 121."
+  },
+  {
+   "level": 122,
+   "steps": 484500,
+   "flowers": 298100,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 121,
+   "note": "Wiki row 121. Those rows were recorded by players while AT level 121, so they are the requirements to REACH 122."
+  },
+  {
+   "level": 123,
+   "steps": 484900,
+   "flowers": 298400,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "wiki",
+   "wikiRow": 122,
+   "note": "Wiki row 122. Those rows were recorded by players while AT level 122, so they are the requirements to REACH 123."
+  },
+  {
+   "level": 124,
+   "steps": 485400,
+   "flowers": 298700,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  },
+  {
+   "level": 125,
+   "steps": 485900,
+   "flowers": 299000,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  },
+  {
+   "level": 126,
+   "steps": 486400,
+   "flowers": 299300,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  },
+  {
+   "level": 127,
+   "steps": 486900,
+   "flowers": 299600,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  },
+  {
+   "level": 128,
+   "steps": 487300,
+   "flowers": 299900,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  },
+  {
+   "level": 129,
+   "steps": 487800,
+   "flowers": 300200,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  },
+  {
+   "level": 130,
+   "steps": 488300,
+   "flowers": 300500,
+   "task": "",
+   "stepsMode": "perLevel",
+   "source": "estimated",
+   "note": "Not observed yet. Estimated from the growth pattern of levels 101-123."
+  }
+ ]
+}

@@ -1,6 +1,6 @@
-The MIT License (MIT)
+MIT License
 
-Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+Copyright (c) 2026 Howzit5217
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Level requirement numbers in src/data/bloom-levels.json are facts collected from
+the Pikmin wiki (https://www.pikminwiki.com/Level) and from the game itself.
+Weather history and place search come from Open-Meteo (https://open-meteo.com),
+used under CC BY 4.0. Bloom Planner is an unofficial fan-made planner and is not
+affiliated with or endorsed by Niantic or Nintendo.

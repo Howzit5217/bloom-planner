@@ -1,25 +1,84 @@
 {
   "expo": {
-    "name": "PikiGrind",
-    "slug": "PikiGrind",
+    "name": "Bloom Planner",
+    "slug": "bloom-planner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "scheme": "bloomplanner",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#FBF7EC",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "io.github.howzit5217.bloomplanner",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Bloom Planner looks up your location once, to read the weather history where you plant. Only the coordinates are sent, to Open-Meteo."
+      }
     },
     "android": {
+      "package": "io.github.howzit5217.bloomplanner",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#7CC35B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-font",
+      "expo-web-browser",
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#FBF7EC",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#241F18"
+          }
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Bloom Planner looks up your location once, to read the weather history where you plant. Only the coordinates are sent, to Open-Meteo.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#3C7A3E"
+        }
+      ],
+      "./plugins/withReleaseSigning"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "githubRepo": "Howzit5217/bloom-planner"
     }
   }
 }
