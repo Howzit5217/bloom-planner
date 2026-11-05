@@ -41,6 +41,8 @@ export interface Settings {
   notifications: NotificationPrefs;
   dismissed: Record<string, boolean>;
   updates: { enabled: boolean; lastCheck: string | null; latest: AppUpdateInfo | null; dismissedVersion: string | null };
+  /** Developer options, shown once unlocked (tap the version 7 times). betaUpdates: take test builds too. */
+  dev: { unlocked: boolean; betaUpdates: boolean };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   dismissed: {},
   updates: { enabled: true, lastCheck: null, latest: null, dismissedVersion: null },
+  dev: { unlocked: false, betaUpdates: false },
 };
 
 export const ALL_DAYS_RIDEABLE: SeasonRate[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const }));
@@ -168,6 +171,7 @@ export const useApp = create<AppState>((set, get) => ({
           ...(settings ?? {}),
           notifications: { ...DEFAULT_SETTINGS.notifications, ...(settings?.notifications ?? {}) },
           updates: { ...DEFAULT_SETTINGS.updates, ...(settings?.updates ?? {}) },
+          dev: { ...DEFAULT_SETTINGS.dev, ...(settings?.dev ?? {}) },
           dismissed: settings?.dismissed ?? {},
         },
         table: pickTable(remote),

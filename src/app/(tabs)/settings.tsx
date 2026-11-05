@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -47,6 +48,7 @@ const PRESET_NAMES: Record<ThresholdPreset, string> = {
 
 
 const IS_WEB = Platform.OS === 'web';
+const DEV_TAPS = 7;
 function Section({ title, icon, children }: { title: string; icon: IconName; children: ReactNode }) {
   return (
     <Card style={{ gap: 14 }}>
@@ -94,6 +96,8 @@ export default function Settings() {
   const [timeSheet, setTimeSheet] = useState(false);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
   const [checking, setChecking] = useState<string | null>(null);
+  // Taps on the version line: seven open the developer options, like Android's own.
+  const [devTaps, setDevTaps] = useState(0);
   // A goal change is checked first: a reasonable one saves (a moment after you stop sliding),
   // an unreasonable one stays here as a draft with the earliest date that would work.
   const [goalDraft, setGoalDraft] = useState<{
@@ -141,6 +145,16 @@ export default function Settings() {
 
   const minGoal = dash.current.level + 1;
   const notif = st.settings.notifications;
+  const dev = st.settings.dev;
+  const tapVersion = () => {
+    if (dev.unlocked) return;
+    const n = devTaps + 1;
+    if (n >= DEV_TAPS) {
+      setDevTaps(0);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      void st.updateSettings({ dev: { ...dev, unlocked: true } });
+    } else setDevTaps(n);
+  };
   const overrides = Object.values(st.overrides).sort((a, b) => a.level - b.level);
   const obs = dash.observed;
   const bikes = dash.rates.bikes;
@@ -420,14 +434,21 @@ export default function Settings() {
             })
           }
         />
-        <T v="small" soft>
-          {t('Version {version} · level data v{data} (checked {date})', {
-            version: APP_VERSION,
-            data: st.table.version,
-            date: retrieved,
-          })}
-          {st.settings.updates.lastCheck ? ` · ${t('last check {date}', { date: fmtDate(toKey(new Date(st.settings.updates.lastCheck))) })}` : ''}
-        </T>
+        <Pressable onPress={tapVersion} accessible={false}>
+          <T v="small" soft>
+            {t('Version {version} · level data v{data} (checked {date})', {
+              version: APP_VERSION,
+              data: st.table.version,
+              date: retrieved,
+            })}
+            {st.settings.updates.lastCheck ? ` · ${t('last check {date}', { date: fmtDate(toKey(new Date(st.settings.updates.lastCheck))) })}` : ''}
+          </T>
+          {!dev.unlocked && devTaps >= 3 ? (
+            <T v="caption" color={c.leafDeep} style={{ marginTop: 4 }}>
+              {tn(DEV_TAPS - devTaps, '{n} more tap for developer options', '{n} more taps for developer options')}
+            </T>
+          ) : null}
+        </Pressable>
         <PillButton
           label={checking ?? t('Check now')}
           size="md"
@@ -456,6 +477,21 @@ export default function Settings() {
           {t('Bloom Planner is an unofficial fan-made planner. It is not affiliated with or endorsed by Scopely or Nintendo. Pikmin Bloom is a trademark of its owners.')}
         </T>
       </Section>
+
+      {!IS_WEB && dev.unlocked ? (
+        <Section title={t('Developer')} icon="code-braces">
+          <Toggle
+            label={t('Beta Updates')}
+            hint={t("Test builds as soon as they're out (GitHub pre-releases). Everyone else stays on the released version.")}
+            value={dev.betaUpdates}
+            onChange={async (b) => {
+              await st.updateSettings({ dev: { ...dev, betaUpdates: b } });
+              if (b) void runUpdateCheck().catch(() => {});
+            }}
+          />
+          <PillButton label={t('Hide developer options')} variant="ghost" size="md" icon="eye-off" onPress={() => void st.updateSettings({ dev: { unlocked: false, betaUpdates: false } })} />
+        </Section>
+      ) : null}
 
       <Sheet visible={timeSheet} onClose={() => setTimeSheet(false)} title={t('Reminder Time')} scroll={false}>
         <TimeWheel hour={timeDraft.hour} minute={timeDraft.minute} onChange={(hour, minute) => setTimeDraft({ hour, minute })} />

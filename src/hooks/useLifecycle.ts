@@ -119,7 +119,7 @@ async function housekeeping() {
 
 export async function runUpdateCheck(): Promise<{ app: boolean; levels: boolean }> {
   const st = useApp.getState();
-  const [latest, levels] = await Promise.all([checkForAppUpdate().catch(() => null), fetchLatestLevelData().catch(() => null)]);
+  const [latest, levels] = await Promise.all([checkForAppUpdate(st.settings.dev.betaUpdates).catch(() => null), fetchLatestLevelData().catch(() => null)]);
   const gotLevels = levels ? await useApp.getState().setRemoteTable(levels) : false;
   await useApp.getState().updateSettings({ updates: { ...st.settings.updates, lastCheck: new Date().toISOString(), latest } });
   return { app: !!latest, levels: gotLevels };

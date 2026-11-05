@@ -65,17 +65,19 @@ interface GitHubRelease {
 /**
  * The newest release this build should be offered, if any.
  * Release builds read only the latest full release (as the download page does), so betas never
- * reach anyone else. Beta builds read recent releases, pre-releases included.
+ * reach anyone else. Beta builds, and a release build with the developer's Beta Updates on, read
+ * recent releases, pre-releases included.
  */
-export async function checkForAppUpdate(): Promise<AppUpdateInfo | null> {
+export async function checkForAppUpdate(betaUpdates = false): Promise<AppUpdateInfo | null> {
   // The web version is the newest every time it loads; only the Android app has downloads.
   if (Platform.OS === 'web') return null;
   const api = `https://api.github.com/repos/${GITHUB_REPO}`;
-  const res = await get(IS_BETA_BUILD ? `${api}/releases?per_page=30` : `${api}/releases/latest`, 'application/vnd.github+json');
+  const takeBetas = IS_BETA_BUILD || betaUpdates;
+  const res = await get(takeBetas ? `${api}/releases?per_page=30` : `${api}/releases/latest`, 'application/vnd.github+json');
   if (!res) return null;
   const json: unknown = await res.json().catch(() => null);
   const list = (Array.isArray(json) ? json : json && typeof json === 'object' ? [json] : []) as GitHubRelease[];
-  const best = newestRelease(list, THIS_BUILD, IS_BETA_BUILD);
+  const best = newestRelease(list, THIS_BUILD, takeBetas);
   if (!best) return null;
   const { release, build } = best;
   const assets = (Array.isArray(release.assets) ? release.assets : []) as Array<{ name?: unknown; browser_download_url?: unknown }>;
