@@ -230,8 +230,9 @@ export function Wizard() {
       currentLevel: level,
       stepsIntoLevel: progress.stepsIntoLevel,
       flowersIntoLevel: progress.flowersIntoLevel,
-      setupTodaySteps: todaySteps ?? 0,
-      setupTodayFlowers: todayFlowers ?? 0,
+      // Only a step count uses today's totals so far (typed, then switched to the amount remaining: dropped).
+      setupTodaySteps: logShown === 'daily' ? (todaySteps ?? 0) : 0,
+      setupTodayFlowers: logShown === 'daily' ? (todayFlowers ?? 0) : 0,
       lifetimeSteps: lifetime,
       lifetimeFlowers: null,
       goalLevel,
@@ -378,19 +379,6 @@ export function Wizard() {
                 ) : null}
               </>
             )}
-            <Pressable accessibilityRole="button" onPress={() => setShowToday((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
-              <Icon name={showToday ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
-              <T v="bodyBold" color={c.leafDeep}>
-                {t('Already been out today?')}
-              </T>
-            </Pressable>
-            {showToday ? (
-              <Card variant="deep" style={{ gap: 12 }}>
-                <T v="small">{t("The numbers above already include today. Enter today's totals so far, so tonight's log doesn't count them twice.")}</T>
-                <NumberField label={t('Steps so far today')} value={todaySteps} onChange={setTodaySteps} size="md" />
-                <NumberField label={t('Flowers so far today')} value={todayFlowers} onChange={setTodayFlowers} size="md" />
-              </Card>
-            ) : null}
             {/* How each evening's log goes from here on (Settings can change it). */}
             <View style={{ gap: 6 }}>
               <T v="smallBold">{t('Log each day by')}</T>
@@ -407,6 +395,25 @@ export function Wizard() {
                 {logShown === 'left' ? t("What the game's level-up screen shows still to go: steps, flowers and the level's quest, like mushrooms or expeditions.") : t("The day's steps and flowers.")}
               </T>
             </View>
+            {/* Only a step count needs today's totals so far, so tonight's log doesn't count them
+                twice; the amount remaining comes straight from the game. */}
+            {logShown === 'daily' ? (
+              <>
+                <Pressable accessibilityRole="button" onPress={() => setShowToday((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
+                  <Icon name={showToday ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
+                  <T v="bodyBold" color={c.leafDeep}>
+                    {t('Already been out today?')}
+                  </T>
+                </Pressable>
+                {showToday ? (
+                  <Card variant="deep" style={{ gap: 12 }}>
+                    <T v="small">{t("The numbers above already include today. Enter today's totals so far, so tonight's log doesn't count them twice.")}</T>
+                    <NumberField label={t('Steps so far today')} value={todaySteps} onChange={setTodaySteps} size="md" />
+                    <NumberField label={t('Flowers so far today')} value={todayFlowers} onChange={setTodayFlowers} size="md" />
+                  </Card>
+                ) : null}
+              </>
+            ) : null}
           </View>
         );
       case 3:
