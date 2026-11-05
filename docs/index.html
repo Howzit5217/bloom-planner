@@ -27,12 +27,16 @@
     }
   }
   * { box-sizing: border-box; }
-  /* The app's scroll bar: a thin lavender line down the right edge, darker where you are on the page. */
-  html { scrollbar-width: thin; scrollbar-color: var(--rail-handle) transparent; }
-  ::-webkit-scrollbar { width: 12px; }
-  ::-webkit-scrollbar-track { background: linear-gradient(90deg, transparent 4px, var(--rail) 4px 8px, transparent 8px); }
-  ::-webkit-scrollbar-thumb { background: var(--rail-handle); background-clip: padding-box; border: 3px solid transparent; border-radius: 999px; min-height: 40px; }
-  ::-webkit-scrollbar-button { display: none; height: 0; }
+  /* The app's scroll bar instead of the browser's: a thin lavender line down the right edge, darker
+     where you are on the page. It shows while scrolling (or with the mouse near the edge), and the
+     darker part drags, on a phone too. */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar { display: none; }
+  .rail { position: fixed; top: 8px; bottom: 8px; right: 0; width: 22px; z-index: 30; opacity: 0; pointer-events: none; touch-action: none; transition: opacity .32s ease; }
+  .rail.on { opacity: 1; pointer-events: auto; transition-duration: .12s; }
+  .rail::before { content: ''; position: absolute; top: 0; bottom: 0; right: 4px; width: 4px; border-radius: 2px; background: var(--rail); }
+  .rail-handle { position: absolute; top: 0; right: 3px; width: 6px; min-height: 40px; border-radius: 3px; background: var(--rail-handle); transition: width .12s ease, right .12s ease; will-change: transform; }
+  .rail.dragging .rail-handle, .rail:hover .rail-handle { width: 8px; right: 2px; }
   /* Tapping a button shows just the button: no browser tap highlight or focus box. Keyboard focus
      keeps a soft rounded outline in the app's green. */
   html { -webkit-tap-highlight-color: transparent; }
@@ -183,6 +187,7 @@
   </footer>
 </main>
 
+<div class="rail" id="rail" aria-hidden="true"><div class="rail-handle"></div></div>
 <script>
   // The app's flat flower: five round petals in one colour and a golden centre.
   function flower(cx, cy, r, color, rot) {
@@ -349,6 +354,57 @@
       document.getElementById('release-line').textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB · Free. No ads. No account. No tracking.';
     })
     .catch(function () {});
+
+  // The scroll rail: drag the darker part (or tap the line to jump there).
+  (function () {
+    var rail = document.getElementById('rail'), handle = rail.firstElementChild, hideTimer = null, drag = null;
+    function geo() {
+      var track = rail.clientHeight, page = document.documentElement.scrollHeight, view = window.innerHeight;
+      var len = Math.max(40, Math.min(track, (view / page) * track));
+      return { len: len, travel: Math.max(0, track - len), max: Math.max(0, page - view) };
+    }
+    function place() {
+      var g = geo();
+      handle.style.height = g.len + 'px';
+      handle.style.transform = 'translateY(' + (g.max ? (window.scrollY / g.max) * g.travel : 0) + 'px)';
+      return g;
+    }
+    function show() {
+      // Only for pages long enough to need it.
+      if (place().max < 40) return;
+      rail.classList.add('on');
+      clearTimeout(hideTimer);
+      if (!drag) hideTimer = setTimeout(function () { if (!drag && !rail.matches(':hover')) rail.classList.remove('on'); }, 2500);
+    }
+    window.addEventListener('scroll', show, { passive: true });
+    window.addEventListener('resize', place);
+    window.addEventListener('mousemove', function (e) { if (e.clientX > window.innerWidth - 40) show(); });
+    rail.addEventListener('mouseleave', show);
+    function move(e) {
+      if (!drag) return;
+      var g = geo(), y = Math.min(g.travel, Math.max(0, e.clientY - drag.top - drag.grab));
+      window.scrollTo({ top: g.travel ? (y / g.travel) * g.max : 0, behavior: 'instant' });
+    }
+    rail.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      var g = geo(), h = handle.getBoundingClientRect();
+      // Grabbed on the handle: keep hold where it was caught. On the line: the handle comes to the finger.
+      drag = { top: rail.getBoundingClientRect().top, grab: e.clientY >= h.top && e.clientY <= h.bottom ? e.clientY - h.top : g.len / 2 };
+      rail.setPointerCapture(e.pointerId);
+      rail.classList.add('dragging', 'on');
+      clearTimeout(hideTimer);
+      move(e);
+    });
+    rail.addEventListener('pointermove', move);
+    function end() {
+      drag = null;
+      rail.classList.remove('dragging');
+      show();
+    }
+    rail.addEventListener('pointerup', end);
+    rail.addEventListener('pointercancel', end);
+    place();
+  })();
 </script>
 </body>
 </html>
