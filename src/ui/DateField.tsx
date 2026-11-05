@@ -11,8 +11,10 @@ import { Icon } from './Icon';
 import { PillButton } from './PillButton';
 import { Sheet } from './Sheet';
 import { FlowerHead } from './skia/FlowerHead';
+import { ScrollText } from './ScrollText';
 import { T } from './T';
 import { t, tn } from '@/i18n';
+import { STILL } from '@/ui/skia/still';
 
 interface Props {
   label: string;
@@ -60,7 +62,7 @@ function CalendarPage({ value }: { value: DayKey | null }) {
             {d.getDate()}
           </Animated.Text>
         ) : (
-          <Canvas style={{ width: 22, height: 22 }}>
+          <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: 22, height: 22 }}>
             <FlowerHead r={9} color={c.petalYellow} transform={[{ translateX: 11 }, { translateY: 11 }]} />
           </Canvas>
         )}
@@ -140,9 +142,9 @@ export function DateField({ label, value, onChange, minimumDate, maximumDate, pl
                   opacity: disabled ? 0.35 : 1,
                 })}
               >
-                <T v="smallBold" color={c.leafDeep} numberOfLines={1}>
+                <ScrollText v="smallBold" color={c.leafDeep} behind={sel ? c.leafPale : c.canvasDeep} center style={{ alignSelf: 'stretch' }}>
                   {jumpLabel(months)}
-                </T>
+                </ScrollText>
               </Pressable>
             );
           })}

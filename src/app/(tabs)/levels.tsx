@@ -13,9 +13,11 @@ import { radius } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
 import { NumberField } from '@/ui/NumberField';
+import { useAppWidth } from '@/ui/layout';
 import { PillButton } from '@/ui/PillButton';
 import { FocusFade, PaperSheet } from '@/ui/Screen';
 import { ScrollRail, useScrollRail } from '@/ui/ScrollRail';
+import { ScrollText } from '@/ui/ScrollText';
 import { Sheet } from '@/ui/Sheet';
 import { FlowerAccent } from '@/ui/skia/FlowerAccent';
 import { LevelBadge } from '@/ui/skia/LevelBadge';
@@ -125,6 +127,9 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
   const task = row.task && row.level > 2 ? `, ${taskText(row.task)}` : '';
   const label = `${t('Level {level}', { level: row.level })}. ${what}${task}.${done ? ` ${t('Done')}.` : ''}`;
   const ink = isCurrent ? c.onPanel : undefined;
+  const tile = isCurrent ? c.panel : isNext ? c.leafPale : c.card;
+  // A small phone: a smaller badge leaves the objectives more room.
+  const narrow = useAppWidth() < 360;
   return (
     <Pressable
       accessibilityRole="button"
@@ -141,29 +146,26 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        backgroundColor: isCurrent ? c.panel : isNext ? c.leafPale : c.card,
+        backgroundColor: tile,
         transform: [{ scale: pressed ? 0.98 : 1 }],
         boxShadow: `0px 3px 12px 0px ${c.shadow}`,
       })}
     >
       {/* Every level wears its rank badge, in its metal: the ones reached and the ones still to come. */}
-      <View style={{ width: BADGE, height: BADGE, alignItems: 'center', justifyContent: 'center' }}>
-        <LevelBadge level={row.level} size={58} />
+      <View style={{ width: narrow ? BADGE - 6 : BADGE, height: BADGE, alignItems: 'center', justifyContent: 'center' }}>
+        <LevelBadge level={row.level} size={narrow ? 50 : 58} />
       </View>
       <View style={{ flex: 1 }}>
         {goals.map((g) => (
           <View key={g.icon + g.text} style={{ height: LINE, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
             <Icon name={g.icon} size={16} color={isCurrent ? c.onPanel : g.tint} />
-            <T v="bodyBold" color={ink} numberOfLines={1} style={{ flex: 1 }}>
+            {/* Too long for the tile (a quest on a small phone): it slides to show the rest, never cut off. */}
+            <ScrollText v="bodyBold" color={ink} behind={tile} style={{ flex: 1 }}>
               {g.text}
-            </T>
+            </ScrollText>
           </View>
         ))}
-        {note ? (
-          <T v="caption" color={isCurrent ? c.onPanelSoft : undefined} soft={!isCurrent} numberOfLines={1} style={{ height: NOTE, paddingTop: 2 }}>
-            {note}
-          </T>
-        ) : null}
+        {note ? <ScrollText v="caption" color={isCurrent ? c.onPanelSoft : undefined} soft={!isCurrent} behind={tile} style={{ height: NOTE, paddingTop: 2 }}>{note}</ScrollText> : null}
       </View>
       {done ? (
         // Finished: steps, flowers and the level's task, all done.

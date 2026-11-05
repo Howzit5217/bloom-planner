@@ -1,13 +1,14 @@
 import { Baloo2_700Bold, Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
 import { Nunito_400Regular, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold } from '@expo-google-fonts/nunito';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { DefaultTheme, Stack, ThemeProvider as NavigationTheme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { MAX_APP_WIDTH } from '@/ui/layout';
+import { WorldBackdrop } from '@/ui/Screen';
 import { HomeScreenOnly } from '@/features/shared/HomeScreenOnly';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { useWebAutoUpdate } from '@/hooks/useWebAutoUpdate';
 import { configureNotifications } from '@/services/notifications';
 import { useApp } from '@/store/app';
 import { ThemeProvider, useTheme } from '@/theme/theme';
+import { PortraitOnly } from '@/features/shared/PortraitOnly';
 import { PillButton } from '@/ui/PillButton';
 import { Celebration } from '@/ui/skia/Celebration';
 import { T } from '@/ui/T';
@@ -59,27 +61,34 @@ function Root() {
     SystemUI.setBackgroundColorAsync(c.canvas).catch(() => {});
   }, [c.canvas]);
   if (loadError) return <LoadError message={loadError} />;
-  // On a tablet or a computer, the app keeps a phone's width, centred, on a slightly deeper cream.
+  // On a tablet or a computer, the app keeps a phone's width, centred, and the meadow fills the
+  // rest of the window behind it: pages there let it show through where they would show their own.
   const wide = width > MAX_APP_WIDTH;
   return (
-    <View style={{ flex: 1, backgroundColor: wide ? c.canvasDeep : c.canvas, alignItems: 'center' }}>
+    <View style={{ flex: 1, backgroundColor: c.canvas, alignItems: 'center' }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      {wide ? <WorldBackdrop /> : null}
       <HomeScreenOnly>
         {profile ? <Housekeeping /> : null}
-        <View style={{ flex: 1, width: '100%', maxWidth: MAX_APP_WIDTH, backgroundColor: c.canvas, overflow: 'hidden', boxShadow: wide ? `0px 0px 40px 0px ${c.shadow}` : undefined }}>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas }, animation: 'fade' }}>
-            <Stack.Protected guard={!profile}>
-              <Stack.Screen name="onboarding" />
-            </Stack.Protected>
-            <Stack.Protected guard={!!profile}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="climate" options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="location" options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="seasons" options={{ animation: 'slide_from_right' }} />
-            </Stack.Protected>
-          </Stack>
+        <View style={{ flex: 1, width: '100%', maxWidth: MAX_APP_WIDTH, backgroundColor: wide ? 'transparent' : c.canvas, overflow: 'hidden' }}>
+          {/* The navigators' own background: the app's cream, or clear over the wide-screen meadow. */}
+          <NavigationTheme value={{ ...DefaultTheme, colors: { ...DefaultTheme.colors, background: wide ? 'transparent' : c.canvas, card: c.canvas } }}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: wide ? 'transparent' : c.canvas }, animation: 'fade' }}>
+              <Stack.Protected guard={!profile}>
+                <Stack.Screen name="onboarding" />
+              </Stack.Protected>
+              <Stack.Protected guard={!!profile}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="climate" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="location" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="seasons" options={{ animation: 'slide_from_right' }} />
+              </Stack.Protected>
+            </Stack>
+          </NavigationTheme>
         </View>
         <CelebrationHost />
+        {/* Portrait only: an iPhone's home-screen app turned sideways asks to be turned back. */}
+        <PortraitOnly />
       </HomeScreenOnly>
     </View>
   );

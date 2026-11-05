@@ -7,6 +7,7 @@ import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { CENTRE_COLOR, CENTRE_R, flowerPath, rng, stemPath } from './shapes';
 import { useAppWidth } from '@/ui/layout';
+import { STILL } from './still';
 
 export const color = (paint: SkPaint, hex: string, alpha = 1) => {
   paint.setColor(Skia.Color(hex));
@@ -275,7 +276,7 @@ export function Meadow({ height, horizon, density = 1, seed: fixedSeed, width }:
   const picture = useMemo(() => drawScene(w, height, horizon, look, c, density, seed), [w, height, horizon, look, c, density, seed]);
   return (
     <View pointerEvents="none" style={{ width: w, height }}>
-      <Canvas style={{ width: w, height }}>
+      <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: w, height }}>
         <Picture picture={picture} />
       </Canvas>
     </View>

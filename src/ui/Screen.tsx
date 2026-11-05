@@ -8,9 +8,10 @@ import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
 import { EdgeFade } from './EdgeFade';
-import { useAppWidth } from './layout';
+import { useAppWidth, useWide } from './layout';
 import { ScrollRail, useScrollRail } from './ScrollRail';
 import { cameraFrame, horizonAt } from './camera';
+import { SKY_SHARE, worldTilt } from './world';
 import { CameraMeadow } from './skia/CameraMeadow';
 import { Meadow } from './skia/Meadow';
 import { Seedling } from './skia/Seedling';
@@ -31,8 +32,6 @@ export function FocusFade({ children }: { children: ReactNode }) {
 }
 
 const PULL_FULL = 110;
-/** Home: the horizon with the camera level, as a share of the screen from the top: about half, as in the game. */
-const SKY_SHARE = 0.52;
 /** Scrolling this many times the horizon's climb tilts the camera all the way down, so the scene moves slower than the cards. */
 const TILT_SCROLL = 1.8;
 /** The camera follows the scroll with a little weight, settling without overshoot. */
@@ -49,20 +48,36 @@ function SkyStatusBar() {
 }
 
 /**
+ * Whether this page draws its pictures now. On the web each drawing canvas takes one of the
+ * browser's few graphics contexts (about sixteen) and the oldest are dropped past that, which blanked
+ * Home's drawings once every tab had been opened. So there a page out of sight lets go of its
+ * drawings and makes them afresh when it's back. In the app every page keeps them.
+ */
+function useLive(): boolean {
+  const focused = useIsFocused();
+  return Platform.OS !== 'web' || focused;
+}
+
+/**
  * The paper pages' look: a strip of sky and field along the top and a cream sheet over it that
  * holds the page. Everything scrolls inside the sheet, so nothing slides over the sky or the status bar.
  */
 export function PaperSheet({ children }: { children: ReactNode }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  // Wider than the app, the meadow behind the whole window shows above the sheet instead.
+  const wide = useWide();
+  const live = useLive();
   return (
-    <View style={{ flex: 1, backgroundColor: c.canvas }}>
+    <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : c.canvas }}>
       <SkyStatusBar />
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-        <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} />
-      </View>
+      {wide || !live ? null : (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
+          <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} />
+        </View>
+      )}
       <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>
-        {children}
+        {live ? children : null}
         <EdgeFade edge="top" color={c.canvas} height={16} />
       </View>
     </View>
@@ -114,7 +129,10 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   // Home: a camera over the meadow that tilts down as the page scrolls, until the field fills the screen.
   const appWidth = useAppWidth();
   const frame = useMemo(() => cameraFrame(appWidth, height, Math.round(height * SKY_SHARE)), [appWidth, height]);
-  const tilt = useSharedValue(0);
+  // Shared with the backdrop behind the app's column on a wide screen, so both tilt together.
+  const tilt = worldTilt;
+  const wide = useWide();
+  const live = useLive();
   const tiltScroll = (frame.cy + 36) * TILT_SCROLL;
   useAnimatedReaction(
     () => rail.y.value,
@@ -167,21 +185,36 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   if (backdrop === 'paper') return <PaperSheet>{scroller}</PaperSheet>;
 
   return (
-    <View style={{ flex: 1, backgroundColor: look.groundNear }}>
+    <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
       <SkyStatusBar />
-      <CameraMeadow frame={frame} tilt={tilt} />
-      {onRefresh ? (
+      {wide || !live ? null : <CameraMeadow frame={frame} tilt={tilt} />}
+      {onRefresh && live ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 2, left: 0, right: 0, alignItems: 'center', zIndex: 2 }, sprout]}>
           <Seedling growth={growth} size={70} />
         </Animated.View>
       ) : null}
-      {scroller}
+      {live ? scroller : null}
       {/* Cards scroll up under a soft fade, never into the clock and battery. */}
       <EdgeFade edge="top" color={look.groundFar} height={insets.top + 14} />
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 15 }, skyFade]}>
         <EdgeFade edge="top" color={look.top} height={insets.top + 14} />
       </Animated.View>
       {bottomExtra}
+    </View>
+  );
+}
+
+/**
+ * On a screen wider than the app, Home's meadow behind the whole window: the app keeps its column in
+ * front, and the sky and field carry on to the edges, tilting with Home's camera.
+ */
+export function WorldBackdrop() {
+  const { width, height } = useWindowDimensions();
+  const look = useSkyLook();
+  const frame = useMemo(() => cameraFrame(width, height, Math.round(height * SKY_SHARE)), [width, height]);
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: look.groundNear }}>
+      <CameraMeadow frame={frame} tilt={worldTilt} />
     </View>
   );
 }

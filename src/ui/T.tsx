@@ -18,6 +18,9 @@ const styles: Record<TVariant, TextStyle> = {
   number: { fontFamily: font.heading, fontSize: 40, lineHeight: 48 },
 };
 
+/** A variant's line height, in points (before the phone's text size setting). */
+export const lineHeightOf = (v: TVariant) => styles[v].lineHeight as number;
+
 interface Props extends TextProps {
   v?: TVariant;
   color?: string;

@@ -69,10 +69,11 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
 
 /**
  * The scene as one image, so tilting it each frame is a single draw rather than a thousand flowers.
- * Sharp to two device pixels per point, within what a GPU texture can hold.
+ * Sharp to two device pixels per point, within what a GPU texture (and a sensible amount of memory) holds.
  */
 function snapshot(picture: SkPicture, f: CameraFrame): SkImage | null {
-  const scale = Math.min(PixelRatio.get(), 2, 4096 / Math.max(f.picW, f.picH));
+  // A computer window's scene is big: kept within a texture's sides and about 8 megapixels.
+  const scale = Math.min(PixelRatio.get(), 2, 4096 / Math.max(f.picW, f.picH), Math.sqrt(8e6 / (f.picW * f.picH)));
   try {
     const w = Math.ceil(f.picW * scale);
     const h = Math.ceil(f.picH * scale);

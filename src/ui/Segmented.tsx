@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/theme/theme';
-import { T } from './T';
+import { ScrollText } from './ScrollText';
 
 interface Props<K extends string> {
   options: Array<{ key: K; label: string }>;
@@ -60,9 +60,9 @@ export function Segmented<K extends string>({ options, value, onChange, label }:
             }}
             style={{ flex: 1, minHeight: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }}
           >
-            <T v="smallBold" color={sel ? c.leafDeep : c.inkSoft} numberOfLines={1}>
+            <ScrollText v="smallBold" color={sel ? c.leafDeep : c.inkSoft} behind={sel ? c.card : c.canvasDeep} center style={{ alignSelf: 'stretch' }}>
               {o.label}
-            </T>
+            </ScrollText>
           </Pressable>
         );
       })}

@@ -8,6 +8,7 @@ import type { Palette } from '@/theme/tokens';
 import { FlowerHead } from '@/ui/skia/FlowerHead';
 import { T } from '@/ui/T';
 import { tk, useT } from '@/i18n';
+import { STILL } from '@/ui/skia/still';
 
 export const DIFFICULTY_NAMES: Record<Difficulty, string> = {
   easy: tk('Easy Plan'),
@@ -27,7 +28,7 @@ export function DifficultyFlower({ difficulty, size = 24, backdrop }: { difficul
   const r = size * (backdrop ? 0.34 : 0.42);
   return (
     <Animated.View key={difficulty} entering={ZoomIn.duration(260)} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Canvas style={{ width: size, height: size }}>
+      <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: size, height: size }}>
         {backdrop ? <Circle cx={size / 2} cy={size / 2} r={size / 2} color={backdrop} /> : null}
         <FlowerHead r={r} color={difficultyColor(c, difficulty)} transform={[{ translateX: size / 2 }, { translateY: size / 2 - size * 0.03 }]} />
       </Canvas>

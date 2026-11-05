@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Easing, useDerivedValue, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import type { BurnDown, BurnPoint, DailyBar, SeasonBar, TimelineItem } from '@/engine/charts';
-import { fmt, fmtDate, fmtShort, fmtWeekday, listJoin, monthShort, roundNice } from '@/engine/format';
+import { fmt, fmtDate, fmtShort, fmtWeekday, listJoin, monthLabel, monthShort, roundNice } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { PETALS } from '@/theme/tokens';
 import { flowerPath } from '@/ui/skia/shapes';
@@ -304,8 +304,8 @@ export function SeasonalChart({ bars, width }: { bars: SeasonBar[]; width: numbe
       <View style={{ flexDirection: 'row' }}>
         {bars.map((b) => (
           <View key={`${b.year}-${b.month}`} style={{ width: colW, alignItems: 'center' }}>
-            <T v="caption" color={b.rate < 0.4 ? c.alert : c.inkSoft} numberOfLines={1} style={{ fontSize: 10.5, letterSpacing: -0.2 }}>
-              {monthShort(b.month)}
+            <T v="caption" color={b.rate < 0.4 ? c.alert : c.inkSoft} style={{ fontSize: 10.5, letterSpacing: -0.2 }}>
+              {monthLabel(b.month, colW)}
             </T>
             <T v="caption" soft style={{ fontSize: 10 }}>
               {t('{n}d', { n: Math.round(b.rideDays) })}

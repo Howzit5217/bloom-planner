@@ -2,7 +2,7 @@ import { Canvas, Group, LinearGradient, RoundedRect, vec } from '@shopify/react-
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { useDerivedValue, useSharedValue, withDelay, withSpring, type SharedValue } from 'react-native-reanimated';
-import { monthName, monthShort } from '@/engine/format';
+import { monthLabel, monthName } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { T } from '@/ui/T';
 import { t } from '@/i18n';
@@ -47,9 +47,9 @@ export function MonthBars({ rates, width, height = 120 }: { rates: number[]; wid
         ))}
       </Canvas>
       <View style={{ flexDirection: 'row', marginTop: 6 }}>
-        {Array.from({ length: 12 }, (_, i) => monthShort(i)).map((m, i) => (
+        {Array.from({ length: 12 }, (_, i) => monthLabel(i, bw + gap)).map((m, i) => (
           <View key={i} style={{ width: bw, marginRight: i < 11 ? gap : 0, alignItems: 'center' }}>
-            <T v="caption" soft numberOfLines={1} style={{ width: bw + gap + 2, textAlign: 'center', fontSize: 10.5, letterSpacing: -0.2 }}>
+            <T v="caption" soft style={{ width: bw + gap + 2, textAlign: 'center', fontSize: 10.5, letterSpacing: -0.2 }}>
               {m}
             </T>
           </View>

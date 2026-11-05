@@ -11,3 +11,8 @@ export function useAppWidth(): number {
   const { width } = useWindowDimensions();
   return Math.min(width, MAX_APP_WIDTH);
 }
+
+/** A screen wider than the app: the app keeps its column and the backdrop fills the rest. */
+export function useWide(): boolean {
+  return useWindowDimensions().width > MAX_APP_WIDTH;
+}

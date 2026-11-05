@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { useTheme } from '@/theme/theme';
 import { FlowerHead } from './FlowerHead';
+import { STILL } from './still';
 
 /**
  * A row of small flowers drawn like the welcome flower (back petals, front petals, golden centre),
@@ -17,7 +18,7 @@ export function FlowerRow({ items, height = 30, accessibilityLabel }: { items: A
   return (
     <View accessible={!!accessibilityLabel} accessibilityLabel={accessibilityLabel} onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{ height }}>
       {w > 0 ? (
-        <Canvas style={{ width: w, height }}>
+        <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: w, height }}>
           {items.map((col, i) => {
             const cx = slot * (i + 0.5);
             const cy = height / 2;

@@ -116,6 +116,17 @@ export const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3));
 export const monthName = (m: number) => cap(format(new Date(2020, m, 1), 'LLLL', opts()));
 /** Month 0-11, short: "Jan", "ene", "1月"... */
 export const monthShort = (m: number) => cap(format(new Date(2020, m, 1), 'LLL', opts()).replace(/\.$/, ''));
+/** Month 0-11, as narrow as it gets: "J", "E", "1"... */
+export const monthNarrow = (m: number) => cap(format(new Date(2020, m, 1), 'LLLLL', opts()));
+/**
+ * A chart's month label for a column this wide, at the charts' 10.5pt: the short name where every
+ * month's fits, the narrow one where some wouldn't (never cut off). Wide characters count nearly double.
+ */
+export function monthLabel(m: number, columnWidth: number): string {
+  const width = (s: string) => Array.from(s).reduce((n, ch) => n + (/[ᄀ-ᇿ　-鿿가-힯＀-￯]/.test(ch) ? 11 : 6.4), 0);
+  const fits = Array.from({ length: 12 }, (_, i) => width(monthShort(i))).every((w) => w <= columnWidth - 2);
+  return fits ? monthShort(m) : monthNarrow(m);
+}
 /** Weekday 0-6 (Sunday first), narrow: "S", "D", "日"... */
 export const weekdayNarrow = (d: number) => cap(format(new Date(2020, 10, 1 + d), 'EEEEE', opts()));
 /** Weekday 0-6 (Sunday first), in full, for screen readers. */

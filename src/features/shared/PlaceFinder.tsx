@@ -210,7 +210,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
           })}
         >
           <Icon name="map-marker" size={20} color={c.leafDeep} />
-          <T v="bodyBold" style={{ flex: 1 }} numberOfLines={2}>
+          <T v="bodyBold" style={{ flex: 1 }}>
             {p.label}
           </T>
         </Pressable>
