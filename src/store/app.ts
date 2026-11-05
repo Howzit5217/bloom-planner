@@ -7,7 +7,9 @@ import { useForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
 import { makeReq, overridesKey, parseLevelTable } from '@/engine/levels';
 import { replayLog } from '@/engine/progress';
+import { DEFAULT_RHYTHM, makeRhythm, type RhythmPrefs } from '@/engine/rhythm';
 import { computeDashboard, type Dashboard } from '@/engine/summary';
+import { usesF, type TempUnit } from '@/engine/units';
 import type { DayEntry, LevelOverride, LevelTable, Overrides, PlayLocation, Profile, Rates, SeasonRate, ThresholdPreset } from '@/engine/types';
 import * as db from '@/storage/db';
 import type { LangPref } from '@/i18n';
@@ -51,6 +53,10 @@ export interface Settings {
   dev: { betaUpdates: boolean };
   /** Too hot to walk far, or to ride, above these feels-like highs (°C). */
   heat: HeatLimits;
+  /** The week's rhythm: easy days, and whether the days vary at all. */
+  plan: RhythmPrefs;
+  /** How temperatures show: the phone's way, or °C or °F. */
+  temp: TempUnit;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -74,6 +80,8 @@ export const DEFAULT_SETTINGS: Settings = {
   updates: { enabled: true, lastCheck: null, latest: null, dismissedVersion: null },
   dev: { betaUpdates: true },
   heat: DEFAULT_HEAT,
+  plan: DEFAULT_RHYTHM,
+  temp: 'auto',
 };
 
 export const ALL_DAYS_RIDEABLE: SeasonRate[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const }));
@@ -184,6 +192,7 @@ export const useApp = create<AppState>((set, get) => ({
           updates: { ...DEFAULT_SETTINGS.updates, ...(settings?.updates ?? {}) },
           dev: { ...DEFAULT_SETTINGS.dev, ...(settings?.dev ?? {}) },
           heat: { ...DEFAULT_SETTINGS.heat, ...(settings?.heat ?? {}) },
+          plan: { ...DEFAULT_SETTINGS.plan, ...(settings?.plan ?? {}) },
           dismissed: settings?.dismissed ?? {},
         },
         table: pickTable(remote),
@@ -323,11 +332,12 @@ export function useDashboard(): Dashboard | null {
   const climate = useApp((s) => s.climate);
   const heat = useApp((s) => s.settings.heat);
   const preset = useApp((s) => s.settings.preset);
+  const rhythmPrefs = useApp((s) => s.settings.plan);
   const forecast = useForecast((s) => s.days);
   const oKey = overridesKey(overrides);
   const sKey = seasonRates.map((r) => r.rideable.toFixed(4)).join(',');
   const pKey = profile ? JSON.stringify(profile) : '';
-  const wKey = `${heat.walk}|${heat.bike}|${preset}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
+  const wKey = `${heat.walk}|${heat.bike}|${preset}|${rhythmPrefs.vary}|${rhythmPrefs.easyDays.join('')}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
   return useMemo(
     () => {
       if (!profile) return null;
@@ -335,9 +345,15 @@ export function useDashboard(): Dashboard | null {
       // The weather's say: walking days from the history, the next fortnight from the forecast.
       const walkRates = climate ? walkRatesFromClimate(climate, heat.walk, walkFallback(indoor)) : undefined;
       const weights = forecast?.length ? forecastWeights(forecast, PRESETS[preset], heat, indoor, today) : null;
-      return computeDashboard({ table, overrides, profile, entries, seasonRates: seasonRates.map((r) => r.rideable), today, walkRates, forecast: weights });
+      return computeDashboard({ table, overrides, profile, entries, seasonRates: seasonRates.map((r) => r.rideable), today, walkRates, forecast: weights, rhythm: makeRhythm(rhythmPrefs) });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pKey, entriesRev, oKey, sKey, table.version, today, wKey],
   );
+}
+
+/** Whether temperatures show in °F: the player's setting, or the phone's region. */
+export function useTempF(): boolean {
+  const unit = useApp((s) => s.settings.temp);
+  return usesF(unit);
 }

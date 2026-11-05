@@ -37,6 +37,8 @@ export interface DashboardInput {
   walkRates?: number[];
   /** The forecast's own weights for the next two weeks. */
   forecast?: ForecastWeights | null;
+  /** The week's rhythm (rhythm.ts): easy days ask less, the rest a little more. */
+  rhythm?: (d: Date) => number;
 }
 
 export interface RingData {
@@ -107,11 +109,11 @@ const ring = (done: number, need: number): RingData => ({
   fraction: need > 0 ? Math.min(1, Math.max(0, done / need)) : 1,
 });
 
-export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today, walkRates, forecast }: DashboardInput): Dashboard {
+export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today, walkRates, forecast, rhythm }: DashboardInput): Dashboard {
   // Riding needs fair weather; without a bike, flowers come from walking, on the walking days.
   const bikes = profile.rates.bikes !== false;
   const seasonRates = bikes ? weather : (walkRates ?? flowerDays(weather, false));
-  const days = { walkRates, walkDays: forecast?.walk, flowerDays: bikes ? forecast?.ride : forecast?.walk };
+  const days = { walkRates, walkDays: forecast?.walk, flowerDays: bikes ? forecast?.ride : forecast?.walk, rhythm };
   const req = makeReq(table, overrides);
   const replay = replayLog(profile, entries, req, table.maxLevel);
   const current = replay.state;
@@ -131,6 +133,7 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     seasonRates,
     req,
     walkRates,
+    rhythm,
   });
   const stand = standing(baseline, current, req, today, loggedToday);
 

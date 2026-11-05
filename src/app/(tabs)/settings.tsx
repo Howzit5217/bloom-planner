@@ -9,15 +9,16 @@ import { checkGoal } from '@/engine/goalCheck';
 import { fmt, fmtDate } from '@/engine/format';
 import { DEFAULT_RATES, RATE_KEYS, type RateKey } from '@/engine/rates';
 import type { ThresholdPreset } from '@/engine/types';
-import { toF } from '@/engine/weatherPlan';
+import { cToF, fmtTemp, fToC, type TempUnit } from '@/engine/units';
 import { DifficultyPill } from '@/features/shared/Difficulty';
+import { EasyDays } from '@/features/shared/EasyDays';
 import { CustomGoalForm } from '@/features/home/NewGoal';
 import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
 import { shareTextFile } from '@/services/shareFile';
-import { useApp, useDashboard, type LogMode, type ThemePref } from '@/store/app';
+import { useApp, useDashboard, useTempF, type LogMode, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { Banner } from '@/ui/Banner';
 import { Card } from '@/ui/Card';
@@ -91,6 +92,7 @@ export default function Settings() {
   const [langSheet, setLangSheet] = useState(false);
   const dash = useDashboard();
   const st = useApp();
+  const tempF = useTempF();
   const profile = st.profile;
   const [confirmReset, setConfirmReset] = useState(false);
   const [timeSheet, setTimeSheet] = useState(false);
@@ -276,6 +278,8 @@ export default function Settings() {
           );
         })}
         <Toggle label={t('Indoor Walking')} hint={t('Treadmill, walking at work.')} value={profile.rates.treadmillAvailable} onChange={(b) => void st.setRates({ ...profile.rates, treadmillAvailable: b })} />
+        {/* Not every day alike: easy days ask less, the rest a little more. */}
+        <EasyDays value={st.settings.plan} onChange={(plan) => void st.updateSettings({ plan })} />
       </Section>
 
       <Section title={t('Where You Play')} icon="map-marker-radius">
@@ -287,23 +291,23 @@ export default function Settings() {
         </T>
         <LinkRow label={st.location ? t('Change place') : t('Find your place')} onPress={() => router.push('/location')} />
         {bikes && st.location && st.climate ? <LinkRow label={t('Climate details')} onPress={() => router.push('/climate')} /> : null}
-        {/* Heat: judged on the feels-like high, so humidity and wind count too. */}
-        <View style={{ gap: 8 }}>
-          <T v="smallBold">{t('Too hot to walk above')}</T>
-          <Stepper label={t('Too hot to walk above')} value={st.settings.heat.walk ?? 35} min={20} max={46} onChange={(v) => void st.setHeat({ ...st.settings.heat, walk: v })} size={52} />
-          <T v="caption" soft center>
-            {t('Feels like {c}°C ({f}°F)', { c: st.settings.heat.walk ?? 35, f: toF(st.settings.heat.walk ?? 35) })}
-          </T>
+        {/* Temperatures: the phone's way, or always °C or °F. */}
+        <View style={{ gap: 6 }}>
+          <T v="smallBold">{t('Temperatures')}</T>
+          <Segmented<TempUnit>
+            label={t('Temperatures')}
+            value={st.settings.temp}
+            onChange={(temp) => void st.updateSettings({ temp })}
+            options={[
+              { key: 'auto', label: t('Automatic') },
+              { key: 'c', label: '°C' },
+              { key: 'f', label: '°F' },
+            ]}
+          />
         </View>
-        {bikes ? (
-          <View style={{ gap: 8 }}>
-            <T v="smallBold">{t('Too hot to ride above')}</T>
-            <Stepper label={t('Too hot to ride above')} value={st.settings.heat.bike ?? 35} min={20} max={46} onChange={(v) => void st.setHeat({ ...st.settings.heat, bike: v })} size={52} />
-            <T v="caption" soft center>
-              {t('Feels like {c}°C ({f}°F)', { c: st.settings.heat.bike ?? 35, f: toF(st.settings.heat.bike ?? 35) })}
-            </T>
-          </View>
-        ) : null}
+        {/* Heat: judged on the feels-like high, so humidity and wind count too; set in the player's unit. */}
+        <HeatLimit label={t('Too hot to walk above')} celsius={st.settings.heat.walk ?? 35} f={tempF} onChange={(v) => void st.setHeat({ ...st.settings.heat, walk: v })} />
+        {bikes ? <HeatLimit label={t('Too hot to ride above')} celsius={st.settings.heat.bike ?? 35} f={tempF} onChange={(v) => void st.setHeat({ ...st.settings.heat, bike: v })} /> : null}
         <T v="caption" soft>
           {t('Feels-like temperature, so humidity and wind count too. Days hotter than this, and rain, snow or storms in the forecast, get less of the plan; the good days get more.')}
         </T>
@@ -328,10 +332,10 @@ export default function Settings() {
               />
               <T v="caption" soft>
                 {st.settings.preset === 'fair'
-                  ? t('No rain at all, at least 5°C and 11 hours of daylight.')
+                  ? t('No rain at all, at least {t} and 11 hours of daylight.', { t: fmtTemp(5, tempF) })
                   : st.settings.preset === 'all'
-                    ? t('Up to 15mm of rain, 3cm of snow, down to -5°C, 8 hours of daylight.')
-                    : t('Up to 5mm of rain, 1cm of snow, at least 2°C and 9.5 hours of daylight.')}
+                    ? t('Up to 15mm of rain, 3cm of snow, down to {t}, 8 hours of daylight.', { t: fmtTemp(-5, tempF) })
+                    : t('Up to 5mm of rain, 1cm of snow, at least {t} and 9.5 hours of daylight.', { t: fmtTemp(2, tempF) })}
                 {st.seasonRates.some((r) => r.source === 'manual') ? ` ${t('Your hand-set months stay as they are.')}` : ''}
               </T>
             </View>
@@ -587,5 +591,23 @@ export default function Settings() {
         </T>
       </Sheet>
     </Screen>
+  );
+}
+
+/**
+ * A heat limit, set in the player's unit: whole degrees °C, or whole degrees °F (kept in °C to the
+ * tenth, so it reads back as set). The other unit shows underneath.
+ */
+function HeatLimit({ label, celsius, f, onChange }: { label: string; celsius: number; f: boolean; onChange: (celsius: number) => void }) {
+  const { t } = useT();
+  const shown = Math.round(f ? cToF(celsius) : celsius);
+  return (
+    <View style={{ gap: 8 }}>
+      <T v="smallBold">{label}</T>
+      <Stepper label={label} value={shown} min={f ? 68 : 20} max={f ? 115 : 46} onChange={(v) => onChange(f ? Math.round(fToC(v) * 10) / 10 : v)} size={52} />
+      <T v="caption" soft center>
+        {t('Feels like {t} ({other})', { t: fmtTemp(celsius, f), other: fmtTemp(celsius, !f) })}
+      </T>
+    </View>
   );
 }

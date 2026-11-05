@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { addDaysKey, fromKey, type DayKey } from '@/engine/dates';
+import { isEasyDay } from '@/engine/rhythm';
 import { fmt, fmtLongDay, roundNice } from '@/engine/format';
 import { doneFromToGo, looksLikeLevelUp, missedDay, rebalanceNext, stateBefore } from '@/engine/leftLog';
 import { questOf } from '@/engine/quest';
@@ -50,6 +51,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const maxLevel = useApp((s) => s.table.maxLevel);
   // What's Left: the numbers come from the game's level-up screen, not a step counter.
   const left = useApp((s) => s.settings.logMode) === 'left';
+  const rhythmPrefs = useApp((s) => s.settings.plan);
   const isToday = date === dash.today;
   const existing = isToday ? dash.todayEntry : (entries.find((e) => e.date === date) ?? null);
   // Where the log stood before this day, so editing a level-up day keeps the right baseline.
@@ -135,7 +137,9 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
 
   const tg = dash.target;
   const cg = dash.custom;
-  const targetLine =
+  // Today is one of the week's easy days: said before the target, so the lighter number makes sense.
+  const easyToday = isToday && dash.phase === 'active' && isEasyDay(rhythmPrefs, fromKey(dash.today));
+  const plainTarget =
     isToday && cg && !cg.reached && !cg.passed && !dash.loggedToday
       ? t("Today's target: {steps} steps · {flowers} flowers", { steps: fmt(roundNice(cg.stepsPerDay)), flowers: fmt(roundNice(cg.flowersPerDay)) })
       : isToday && tg.isToday && dash.phase === 'active' && dash.plan.status === 'ok'
@@ -145,6 +149,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
             : t("Today's target: {steps} steps · {flowers} flowers", { steps: fmt(roundNice(tg.steps)), flowers: fmt(roundNice(tg.flowersIfRiding)) })
           : t("Today's target: {steps} steps", { steps: fmt(roundNice(tg.steps)) })
         : null;
+  const targetLine = plainTarget && easyToday ? `${t('Easy day.')} ${plainTarget}` : plainTarget;
   // The forecast cut today down: say why, so a smaller target makes sense.
   const wt = dash.weather?.today;
   const rideBad = dash.rates.bikes && wt && wt.ride !== 'good';

@@ -61,22 +61,36 @@ export class RideCalendar {
   readonly startKey: DayKey;
   private readonly rates: number[];
   private readonly prefix: number[];
+  /** Each day's share from the week's rhythm (1 when the days don't vary). */
+  private readonly shares: number[];
 
-  constructor(startKey: DayKey, seasonRates: number[], days: number, overrides?: DayWeights) {
+  /**
+   * `rhythm` scales each day by the week's rhythm (easy days less, the rest a little more), on top
+   * of the weather's weight: a day's weight can then pass 1.
+   */
+  constructor(startKey: DayKey, seasonRates: number[], days: number, overrides?: DayWeights, rhythm?: (d: Date) => number) {
     this.startKey = startKey;
     const n = Math.max(1, Math.ceil(days));
     this.rates = new Array(n);
     this.prefix = new Array(n + 1);
+    this.shares = new Array(n);
     this.prefix[0] = 0;
     const d = fromKey(startKey);
     const has = !!overrides && Object.keys(overrides).length > 0;
     for (let i = 0; i < n; i++) {
       const o = has ? overrides![toKey(d)] : undefined;
-      const r = Math.min(1, Math.max(0, o ?? seasonRates[d.getMonth()] ?? 1));
+      const share = rhythm ? Math.max(0, rhythm(d)) : 1;
+      const r = Math.min(1, Math.max(0, o ?? seasonRates[d.getMonth()] ?? 1)) * share;
+      this.shares[i] = share;
       this.rates[i] = r;
       this.prefix[i + 1] = this.prefix[i] + r;
       d.setDate(d.getDate() + 1);
     }
+  }
+
+  /** Day i's share from the week's rhythm. */
+  shareOnDay(i: number): number {
+    return i >= 0 && i < this.shares.length ? this.shares[i] : 1;
   }
 
   get length() {
@@ -243,17 +257,19 @@ export interface PlanInput {
   /** The forecast's own weights for the days it covers. */
   flowerDays?: DayWeights;
   walkDays?: DayWeights;
+  /** The week's rhythm (rhythm.ts): easy days ask less, the rest a little more. */
+  rhythm?: (d: Date) => number;
 }
 
 const EVERY_DAY = new Array(12).fill(1);
 
 /** §7.3 + §7.5: required paces and the projected path to the goal. */
-export function buildPlan({ start, startKey, goalKey, goalLevel, seasonRates, req, walkRates, flowerDays, walkDays }: PlanInput): Plan {
+export function buildPlan({ start, startKey, goalKey, goalLevel, seasonRates, req, walkRates, flowerDays, walkDays, rhythm }: PlanInput): Plan {
   const calendarDays = daysBetween(startKey, goalKey) + 1;
   const remaining = remainingWork(start, goalLevel, req);
   const horizon = Math.max(1, calendarDays) + 3660;
-  const cal = new RideCalendar(startKey, seasonRates, horizon, flowerDays);
-  const walk = new RideCalendar(startKey, walkRates ?? EVERY_DAY, horizon, walkDays);
+  const cal = new RideCalendar(startKey, seasonRates, horizon, flowerDays, rhythm);
+  const walk = new RideCalendar(startKey, walkRates ?? EVERY_DAY, horizon, walkDays, rhythm);
   const ride = calendarDays > 0 ? cal.W(calendarDays) : 0;
   const walkable = calendarDays > 0 ? walk.W(calendarDays) : 0;
   const base: Omit<Plan, 'status' | 'segments' | 'endT' | 'scale' | 'stepsCap' | 'flowersCap' | 'avgStepsPerDay' | 'avgFlowersPerRideDay'> = {
@@ -346,7 +362,8 @@ export function plannedForDay(plan: Plan, i: number): { steps: number; flowersIf
     const b = Math.min(i + 1, s.endT);
     if (b <= a) continue;
     steps += s.stepRate * (plan.walk.W(b) - plan.walk.W(a));
-    flowersIfRiding += s.flowerRate * (b - a);
+    // A ride on an easy day plants less too.
+    flowersIfRiding += s.flowerRate * (b - a) * plan.calendar.shareOnDay(i);
     expectedFlowers += s.flowerRate * (plan.calendar.W(b) - plan.calendar.W(a));
   }
   return { steps, flowersIfRiding, expectedFlowers };

@@ -2,9 +2,12 @@ import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { daysBetween } from '@/engine/dates';
+import { daysBetween, fromKey } from '@/engine/dates';
+import { isEasyDay } from '@/engine/rhythm';
 import { fmt, fmtDate, fmtHours, fmtShort, fmtWeekday, roundNice } from '@/engine/format';
 import type { Dashboard } from '@/engine/summary';
+import { cToF } from '@/engine/units';
+import { useApp, useTempF } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { DifficultyFlower, DifficultyPill } from '@/features/shared/Difficulty';
 import { QUEST_ICON } from '@/features/shared/quest';
@@ -342,14 +345,6 @@ function dayIcon(d: Dashboard['week'][number], bikes: boolean): IconName {
   return 'weather-sunny';
 }
 
-/** °F where the phone is set to the US, °C everywhere else. */
-const USES_F = (() => {
-  try {
-    return /-US$/.test(Intl.DateTimeFormat().resolvedOptions().locale);
-  } catch {
-    return false;
-  }
-})();
 const kNum = (n: number) => (n >= 9500 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(Math.round(n / 10) * 10));
 
 /** The week ahead: each day's weather and what the plan asks of it, so a lighter or heavier day makes sense. */
@@ -358,6 +353,8 @@ export function WeekCard({ dash }: { dash: Dashboard }) {
   const { t } = useT();
   const bikes = dash.rates.bikes;
   const hasWeather = dash.week.some((d) => d.walk != null);
+  const f = useTempF();
+  const rhythm = useApp((s) => s.settings.plan);
   return (
     <Card style={{ gap: 12 }}>
       <T v="h3">{t('The Week Ahead')}</T>
@@ -369,10 +366,14 @@ export function WeekCard({ dash }: { dash: Dashboard }) {
               <T v="caption" soft={i !== 0} style={i === 0 ? { color: c.leafDeep, fontWeight: '800' } : undefined}>
                 {fmtWeekday(d.date)}
               </T>
+              {/* An easy day: a leaf, and less asked of it. */}
+              <View style={{ height: 12, justifyContent: 'center' }} accessible={isEasyDay(rhythm, fromKey(d.date))} accessibilityLabel={t('Easy day')}>
+                {isEasyDay(rhythm, fromKey(d.date)) ? <Icon name="leaf" size={12} color={c.leaf} /> : null}
+              </View>
               {hasWeather ? <Icon name={d.walk != null ? dayIcon(d, bikes) : 'minus'} size={22} color={poor ? c.alert : c.leafDeep} /> : null}
               {hasWeather ? (
                 <T v="caption" soft>
-                  {d.feels != null ? `${Math.round(USES_F ? (d.feels * 9) / 5 + 32 : d.feels)}°` : ' '}
+                  {d.feels != null ? `${Math.round(f ? cToF(d.feels) : d.feels)}°` : ' '}
                 </T>
               ) : null}
               {d.logged ? <Icon name="check-circle" size={18} color={c.leaf} /> : null}

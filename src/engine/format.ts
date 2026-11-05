@@ -127,6 +127,8 @@ export function monthLabel(m: number, columnWidth: number): string {
   const fits = Array.from({ length: 12 }, (_, i) => width(monthShort(i))).every((w) => w <= columnWidth - 2);
   return fits ? monthShort(m) : monthNarrow(m);
 }
+/** Weekday 0-6 (Sunday first), short: "Sun", "dom", "日"... */
+export const weekdayShort = (d: number) => cap(format(new Date(2020, 10, 1 + d), 'EEE', opts()).replace(/\.$/, ''));
 /** Weekday 0-6 (Sunday first), narrow: "S", "D", "日"... */
 export const weekdayNarrow = (d: number) => cap(format(new Date(2020, 10, 1 + d), 'EEEEE', opts()));
 /** Weekday 0-6 (Sunday first), in full, for screen readers. */
