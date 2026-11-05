@@ -8,9 +8,14 @@ works out the rest: how far ahead or behind you are, how many steps and flowers 
 how long that takes on foot or by bike, and when each level should land, with your local
 weather built in.
 
+It speaks the same ten languages as Pikmin Bloom, plans for walking only if you don't bike, and
+grades every goal with a flower: white for an easy plan, then yellow, red, and blue for the hardest.
+
 > Unofficial fan-made planner. Not affiliated with or endorsed by Scopely or Nintendo.
 
 ## Download
+
+**Download page: https://howzit5217.github.io/bloom-planner/**
 
 ### Android
 
@@ -23,21 +28,17 @@ published it shows a "Version X is ready" card on Home; tap it, download, and in
 Your log is kept. Corrected level data (`src/data/bloom-levels.json`) is picked up automatically,
 without reinstalling.
 
-### iPhone
+### iPhone (and computers)
 
-Apple doesn't allow installing apps from outside the App Store or TestFlight, so there's no
-download for iPhone yet. You can still run it from this source code with the free
-[Expo Go](https://apps.apple.com/app/expo-go/id982107779) app:
+The same app runs on the web, with nothing to download:
 
-```bash
-git clone https://github.com/Howzit5217/bloom-planner.git
-cd bloom-planner
-npm install
-npx expo start
-```
+1. Open **https://howzit5217.github.io/bloom-planner/app/** in Safari.
+2. Tap **Share**, then **Add to Home Screen**. (The app shows these two taps too.)
+3. Open it from the home screen: full screen, its own icon, no browser bars.
 
-Scan the QR code with the iPhone camera. (Publishing to the App Store or TestFlight needs an
-Apple Developer account; the project builds with `eas build -p ios` once one is set up.)
+Add it before setting up: Safari keeps a home-screen app's data apart from the browser's. The web
+version has everything except evening reminders, which only the Android app can send. On a
+computer it works in any modern browser, in a phone-width column; Chrome and Edge offer **Install**.
 
 ## How the maths works
 
@@ -88,7 +89,8 @@ download it automatically.
 
 ## Privacy
 
-- Your log stays on your phone (SQLite). There's no account, server or analytics.
+- Your log stays on your device (SQLite in the Android app, the browser's own storage on the web).
+  There's no account, server or analytics.
 - Only the coordinates of the place you pick go to Open-Meteo, for weather. With "use my current
   location", your phone's own maps service turns them into a place name.
 - The update check downloads two public files from this GitHub repository. Nothing about you is sent.
@@ -100,24 +102,39 @@ Requires Node 20+.
 ```bash
 npm install
 npx expo start          # open in Expo Go (Android or iPhone)
-npm test                # engine unit tests
+npm test                # unit tests (engine, translations, layouts)
 npm run typecheck
 npm run lint
+npm run build:web       # the web version, into dist/ (served under /bloom-planner/app)
 ```
 
 Built with Expo SDK 58, React Native, TypeScript, expo-router, Reanimated 4, Skia (all charts and
-animations), expo-sqlite, zustand and date-fns.
+animations), expo-sqlite, zustand and date-fns. The web version runs on react-native-web, with Skia's
+CanvasKit; every push to `main` publishes it and the download page
+([`docs/`](docs)) to GitHub Pages ([pages workflow](.github/workflows/pages.yml)).
+
+Translations live in [`src/i18n`](src/i18n): the English text is the key, and a test checks every
+language has every string with the same placeholders.
 
 ### Publishing a new version
 
-1. Raise `version` (and `android.versionCode`) in `app.json`, and `version` in `package.json`.
-2. Commit, then tag and push: `git tag v1.1.0 && git push origin main --tags`.
-3. The [Release workflow](.github/workflows/release.yml) builds a signed APK and publishes it as a
-   GitHub Release. Installed apps find it on their next daily check.
+Versions are `MAJOR.MINOR.PATCH`. Test builds add a beta number: `1.1.0:b3` is the third beta built on
+1.1.0 (it ranks above 1.1.0, so the next release raises the version). Beta builds take GitHub
+**pre-releases**; everyone else, and the download page, only ever see full releases.
 
-The workflow needs these repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Every update must be signed with the same key, or Android
-refuses to install it over the old version.
+```powershell
+# A release: bumps app.json and package.json, builds on GitHub Actions, signs, publishes.
+powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Version 1.2.0 -NotesFile notes.txt
+
+# A beta for your own devices, as a pre-release (-Install puts it on every device adb lists).
+powershell -ExecutionPolicy Bypass -File tools\beta.ps1 [-Install]
+```
+
+The [Release workflow](.github/workflows/release.yml) builds the APK (`variant` input: `release` or
+`beta`). With the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` it signs and publishes the release itself; without
+them it leaves an unsigned APK, which the script signs locally with the release key. Every update
+must be signed with the same key, or Android refuses to install it over the old version.
 
 ## Credits
 
