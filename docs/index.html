@@ -32,7 +32,7 @@
      darker part drags, on a phone too. */
   html { scrollbar-width: none; }
   html::-webkit-scrollbar { display: none; }
-  .rail { position: fixed; top: 8px; bottom: 8px; right: 0; width: 22px; z-index: 30; opacity: 0; pointer-events: none; touch-action: none; transition: opacity .32s ease; }
+  .rail { position: fixed; top: 132px; bottom: 8px; right: 0; width: 22px; z-index: 30; opacity: 0; pointer-events: none; touch-action: none; transition: opacity .32s ease; }
   .rail.on { opacity: 1; pointer-events: auto; transition-duration: .12s; }
   .rail::before { content: ''; position: absolute; top: 0; bottom: 0; right: 4px; width: 4px; border-radius: 2px; background: var(--rail); }
   .rail-handle { position: absolute; top: 0; right: 3px; width: 6px; min-height: 40px; border-radius: 3px; background: var(--rail-handle); transition: width .12s ease, right .12s ease; will-change: transform; }
@@ -372,7 +372,16 @@
       var len = Math.max(40, Math.min(track, (view / page) * track));
       return { len: len, travel: Math.max(0, track - len), max: Math.max(0, page - view) };
     }
+    // The bar starts below the flowers along the top, and reaches up as they scroll away.
+    var strip = document.querySelector('.meadow');
+    function edge() {
+      // Held still while dragging, so it doesn't shift under the finger.
+      if (drag) return;
+      var below = strip ? strip.getBoundingClientRect().bottom - 28 + 10 : 8;
+      rail.style.top = Math.max(8, Math.round(below)) + 'px';
+    }
     function place() {
+      edge();
       var g = geo();
       handle.style.height = g.len + 'px';
       handle.style.transform = 'translateY(' + (g.max ? (window.scrollY / g.max) * g.travel : 0) + 'px)';

@@ -248,6 +248,7 @@ function Big({ value, label }: { value: number; label: string }) {
 
 /** How much movement today's targets imply. */
 /** Whether each Home card has anything to show: Home leaves out the rest, so the gaps stay even. */
+export const showsWeekCard = (dash: Dashboard) => dash.week.length > 0;
 export const showsTimeCard = (dash: Dashboard) => dash.phase === 'active' && dash.plan.status === 'ok';
 export const showsMilestoneCard = (dash: Dashboard) => dash.phase === 'active' && (dash.replay.readyToLevel || (!!dash.nextMilestone && dash.plan.status === 'ok'));
 
@@ -322,6 +323,93 @@ export function StreakCard({ dash }: { dash: Dashboard }) {
         accessibilityLabel={t('Logged {n} of the last {total} days', { n: dash.recent.filter((d) => d.logged).length, total: dash.recent.length })}
         items={dash.recent.map((d, i) => (d.logged ? (colors[i % colors.length] === c.petalWhite ? c.petalPurple : colors[i % colors.length]) : null))}
       />
+    </Card>
+  );
+}
+
+/** The forecast's look for a day: what matters most for the plan first. */
+function dayIcon(d: Dashboard['week'][number], bikes: boolean): IconName {
+  const v = d.walk === 'good' && bikes && d.ride && d.ride !== 'good' ? d.ride : d.walk;
+  if (v === 'hot') return 'thermometer-high';
+  if (v === 'storm') return 'weather-lightning-rainy';
+  if (v === 'snow') return 'weather-snowy';
+  if (v === 'wet') return 'weather-pouring';
+  if (v === 'wind') return 'weather-windy';
+  if (v === 'cold') return 'snowflake';
+  if ((d.code ?? 0) >= 51) return 'weather-rainy';
+  if ((d.code ?? 0) >= 45) return 'weather-fog';
+  if ((d.code ?? 0) >= 2) return 'weather-partly-cloudy';
+  return 'weather-sunny';
+}
+
+/** °F where the phone is set to the US, °C everywhere else. */
+const USES_F = (() => {
+  try {
+    return /-US$/.test(Intl.DateTimeFormat().resolvedOptions().locale);
+  } catch {
+    return false;
+  }
+})();
+const kNum = (n: number) => (n >= 9500 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(Math.round(n / 10) * 10));
+
+/** The week ahead: each day's weather and what the plan asks of it, so a lighter or heavier day makes sense. */
+export function WeekCard({ dash }: { dash: Dashboard }) {
+  const { c } = useTheme();
+  const { t } = useT();
+  const bikes = dash.rates.bikes;
+  const hasWeather = dash.week.some((d) => d.walk != null);
+  return (
+    <Card style={{ gap: 12 }}>
+      <T v="h3">{t('The Week Ahead')}</T>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        {dash.week.map((d, i) => {
+          const poor = d.walk != null && d.walk !== 'good';
+          return (
+            <View key={d.date} style={{ flex: 1, alignItems: 'center', gap: 4, paddingVertical: 6, borderRadius: 14, backgroundColor: i === 0 ? c.leafPale : 'transparent' }}>
+              <T v="caption" soft={i !== 0} style={i === 0 ? { color: c.leafDeep, fontWeight: '800' } : undefined}>
+                {fmtWeekday(d.date)}
+              </T>
+              {hasWeather ? <Icon name={d.walk != null ? dayIcon(d, bikes) : 'minus'} size={22} color={poor ? c.alert : c.leafDeep} /> : null}
+              {hasWeather ? (
+                <T v="caption" soft>
+                  {d.feels != null ? `${Math.round(USES_F ? (d.feels * 9) / 5 + 32 : d.feels)}°` : ' '}
+                </T>
+              ) : null}
+              {d.logged ? <Icon name="check-circle" size={18} color={c.leaf} /> : null}
+              <T v="smallBold" color={c.teal}>
+                {kNum(d.steps)}
+              </T>
+              {d.flowers >= 1 || (bikes && d.ride != null) ? (
+                <T v="caption" color={c.petalRed}>
+                  {d.flowers >= 1 ? kNum(d.flowers) : '–'}
+                </T>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Icon name="shoe-print" size={14} color={c.teal} />
+          <T v="caption" soft>
+            {t('steps')}
+          </T>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Icon name="flower" size={14} color={c.petalRed} />
+          <T v="caption" soft>
+            {t('flowers')}
+          </T>
+        </View>
+      </View>
+      {hasWeather ? null : (
+        <Pressable accessibilityRole="button" onPress={() => router.push('/location')} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 40 }}>
+          <Icon name="weather-partly-cloudy" size={18} color={c.leafDeep} />
+          <T v="smallBold" color={c.leafDeep}>
+            {t('Add where you play to see its weather here')}
+          </T>
+        </Pressable>
+      )}
     </Card>
   );
 }

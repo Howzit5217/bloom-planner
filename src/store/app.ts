@@ -260,6 +260,8 @@ export const useApp = create<AppState>((set, get) => ({
     if (climate) await db.kvSet('climate', climate);
     else await db.kvDelete('climate');
     set({ location, climate });
+    // A new place: its forecast now, not at the next start.
+    void useForecast.getState().refresh(location);
     if (climate) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, get().settings.heat.bike));
   },
 

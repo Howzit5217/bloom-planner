@@ -46,6 +46,8 @@ export type DayVerdict = 'good' | 'hot' | 'wet' | 'snow' | 'storm' | 'wind' | 'c
 export interface ForecastWeights {
   walk: DayWeights;
   ride: DayWeights;
+  /** The forecast itself, by date, for showing it. */
+  day: Record<string, ForecastWeatherDay>;
   /** Why each day is weighed as it is, for walking and for riding. */
   why: Record<string, { walk: DayVerdict; ride: DayVerdict }>;
 }
@@ -84,15 +86,17 @@ export function forecastWeights(days: ForecastWeatherDay[], th: Thresholds, heat
   const walk: DayWeights = {};
   const ride: DayWeights = {};
   const why: ForecastWeights['why'] = {};
+  const day: ForecastWeights['day'] = {};
   for (const d of days) {
     if (d.date < from) continue;
+    day[d.date] = d;
     const w = walkVerdict(d, heat);
     const r = rideVerdict(d, th, heat);
     walk[d.date] = w === 'good' ? 1 : walkFallback(indoor);
     ride[d.date] = r === 'good' ? 1 : r === 'wet' && (d.precipChance ?? 100) < 50 ? 0.5 : 0;
     why[d.date] = { walk: w, ride: r };
   }
-  return { walk, ride, why };
+  return { walk, ride, why, day };
 }
 
 /** °C to °F, for showing a limit both ways. */

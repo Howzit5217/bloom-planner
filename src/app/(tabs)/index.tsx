@@ -3,7 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
 import { fmt, fmtHours } from '@/engine/format';
-import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, StreakCard, TimeCard } from '@/features/home/Cards';
+import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, showsWeekCard, StreakCard, TimeCard, WeekCard } from '@/features/home/Cards';
 import { CustomGoalCard, NewGoalCard, showsCustomGoal, showsNewGoal } from '@/features/home/NewGoal';
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
@@ -135,6 +135,7 @@ export default function Home() {
     // At the top level there's no next level: the user's own goal takes the rings.
     dash.phase === 'maxed' ? (showsCustomGoal(dash) ? <CustomGoalCard key="custom" dash={dash} /> : null) : <RingsCard key="rings" dash={dash} />,
     <PaceCard key="pace" dash={dash} />,
+    showsWeekCard(dash) ? <WeekCard key="week" dash={dash} /> : null,
     showsTimeCard(dash) ? <TimeCard key="time" dash={dash} /> : null,
     <StreakCard key="streak" dash={dash} />,
     showsMilestoneCard(dash) ? <MilestoneCard key="milestone" dash={dash} /> : null,

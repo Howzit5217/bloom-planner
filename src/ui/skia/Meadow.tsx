@@ -163,11 +163,14 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
       color(petal, nightTint(CENTRE_COLOR));
       canvas.drawCircle(f.x, f.y, r * CENTRE_R, petal);
     }
-    // Haze where the ground meets the sky (and a thicker one in fog).
-    if (hz > 0) {
-      const haze = Math.min(groundH * (look.fog ? 0.45 : 0.08), look.fog ? 400 : 70);
+    // Haze where the ground meets the sky (and a thicker one in fog). A field drawn on its own (its
+    // horizon at the top edge) gets it along the top.
+    if (hz > 0 || horizon <= 0) {
+      // On its own the field's top edge meets a separately drawn sky, so its haze is fuller there.
+      const own = horizon <= 0;
+      const haze = Math.min(groundH * (look.fog ? 0.45 : own ? 0.12 : 0.08), look.fog ? 400 : own ? 110 : 70);
       paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, hz + haze), [Skia.Color(look.horizon), Skia.Color(`${look.horizon}00`)], [0, 1], TileMode.Clamp));
-      paint.setAlphaf(look.fog ? 0.85 : 0.45);
+      paint.setAlphaf(look.fog ? 0.85 : own ? 0.8 : 0.45);
       canvas.drawRect(Skia.XYWHRect(0, hz, w, haze), paint);
       paint.setShader(null);
       paint.setAlphaf(1);
@@ -218,7 +221,8 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
 /**
  * The backdrop: a sky (the real time of day and weather where you play) above a field of grass and
  * flowers. Drawn once into a picture, so scrolling over it is cheap; redrawn when the sky changes.
- * `horizon` is where the ground starts, in points from the top.
+ * `horizon` is where the ground starts, in points from the top: at the bottom edge it's only sky, at
+ * the top edge only field (Home draws them as two layers that move at different speeds).
  */
 export function Meadow({ height, horizon, density = 1, seed: fixedSeed, width }: { height: number; horizon: number; density?: number; seed?: number; width?: number }) {
   const { c } = useTheme();

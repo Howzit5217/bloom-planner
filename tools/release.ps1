@@ -157,7 +157,9 @@ try {
         $devices = & $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '\tdevice$' } | ForEach-Object { ($_ -split "`t")[0] }
         foreach ($d in $devices) { Write-Host "Installing on $d..."; Run $adb @('-s', $d, 'install', '-r', $apk) }
     }
-    Write-Host "APK: $apk"
+    # The APK is on GitHub now; the local copy isn't needed (and is over 100 MB).
+    Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "Done: https://github.com/$repo/releases/tag/$tag"
 } finally {
     Pop-Location
 }
