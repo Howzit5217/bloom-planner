@@ -28,6 +28,8 @@ const MIGRATIONS: string[] = [
      source TEXT NOT NULL,
      sample_days INTEGER
    );`,
+  // The level's quest (mushrooms, expeditions, ...) still to go, from the What's Left log.
+  `ALTER TABLE day_entries ADD COLUMN game_task_to_go INTEGER;`,
 ];
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -88,6 +90,7 @@ interface EntryRow {
   out_mode: string | null;
   game_steps_to_go: number | null;
   game_flowers_to_go: number | null;
+  game_task_to_go: number | null;
 }
 
 const toEntry = (r: EntryRow): DayEntry => ({
@@ -101,6 +104,7 @@ const toEntry = (r: EntryRow): DayEntry => ({
   outMode: r.out_mode === 'bike' || r.out_mode === 'walk' ? r.out_mode : null,
   gameStepsToGo: r.game_steps_to_go,
   gameFlowersToGo: r.game_flowers_to_go,
+  gameTaskToGo: r.game_task_to_go ?? null,
 });
 
 export async function getEntries(): Promise<DayEntry[]> {
@@ -112,11 +116,12 @@ export async function getEntries(): Promise<DayEntry[]> {
 export async function upsertEntry(e: DayEntry): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO day_entries (date, steps, flowers, leveled_up, new_level, note, minutes_out, out_mode, game_steps_to_go, game_flowers_to_go, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO day_entries (date, steps, flowers, leveled_up, new_level, note, minutes_out, out_mode, game_steps_to_go, game_flowers_to_go, game_task_to_go, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(date) DO UPDATE SET steps = excluded.steps, flowers = excluded.flowers, leveled_up = excluded.leveled_up,
        new_level = excluded.new_level, note = excluded.note, minutes_out = excluded.minutes_out, out_mode = excluded.out_mode,
-       game_steps_to_go = excluded.game_steps_to_go, game_flowers_to_go = excluded.game_flowers_to_go, updated_at = excluded.updated_at`,
+       game_steps_to_go = excluded.game_steps_to_go, game_flowers_to_go = excluded.game_flowers_to_go,
+       game_task_to_go = excluded.game_task_to_go, updated_at = excluded.updated_at`,
     e.date,
     Math.round(e.steps),
     Math.round(e.flowers),
@@ -127,6 +132,7 @@ export async function upsertEntry(e: DayEntry): Promise<void> {
     e.outMode,
     e.gameStepsToGo,
     e.gameFlowersToGo,
+    e.gameTaskToGo ?? null,
     new Date().toISOString(),
   );
 }

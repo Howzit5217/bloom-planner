@@ -3,10 +3,12 @@
 A warm little planner for Pikmin Bloom that answers one question every day:
 **am I on pace to hit my goal level by my goal date?**
 
-Log three things each evening (steps, flowers, and whether you levelled up) and Bloom Planner
-works out the rest: how far ahead or behind you are, how many steps and flowers today needs,
-how long that takes on foot or by bike, and when each level should land, with your local
-weather built in.
+Log each evening (the day's steps and flowers, or what the game shows still to go, plus the
+level's quest and whether you levelled up) and Bloom Planner works out the rest: how far ahead
+or behind you are, how many steps and flowers today needs, how long that takes on foot or by
+bike, and when each level should land, with your local weather built in. Missed a day? Fill it
+in later. Reached the goal? It asks for the next one, and at the top level the goal is your own
+steps and flowers by a date.
 
 It speaks the same ten languages as Pikmin Bloom, plans for walking only if you don't bike, and
 grades every goal with a flower: white for an easy plan, then yellow, red, and blue for the hardest.

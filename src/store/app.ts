@@ -33,8 +33,12 @@ export interface AppUpdateInfo {
   notes: string;
 }
 
+/** How each day is logged: today's steps and flowers, or what the game shows still to go. */
+export type LogMode = 'daily' | 'left';
+
 export interface Settings {
   theme: ThemePref;
+  logMode: LogMode;
   /** 'system' follows the phone's language. */
   language: LangPref;
   preset: ThresholdPreset;
@@ -47,6 +51,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
+  logMode: 'daily',
   language: 'system',
   preset: 'normal',
   notifications: {

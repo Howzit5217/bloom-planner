@@ -7,6 +7,7 @@ import { fmt, fmtDate, fmtHours, fmtShort, fmtWeekday, roundNice } from '@/engin
 import type { Dashboard } from '@/engine/summary';
 import { useTheme } from '@/theme/theme';
 import { DifficultyFlower, DifficultyPill } from '@/features/shared/Difficulty';
+import { QUEST_ICON } from '@/features/shared/quest';
 import { PETALS } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
@@ -17,6 +18,7 @@ import { LevelBadge } from '@/ui/skia/LevelBadge';
 import { Ring } from '@/ui/skia/Ring';
 import { T } from '@/ui/T';
 import { useT } from '@/i18n';
+import { taskText } from '@/i18n/level-text';
 
 /** Header: current level in the gold badge, the goal beneath. Tap for the level table. */
 export function HomeHeader({ dash }: { dash: Dashboard }) {
@@ -96,7 +98,35 @@ export function RingsCard({ dash }: { dash: Dashboard }) {
         {one('steps', steps, [c.leaf, c.teal], hitSteps, 'shoe-print')}
         {one('flowers', flowers, [c.petalRed, c.petalYellow], hitFlowers, 'flower')}
       </View>
+      {dash.quest ? <QuestRow quest={dash.quest} /> : null}
     </Card>
+  );
+}
+
+/** The level's quest (mushrooms, expeditions, ...): how far along, once the log has a count. */
+function QuestRow({ quest }: { quest: NonNullable<Dashboard['quest']> }) {
+  const { c } = useTheme();
+  const { t } = useT();
+  const fraction = quest.toGo == null ? null : Math.max(0, Math.min(1, (quest.count - quest.toGo) / Math.max(1, quest.count)));
+  return (
+    <View style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.canvasDeep, borderRadius: 18, padding: 12 }}>
+      <IconChip name={QUEST_ICON[quest.kind]} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <T v="smallBold">{taskText(quest.task)}</T>
+        {fraction != null ? (
+          <View style={{ height: 8, borderRadius: 4, backgroundColor: c.card, overflow: 'hidden' }}>
+            <View style={{ width: `${fraction * 100}%`, height: '100%', borderRadius: 4, backgroundColor: c.leaf }} />
+          </View>
+        ) : null}
+      </View>
+      {quest.toGo === 0 ? (
+        <Icon name="check-circle" size={26} color={c.leaf} />
+      ) : quest.toGo != null ? (
+        <T v="smallBold" color={c.leafDeep}>
+          {t('{n} to go', { n: fmt(quest.toGo) })}
+        </T>
+      ) : null}
+    </View>
   );
 }
 
@@ -128,17 +158,17 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
     tone = c.nectar;
     const early = Math.max(0, daysBetween(dash.today, dash.goal.date));
     headline = t('You reached Level {level}!', { level: dash.current.level });
-    sub = early > 0 ? `${tn(early, '{n} day before your goal date.', '{n} days before your goal date.')} ${t('Set a new goal in Settings whenever you like.')}` : t('Set a new goal in Settings whenever you like.');
+    sub = early > 0 ? tn(early, '{n} day before your goal date.', '{n} days before your goal date.') : null;
   } else if (dash.phase === 'maxed') {
     icon = 'crown';
     tone = c.nectar;
     headline = t('Level {level}. You finished the game.', { level: dash.current.level });
-    sub = t('{n} days logged. Every step counted.', { n: fmt(dash.replay.days.length) });
+    sub = tn(dash.replay.days.length, '{n} day logged. Every step counted.', '{n} days logged. Every step counted.', { n: fmt(dash.replay.days.length) });
   } else if (dash.phase === 'datePassed') {
     icon = 'calendar-alert';
     tone = c.alert;
     headline = t('Your goal date has passed.');
-    sub = t("You're at Level {level}. Pick a new date in Settings to replan.", { level: dash.current.level });
+    sub = t("You're at Level {level}.", { level: dash.current.level });
   } else if (dash.plan.status === 'noRideDays') {
     icon = 'weather-cloudy-alert';
     tone = c.alert;
@@ -300,7 +330,7 @@ export function MilestoneCard({ dash }: { dash: Dashboard }) {
   let text: string;
   let sub: string | null = null;
   if (dash.replay.readyToLevel) {
-    text = t('Level {level} is ready: both targets met.', { level: next });
+    text = t('Level {level} is ready: everything is cleared.', { level: next });
     sub = t("Claim it in the game, then mark it in today's log.");
   } else if (dash.nextMilestone && dash.plan.status === 'ok') {
     const days = Math.max(0, daysBetween(dash.today, dash.nextMilestone.date));

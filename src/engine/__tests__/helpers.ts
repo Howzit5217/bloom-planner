@@ -2,12 +2,12 @@ import { makeReq, parseLevelTable } from '../levels';
 import type { DayEntry, LevelTable, Overrides, Profile, StepsMode } from '../types';
 
 /** Small synthetic table: level L>=3 needs `steps` and `flowers`, with a chosen steps mode. */
-export function table(rows: Array<{ level: number; steps: number; flowers: number; stepsMode?: StepsMode }>, maxLevel?: number): LevelTable {
+export function table(rows: Array<{ level: number; steps: number; flowers: number; stepsMode?: StepsMode; task?: string }>, maxLevel?: number): LevelTable {
   const max = maxLevel ?? Math.max(...rows.map((r) => r.level));
   const all = [];
   for (let l = 1; l <= max; l++) {
     const r = rows.find((x) => x.level === l);
-    all.push({ level: l, steps: r?.steps ?? 0, flowers: r?.flowers ?? 0, task: '', stepsMode: r?.stepsMode ?? 'perLevel', source: 'wiki' });
+    all.push({ level: l, steps: r?.steps ?? 0, flowers: r?.flowers ?? 0, task: r?.task ?? '', stepsMode: r?.stepsMode ?? 'perLevel', source: 'wiki' });
   }
   return parseLevelTable({ maxLevel: max, levels: all, extrapolation: {} });
 }

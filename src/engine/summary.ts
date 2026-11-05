@@ -15,6 +15,8 @@ import { flowerDays, observedRates, resolveRates, type ObservedRates } from './r
 import { standing, type Standing } from './standing';
 import { recentDays, streak } from './streak';
 import { planDifficulty, type PlanDifficulty } from './difficulty';
+import { customProgress, type CustomProgress } from './customGoal';
+import { questOf, type Quest } from './quest';
 import { MAX_STEPS_PER_DAY } from './goalCheck';
 import { timeCost, type TimeCost } from './timecost';
 import type { DayEntry, LevelState, LevelTable, Overrides, Profile, ReqFn, Requirement, ResolvedRates } from './types';
@@ -52,6 +54,10 @@ export interface Dashboard {
   todayEntry: DayEntry | null;
   loggedToday: boolean;
   rings: { steps: RingData; flowers: RingData };
+  /** The next level's quest (mushrooms, expeditions, ...) and how many are left, when logged. */
+  quest: (Quest & { task: string; toGo: number | null }) | null;
+  /** At the top level: progress toward the user's own steps-and-flowers goal, when one is set. */
+  custom: CustomProgress | null;
   goal: { level: number; date: DayKey; levelsToGo: number; daysLeft: number };
   plan: Plan;
   baseline: Plan;
@@ -153,6 +159,11 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
       steps: ring(next ? Math.min(current.steps, next.steps) : 0, next?.steps ?? 0),
       flowers: ring(next ? Math.min(current.flowers, next.flowers) : 0, next?.flowers ?? 0),
     },
+    custom: phase === 'maxed' && profile.customGoal ? customProgress(profile.customGoal, entries, today, loggedToday) : null,
+    quest: (() => {
+      const q = next ? questOf(next.task) : null;
+      return q && next ? { ...q, task: next.task, toGo: replay.taskToGo } : null;
+    })(),
     goal: {
       level: goalLevel,
       date: profile.goalDate,

@@ -8,8 +8,8 @@ const THUMB_W = 54;
 const THUMB_H = 62;
 /** The bar: a thin lavender line with round ends. */
 const BAR_W = 4;
-/** Gap between the bar and the screen's edge. */
-const EDGE = 14;
+/** Gap between the bar and the screen's edge: room for the handle, centred on the bar, plus a little. */
+const EDGE = 31;
 const LANE = THUMB_W;
 
 export interface Rail {

@@ -111,6 +111,16 @@ export interface Profile {
   createdAt: string;
   /** yyyy-MM-dd, local calendar day of setup */
   startDate: string;
+  /** At the top level: the user's own steps-and-flowers goal. */
+  customGoal?: CustomGoal | null;
+}
+
+/** A goal past the top level: so many steps and flowers between two dates (yyyy-MM-dd, inclusive). */
+export interface CustomGoal {
+  steps: number;
+  flowers: number;
+  startDate: string;
+  endDate: string;
 }
 
 export type OutMode = 'bike' | 'walk';
@@ -129,6 +139,8 @@ export interface DayEntry {
   /** Optional sync: what the game showed as remaining after this day. */
   gameStepsToGo: number | null;
   gameFlowersToGo: number | null;
+  /** Optional sync: the level's quest (mushrooms, expeditions, ...) still to go after this day. */
+  gameTaskToGo?: number | null;
 }
 
 export type SeasonSource = 'climate' | 'manual' | 'default';

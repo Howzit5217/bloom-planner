@@ -1,4 +1,5 @@
 import { stepsCarryInto } from './levels';
+import { questOf } from './quest';
 import type { DayKey } from './dates';
 import type { DayEntry, LevelState, Profile, ReqFn } from './types';
 
@@ -95,6 +96,8 @@ export interface ReplayDay {
   before: LevelState;
   after: LevelState;
   levelUps: LevelUpEvent[];
+  /** The quest still to go after this day, as far as the log knows. */
+  taskToGo: number | null;
 }
 
 export interface ReplayResult {
@@ -102,8 +105,10 @@ export interface ReplayResult {
   days: ReplayDay[];
   /** Level -> date reached, for levels reached since setup. */
   reachedOn: Record<number, DayKey>;
-  /** Requirements for the next level look met but the user hasn't said they levelled up. */
+  /** Everything for the next level looks cleared (steps, flowers and any quest) but the user hasn't said they levelled up. */
   readyToLevel: boolean;
+  /** The next level's quest still to go, as last logged; null when not logged since the last level-up. */
+  taskToGo: number | null;
 }
 
 export function initialState(profile: Profile): LevelState {
@@ -119,6 +124,7 @@ export function replayLog(profile: Profile, entries: DayEntry[], req: ReqFn, max
   let state = initialState(profile);
   const days: ReplayDay[] = [];
   const reachedOn: Record<number, DayKey> = {};
+  let taskToGo: number | null = null;
   const sorted = [...entries].filter((e) => e.date >= profile.startDate).sort((a, b) => (a.date < b.date ? -1 : 1));
   for (const entry of sorted) {
     const before = { ...state };
@@ -147,12 +153,16 @@ export function replayLog(profile: Profile, entries: DayEntry[], req: ReqFn, max
       }
       if (entry.gameFlowersToGo != null) state.flowers = Math.max(0, next.flowers - entry.gameFlowersToGo);
     }
+    // A new level brings a new quest: what was logged for the old one no longer applies.
+    if (levelUps.length) taskToGo = null;
+    if (entry.gameTaskToGo != null) taskToGo = Math.max(0, entry.gameTaskToGo);
     for (const lu of levelUps) reachedOn[lu.level] = entry.date;
-    days.push({ date: entry.date, entry, before, after: { ...state }, levelUps });
+    days.push({ date: entry.date, entry, before, after: { ...state }, levelUps, taskToGo });
   }
   const next = req(state.level + 1);
-  const readyToLevel = !!next && state.steps >= next.steps && state.flowers >= next.flowers;
-  return { state, days, reachedOn, readyToLevel };
+  // A quest counts as cleared only once the log says so.
+  const readyToLevel = !!next && state.steps >= next.steps && state.flowers >= next.flowers && (!questOf(next.task) || taskToGo === 0);
+  return { state, days, reachedOn, readyToLevel, taskToGo };
 }
 
 /** Fraction of the next level done, judged by the requirement that's further behind (0..1). */

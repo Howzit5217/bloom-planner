@@ -137,7 +137,7 @@ describe('streak, csv, format', () => {
   });
   it('escapes CSV safely', () => {
     const csv = entriesToCsv([entry('2026-11-04', 100, 5, { note: '=cmd, "hi"' })]);
-    expect(csv.split('\n')[1]).toBe(`2026-11-04,100,5,0,,,,,,"'=cmd, ""hi"""`);
+    expect(csv.split('\n')[1]).toBe(`2026-11-04,100,5,0,,,,,,,"'=cmd, ""hi"""`);
   });
   it('formats numbers and durations', () => {
     expect(fmt(479200)).toBe('479,200');

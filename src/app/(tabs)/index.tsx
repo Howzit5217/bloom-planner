@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
 import { fmt, fmtHours } from '@/engine/format';
 import { HomeHeader, MilestoneCard, PaceCard, RingsCard, StreakCard, TimeCard } from '@/features/home/Cards';
+import { CustomGoalCard, NewGoalCard } from '@/features/home/NewGoal';
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
@@ -71,7 +72,7 @@ export default function Home() {
         <Banner
           icon="party-popper"
           tone="nectar"
-          text={t("Looks like you've hit both targets for Level {level}. Did you level up?", { level: dash.current.level + 1 })}
+          text={t('Everything for Level {level} looks cleared. Did you level up?', { level: dash.current.level + 1 })}
           action={{
             label: t('Yes, levelled up'),
             onPress: () => {
@@ -119,8 +120,10 @@ export default function Home() {
   const cards = [
     <HomeHeader key="h" dash={dash} />,
     ...banners.map((b) => <View key={b.key}>{b.node}</View>),
+    <NewGoalCard key="new-goal" dash={dash} />,
     <TodayCard key={`today-${dash.today}`} dash={dash} levelUpRequest={levelUpRequest} />,
-    <RingsCard key="rings" dash={dash} />,
+    // At the top level there's no next level: the user's own goal takes the rings.
+    dash.phase === 'maxed' ? <CustomGoalCard key="custom" dash={dash} /> : <RingsCard key="rings" dash={dash} />,
     <PaceCard key="pace" dash={dash} />,
     <TimeCard key="time" dash={dash} />,
     <StreakCard key="streak" dash={dash} />,

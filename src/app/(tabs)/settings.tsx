@@ -10,12 +10,13 @@ import { fmt, fmtDate } from '@/engine/format';
 import { DEFAULT_RATES, RATE_KEYS, type RateKey } from '@/engine/rates';
 import type { ThresholdPreset } from '@/engine/types';
 import { DifficultyPill } from '@/features/shared/Difficulty';
+import { CustomGoalForm } from '@/features/home/NewGoal';
 import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
 import { shareTextFile } from '@/services/shareFile';
-import { useApp, useDashboard, type ThemePref } from '@/store/app';
+import { useApp, useDashboard, type LogMode, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { Banner } from '@/ui/Banner';
 import { Card } from '@/ui/Card';
@@ -44,7 +45,6 @@ const PRESET_NAMES: Record<ThresholdPreset, string> = {
   normal: tk('Normal'),
   all: tk('All weather'),
 };
-
 
 const IS_WEB = Platform.OS === 'web';
 function Section({ title, icon, children }: { title: string; icon: IconName; children: ReactNode }) {
@@ -171,19 +171,41 @@ export default function Settings() {
       </View>
 
       <Section title={t('Goal')} icon="flag-checkered">
-        <Stepper label={t('Target level')} value={Math.max(minGoal, shownGoal.level)} min={Math.min(minGoal, st.table.maxLevel)} max={st.table.maxLevel} onChange={(v) => setGoalDraft({ level: v, date: shownGoal.date })} size={60} />
-        <DateField label={t('Target date')} value={shownGoal.date} onChange={(k) => setGoalDraft({ level: shownGoal.level, date: k })} minimumDate={fromKey(addDaysKey(dash.today, 1))} />
-        {shownDifficulty ? <DifficultyPill d={shownDifficulty} /> : null}
-        {goalDraft && draftCheck && !draftCheck.ok ? (
+        {dash.phase === 'maxed' ? (
+          // Past the top level the goal is the user's own: steps and flowers by a date.
+          <CustomGoalForm dash={dash} />
+        ) : (
           <>
-            <GoalVerdict check={draftCheck} earliest={earliest} onUseDate={(k) => setGoalDraft({ level: goalDraft.level, date: k })} />
-            <T v="caption" soft>
-              {t('Your saved goal stays level {level} by {date} until you pick one that works.', { level: profile.goalLevel, date: fmtDate(profile.goalDate) })}
-            </T>
-            <PillButton label={t('Keep the saved goal')} variant="ghost" size="md" onPress={() => setGoalDraft(null)} />
+            <Stepper label={t('Target level')} value={Math.max(minGoal, shownGoal.level)} min={Math.min(minGoal, st.table.maxLevel)} max={st.table.maxLevel} onChange={(v) => setGoalDraft({ level: v, date: shownGoal.date })} size={60} />
+            <DateField label={t('Target date')} value={shownGoal.date} onChange={(k) => setGoalDraft({ level: shownGoal.level, date: k })} minimumDate={fromKey(addDaysKey(dash.today, 1))} />
+            {shownDifficulty ? <DifficultyPill d={shownDifficulty} /> : null}
+            {goalDraft && draftCheck && !draftCheck.ok ? (
+              <>
+                <GoalVerdict check={draftCheck} earliest={earliest} onUseDate={(k) => setGoalDraft({ level: goalDraft.level, date: k })} />
+                <T v="caption" soft>
+                  {t('Your saved goal stays level {level} by {date} until you pick one that works.', { level: profile.goalLevel, date: fmtDate(profile.goalDate) })}
+                </T>
+                <PillButton label={t('Keep the saved goal')} variant="ghost" size="md" onPress={() => setGoalDraft(null)} />
+              </>
+            ) : null}
+            {!goalDraft && profile.goalLevel <= dash.current.level ? <Banner icon="trophy" tone="nectar" text={t("You've reached this goal. Raise the level to plan the next stretch.")} /> : null}
           </>
-        ) : null}
-        {!goalDraft && profile.goalLevel <= dash.current.level ? <Banner icon="trophy" tone="nectar" text={t("You've reached this goal. Raise the level to plan the next stretch.")} /> : null}
+        )}
+      </Section>
+
+      <Section title={t('Daily Log')} icon="notebook-edit-outline">
+        <Segmented<LogMode>
+          label={t('Log each day by')}
+          value={st.settings.logMode}
+          onChange={(m) => void st.updateSettings({ logMode: m })}
+          options={[
+            { key: 'daily', label: t('Step count') },
+            { key: 'left', label: t('Amount remaining') },
+          ]}
+        />
+        <T v="caption" soft>
+          {st.settings.logMode === 'left' ? t("What the game's level-up screen shows still to go: steps, flowers and the level's quest, like mushrooms or expeditions.") : t("The day's steps and flowers.")}
+        </T>
       </Section>
 
       <Section title={t('Your Pace')} icon="speedometer">
@@ -312,67 +334,67 @@ export default function Settings() {
 
       {/* A web page cannot remind anyone at 8pm, so the web version has no reminders. */}
       {!IS_WEB ? (
-      <Section title={t('Reminders')} icon="bell">
-        <Toggle
-          label={t('Evening Check-In')}
-          hint={t('One friendly reminder a day at most.')}
-          value={notif.enabled}
-          onChange={async (on) => {
-            const ok = on ? await requestPermission() : true;
-            await st.updateSettings({
-              notifications: {
-                ...notif,
-                enabled: on && ok,
-                askedAt: notif.askedAt ?? new Date().toISOString(),
-              },
-            });
-            void scheduleNotifications();
-          }}
-        />
-        {notif.enabled ? (
-          <>
-            <LinkRow
-              label={t('Reminder at {time}', {
-                time: fmtClock(notif.hour, notif.minute),
-              })}
-              onPress={pickTime}
-              icon="clock-edit"
-            />
-            {bikes ? (
+        <Section title={t('Reminders')} icon="bell">
+          <Toggle
+            label={t('Evening Check-In')}
+            hint={t('One friendly reminder a day at most.')}
+            value={notif.enabled}
+            onChange={async (on) => {
+              const ok = on ? await requestPermission() : true;
+              await st.updateSettings({
+                notifications: {
+                  ...notif,
+                  enabled: on && ok,
+                  askedAt: notif.askedAt ?? new Date().toISOString(),
+                },
+              });
+              void scheduleNotifications();
+            }}
+          />
+          {notif.enabled ? (
+            <>
+              <LinkRow
+                label={t('Reminder at {time}', {
+                  time: fmtClock(notif.hour, notif.minute),
+                })}
+                onPress={pickTime}
+                icon="clock-edit"
+              />
+              {bikes ? (
+                <Toggle
+                  label={t('Good-Day-to-Ride Nudges')}
+                  hint={t('When a bright, dry day follows a day without flowers. Twice a week at most.')}
+                  value={notif.nudges}
+                  onChange={(b) =>
+                    void st.updateSettings({
+                      notifications: { ...notif, nudges: b },
+                    })
+                  }
+                />
+              ) : null}
               <Toggle
-                label={t('Good-Day-to-Ride Nudges')}
-                hint={t('When a bright, dry day follows a day without flowers. Twice a week at most.')}
-                value={notif.nudges}
+                label={t('Behind-Pace Heads-Up')}
+                hint={t('Only past 5 days behind, once a week at most.')}
+                value={notif.behind}
                 onChange={(b) =>
                   void st.updateSettings({
-                    notifications: { ...notif, nudges: b },
+                    notifications: { ...notif, behind: b },
                   })
                 }
               />
-            ) : null}
-            <Toggle
-              label={t('Behind-Pace Heads-Up')}
-              hint={t('Only past 5 days behind, once a week at most.')}
-              value={notif.behind}
-              onChange={(b) =>
-                void st.updateSettings({
-                  notifications: { ...notif, behind: b },
-                })
-              }
-            />
-            <Toggle
-              label={t('Level-Up Coming')}
-              hint={t('When a level is about 2 days away.')}
-              value={notif.milestones}
-              onChange={(b) =>
-                void st.updateSettings({
-                  notifications: { ...notif, milestones: b },
-                })
-              }
-            />
-          </>
-        ) : null}
-      </Section>
+              <Toggle
+                label={t('Level-Up Coming')}
+                hint={t('When a level is about 2 days away.')}
+                value={notif.milestones}
+                onChange={(b) =>
+                  void st.updateSettings({
+                    notifications: { ...notif, milestones: b },
+                  })
+                }
+              />
+            </>
+          ) : null}
+        </Section>
       ) : null}
 
       <Section title={t('Appearance')} icon="theme-light-dark">
@@ -407,42 +429,42 @@ export default function Settings() {
 
       {/* The web version is always the newest, and its level data refreshes by itself. */}
       {!IS_WEB ? (
-      <Section title={t('Updates')} icon="update">
-        <Toggle
-          label={t('Check GitHub for Updates')}
-          hint={t('Once a day: new app versions and corrected level data. Nothing about you is sent.')}
-          value={st.settings.updates.enabled}
-          onChange={(b) =>
-            void st.updateSettings({
-              updates: { ...st.settings.updates, enabled: b },
-            })
-          }
-        />
-        <T v="small" soft>
-          {t('Version {version} · level data v{data} (checked {date})', {
-            version: APP_VERSION,
-            data: st.table.version,
-            date: retrieved,
-          })}
-          {st.settings.updates.lastCheck ? ` · ${t('last check {date}', { date: fmtDate(toKey(new Date(st.settings.updates.lastCheck))) })}` : ''}
-        </T>
-        <PillButton
-          label={checking ?? t('Check now')}
-          size="md"
-          variant="secondary"
-          icon="refresh"
-          onPress={async () => {
-            setChecking(t('Checking…'));
-            const r = await runUpdateCheck().catch(() => ({
-              app: false,
-              levels: false,
-            }));
-            setChecking(r.app ? t('An update is ready (see Home)') : r.levels ? t('Level data updated') : t('Fresh as a daisy: you’re up to date'));
-            setTimeout(() => setChecking(null), 2500);
-          }}
-        />
-        <LinkRow label={t('Project page on GitHub')} onPress={() => void WebBrowser.openBrowserAsync(REPO_URL)} icon="open-in-new" />
-      </Section>
+        <Section title={t('Updates')} icon="update">
+          <Toggle
+            label={t('Check GitHub for Updates')}
+            hint={t('Once a day: new app versions and corrected level data. Nothing about you is sent.')}
+            value={st.settings.updates.enabled}
+            onChange={(b) =>
+              void st.updateSettings({
+                updates: { ...st.settings.updates, enabled: b },
+              })
+            }
+          />
+          <T v="small" soft>
+            {t('Version {version} · level data v{data} (checked {date})', {
+              version: APP_VERSION,
+              data: st.table.version,
+              date: retrieved,
+            })}
+            {st.settings.updates.lastCheck ? ` · ${t('last check {date}', { date: fmtDate(toKey(new Date(st.settings.updates.lastCheck))) })}` : ''}
+          </T>
+          <PillButton
+            label={checking ?? t('Check now')}
+            size="md"
+            variant="secondary"
+            icon="refresh"
+            onPress={async () => {
+              setChecking(t('Checking…'));
+              const r = await runUpdateCheck().catch(() => ({
+                app: false,
+                levels: false,
+              }));
+              setChecking(r.app ? t('An update is ready (see Home)') : r.levels ? t('Level data updated') : t('Fresh as a daisy: you’re up to date'));
+              setTimeout(() => setChecking(null), 2500);
+            }}
+          />
+          <LinkRow label={t('Project page on GitHub')} onPress={() => void WebBrowser.openBrowserAsync(REPO_URL)} icon="open-in-new" />
+        </Section>
       ) : null}
 
       <Section title={t('About')} icon="information">
