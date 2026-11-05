@@ -6,7 +6,8 @@
 //   BLOOM_UPLOAD_STORE_PASSWORD
 //   BLOOM_UPLOAD_KEY_ALIAS
 //   BLOOM_UPLOAD_KEY_PASSWORD
-// Without them, release builds fall back to the debug key (fine for local testing only).
+// Without them, release builds fall back to the debug key (fine for local testing only),
+// or are left unsigned when BLOOM_UNSIGNED=1 (CI without secrets: sign the APK locally afterwards).
 const { withAppBuildGradle, withGradleProperties } = require('expo/config-plugins');
 
 const RELEASE_BLOCK = `
@@ -32,7 +33,7 @@ function patchBuildGradle(src) {
   if (bt < 0 || rel < 0 || at < 0) throw new Error('withReleaseSigning: release buildType not found');
   return (
     src.slice(0, at) +
-    "signingConfig System.getenv('BLOOM_UPLOAD_STORE_FILE') ? signingConfigs.release : signingConfigs.debug" +
+    "signingConfig System.getenv('BLOOM_UPLOAD_STORE_FILE') ? signingConfigs.release : (System.getenv('BLOOM_UNSIGNED') ? null : signingConfigs.debug)" +
     src.slice(at + line.length)
   );
 }

@@ -21,33 +21,29 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "::warning::Signing secrets are not set, so no APK was built. Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD (see README) to publish releases automatically."
+            echo "::warning::Signing secrets are not set, so this builds an UNSIGNED APK as a workflow artifact. Sign it locally with the release key (see README), or add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD to publish releases automatically."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@v5
-        if: steps.signing.outputs.enabled == 'true'
 
       - uses: actions/setup-node@v5
-        if: steps.signing.outputs.enabled == 'true'
         with:
           node-version: 22
           cache: npm
 
       - uses: actions/setup-java@v5
-        if: steps.signing.outputs.enabled == 'true'
         with:
           distribution: temurin
           java-version: 21
 
       - name: Install dependencies
-        if: steps.signing.outputs.enabled == 'true'
         run: npm ci
 
       - name: Check the tag matches app.json
-        if: steps.signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           if [ "v$APP_VERSION" != "$GITHUB_REF_NAME" ]; then
@@ -56,7 +52,6 @@ jobs:
           fi
 
       - name: Typecheck, lint and test
-        if: steps.signing.outputs.enabled == 'true'
         run: |
           npx tsc --noEmit
           npx eslint src
@@ -70,11 +65,9 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: Generate the native project
-        if: steps.signing.outputs.enabled == 'true'
         run: npx expo prebuild --platform android --clean --no-install
 
       - name: Build the release APK
-        if: steps.signing.outputs.enabled == 'true'
         working-directory: android
         env:
           NODE_ENV: production
@@ -82,7 +75,10 @@ jobs:
           BLOOM_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BLOOM_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           BLOOM_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --console=plain
+          BLOOM_UNSIGNED: ${{ steps.signing.outputs.enabled != 'true' && '1' || '' }}
+        run: |
+          if [ "$BLOOM_UNSIGNED" = "1" ]; then unset BLOOM_UPLOAD_STORE_FILE; fi
+          ./gradlew assembleRelease --console=plain
 
       - name: Publish the release
         if: steps.signing.outputs.enabled == 'true'
@@ -98,3 +94,12 @@ jobs:
           else
             gh release create "$TAG" "$APK" --title "Bloom Planner ${TAG}" --generate-notes
           fi
+
+      - name: Upload the unsigned APK
+        if: steps.signing.outputs.enabled != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BloomPlanner-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 7
+          if-no-files-found: error
