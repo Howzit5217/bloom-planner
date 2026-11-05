@@ -397,7 +397,7 @@ export function Wizard() {
         <Dots step={step} />
         {step === 0 ? (
           <T v="caption" soft center>
-            Unofficial fan-made planner. Not affiliated with Niantic, Nintendo or Pikmin Bloom.
+            Unofficial fan-made planner. Not affiliated with Scopely, Nintendo or Pikmin Bloom.
           </T>
         ) : null}
       </View>

@@ -267,7 +267,7 @@ export default function Settings() {
         <T v="small">Weather history and place search: Open-Meteo, free for non-commercial use under CC BY 4.0.</T>
         <LinkRow label="open-meteo.com" onPress={() => void WebBrowser.openBrowserAsync('https://open-meteo.com')} icon="open-in-new" />
         <T v="caption" soft>
-          Bloom Planner is an unofficial fan-made planner. It is not affiliated with or endorsed by Niantic or Nintendo. Pikmin Bloom is a trademark of its owners.
+          Bloom Planner is an unofficial fan-made planner. It is not affiliated with or endorsed by Scopely or Nintendo. Pikmin Bloom is a trademark of its owners.
         </T>
       </Section>
 

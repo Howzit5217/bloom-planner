@@ -8,7 +8,7 @@ works out the rest: how far ahead or behind you are, how many steps and flowers 
 how long that takes on foot or by bike, and when each level should land, with your local
 weather built in.
 
-> Unofficial fan-made planner. Not affiliated with or endorsed by Niantic or Nintendo.
+> Unofficial fan-made planner. Not affiliated with or endorsed by Scopely or Nintendo.
 
 ## Download
 
