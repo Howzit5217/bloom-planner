@@ -17,16 +17,22 @@
     --canvas: #FBF7EC; --canvas-deep: #F2EADA; --card: #FFFDF8; --ink: #3A3226; --ink-soft: #6E6455;
     --leaf: #5BA85A; --leaf-deep: #3C7A3E; --leaf-pale: #DCEEDA; --button: #43853F; --button-pressed: #336B31;
     --panel: #346E36; --on-panel: #FFFFFF; --on-panel-soft: rgba(255,255,255,0.86);
-    --shadow: rgba(120,100,70,0.12); --tile: #E7E2D9; --stem: #4E934E; --petal-under: #D3CBBD;
+    --shadow: rgba(120,100,70,0.12); --tile: #E7E2D9; --meadow-top: #D8F0B8; --meadow-bottom: #A9DB7E; --stem: #3E7D3C; --sprig-leaf: #4E9A4C; --petal-under: #D3CBBD; --rail: rgba(141,146,224,0.28); --rail-handle: #8D92E0;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --canvas: #241F18; --canvas-deep: #1B1712; --card: #30291F; --ink: #F2EADA; --ink-soft: #C9BFAE;
       --leaf: #6FBF6B; --leaf-deep: #9CD597; --leaf-pale: #2E4A2C; --button: #4F9A4A; --button-pressed: #3F7F3B;
-      --panel: #264E28; --shadow: rgba(0,0,0,0.35); --tile: #3A342C; --stem: #65B162; --petal-under: #B9AD95;
+      --panel: #264E28; --shadow: rgba(0,0,0,0.35); --tile: #3A342C; --meadow-top: #2F4A24; --meadow-bottom: #3D5E2E; --stem: #7FC27A; --sprig-leaf: #9AD394; --petal-under: #B9AD95; --rail: rgba(167,171,242,0.28); --rail-handle: #A7ABF2;
     }
   }
   * { box-sizing: border-box; }
+  /* The app's scroll bar: a thin lavender line down the right edge, darker where you are on the page. */
+  html { scrollbar-width: thin; scrollbar-color: var(--rail-handle) transparent; }
+  ::-webkit-scrollbar { width: 12px; }
+  ::-webkit-scrollbar-track { background: linear-gradient(90deg, transparent 4px, var(--rail) 4px 8px, transparent 8px); }
+  ::-webkit-scrollbar-thumb { background: var(--rail-handle); background-clip: padding-box; border: 3px solid transparent; border-radius: 999px; min-height: 40px; }
+  ::-webkit-scrollbar-button { display: none; height: 0; }
   /* Tapping a button shows just the button: no browser tap highlight or focus box. Keyboard focus
      keeps a soft rounded outline in the app's green. */
   html { -webkit-tap-highlight-color: transparent; }
@@ -37,8 +43,8 @@
   body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 17px/1.55 Nunito, system-ui, sans-serif; }
   a { color: var(--leaf-deep); font-weight: 700; }
   h1, h2, h3 { font-family: 'Baloo 2', Nunito, sans-serif; line-height: 1.15; margin: 0; }
-  /* The app's welcome flowers: stemmed sprigs growing up from the page, swaying a little. */
-  .meadow { position: relative; height: 150px; background: var(--canvas); overflow: hidden; }
+  /* The app's welcome flowers on the meadow green: stemmed sprigs growing up, swaying a little. */
+  .meadow { position: relative; height: 150px; background: linear-gradient(var(--meadow-top), var(--meadow-bottom)); overflow: hidden; }
   .meadow svg { position: absolute; left: 0; top: 0; width: 100%; height: 122px; overflow: visible; }
   .sprig { transform-box: view-box; animation: sway 7s ease-in-out infinite; }
   .sprig .stem { transform-box: view-box; animation: grow-stem 0.8s cubic-bezier(.2,.7,.3,1) both; }
@@ -295,7 +301,7 @@
       var LL = sp.r * sp.leafLen, d0 = sp.delay * 1.4;
       var leaves = sp.leaves.map(function (l) {
         var q = g.at(l.at), deg = leafAngle(q.along, l.side) * 180 / Math.PI;
-        return '<g transform="translate(' + f(sp.x + q.x) + ' ' + f(sp.y + q.y) + ') rotate(' + f(deg) + ') scale(' + f(l.size) + ' ' + f(l.size * l.side) + ')"><path class="leaf" style="transform-origin:0 0;animation-delay:' + (d0 + 0.3 + l.at * 0.4).toFixed(2) + 's" d="' + leafD(LL, LL * sp.leafWid) + '" fill="var(--leaf)"/></g>';
+        return '<g transform="translate(' + f(sp.x + q.x) + ' ' + f(sp.y + q.y) + ') rotate(' + f(deg) + ') scale(' + f(l.size) + ' ' + f(l.size * l.side) + ')"><path class="leaf" style="transform-origin:0 0;animation-delay:' + (d0 + 0.3 + l.at * 0.4).toFixed(2) + 's" d="' + leafD(LL, LL * sp.leafWid) + '" fill="var(--sprig-leaf)"/></g>';
       }).join('');
       html += '<g class="sprig" style="' + base + 'animation-delay:-' + (sp.phase * 7).toFixed(2) + 's"><g transform="translate(' + f(sp.x) + ' ' + f(sp.y) + ')">' +
         '<path class="stem" style="transform-origin:0 0;animation-delay:' + d0.toFixed(2) + 's" d="' + stem(g, Math.max(3.5, sp.r * sp.stemW), Math.max(2.5, sp.r * sp.stemW * 0.62)) + '" fill="var(--stem)"/></g>' +
