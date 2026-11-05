@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { addDaysKey, fromKey, type DayKey } from '@/engine/dates';
 import { isEasyDay } from '@/engine/rhythm';
@@ -8,6 +8,7 @@ import { doneFromToGo, looksLikeLevelUp, missedDay, rebalanceNext, stateBefore }
 import { questOf } from '@/engine/quest';
 import type { Dashboard } from '@/engine/summary';
 import type { DayEntry, OutMode } from '@/engine/types';
+import { dropDraft, draftFor, keepDraft } from '@/features/home/dayDrafts';
 import { QUEST_ICON, questToGoLabel } from '@/features/shared/quest';
 import { ScreenshotButton } from '@/features/shared/ScreenshotButton';
 import { useApp } from '@/store/app';
@@ -58,23 +59,29 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const { state: before, taskToGo: taskBefore } = profile ? stateBefore(dash.replay, profile, date) : { state: dash.current, taskToGo: null };
   const baseLevel = before.level;
 
-  const [editing, setEditing] = useState(!existing);
-  const [steps, setSteps] = useState<number | null>(existing?.steps ?? null);
-  const [flowers, setFlowers] = useState<number | null>(existing?.flowers ?? null);
-  const [leveled, setLeveled] = useState(existing?.leveledUp ?? false);
-  const [newLevel, setNewLevel] = useState(existing?.newLevel ?? baseLevel + 1);
+  // Anything typed earlier and not saved yet comes back (on the web a page out of sight lets go of it).
+  const [draft] = useState(() => draftFor(date));
+  const [editing, setEditing] = useState(!existing || !!draft);
+  const [steps, setSteps] = useState<number | null>(draft ? draft.steps : (existing?.steps ?? null));
+  const [flowers, setFlowers] = useState<number | null>(draft ? draft.flowers : (existing?.flowers ?? null));
+  const [leveled, setLeveled] = useState(draft ? draft.leveled : (existing?.leveledUp ?? false));
+  const [newLevel, setNewLevel] = useState(draft ? draft.newLevel : (existing?.newLevel ?? baseLevel + 1));
   const [more, setMore] = useState(false);
-  const [minutes, setMinutes] = useState<number | null>(existing?.minutesOut ?? null);
-  const [mode, setMode] = useState<OutMode>(existing?.outMode ?? 'bike');
-  const [syncSteps, setSyncSteps] = useState<number | null>(existing?.gameStepsToGo ?? null);
-  const [syncFlowers, setSyncFlowers] = useState<number | null>(existing?.gameFlowersToGo ?? null);
-  const [questLeft, setQuestLeft] = useState<number | null>(existing?.gameTaskToGo ?? null);
-  const [note, setNote] = useState(existing?.note ?? '');
+  const [minutes, setMinutes] = useState<number | null>(draft ? draft.minutes : (existing?.minutesOut ?? null));
+  const [mode, setMode] = useState<OutMode>(draft ? draft.mode : (existing?.outMode ?? 'bike'));
+  const [syncSteps, setSyncSteps] = useState<number | null>(draft ? draft.syncSteps : (existing?.gameStepsToGo ?? null));
+  const [syncFlowers, setSyncFlowers] = useState<number | null>(draft ? draft.syncFlowers : (existing?.gameFlowersToGo ?? null));
+  const [questLeft, setQuestLeft] = useState<number | null>(draft ? draft.questLeft : (existing?.gameTaskToGo ?? null));
+  const [note, setNote] = useState(draft ? draft.note : (existing?.note ?? ''));
+  // While the log is open, what's in it is kept as the day's draft.
+  useEffect(() => {
+    if (editing) keepDraft(date, { steps, flowers, leveled, newLevel, minutes, mode, syncSteps, syncFlowers, questLeft, note });
+  }, [editing, date, steps, flowers, leveled, newLevel, minutes, mode, syncSteps, syncFlowers, questLeft, note]);
   const [askLevelUp, setAskLevelUp] = useState(false);
   const [burst, setBurst] = useState(0);
   const [size, setSize] = useState({ w: 0, h: 0, bx: 0, by: 0 });
 
-  // 'Yes, levelled up' from the Home prompt: open the editor with the toggle on.
+  // 'Yes, leveled up' from the Home prompt: open the editor with the toggle on.
   const [seenRequest, setSeenRequest] = useState(levelUpRequest);
   if (levelUpRequest !== seenRequest) {
     setSeenRequest(levelUpRequest);
@@ -130,6 +137,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
     // A filled-in day takes its share out of the next logged day's worked-out steps and flowers.
     const next = leftMode && !isToday ? rebalanceNext(entries, entry, existing) : null;
     if (next) await save(next);
+    dropDraft(date);
     setAskLevelUp(false);
     setEditing(false);
     setMore(false);
@@ -205,7 +213,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
             {existing.leveledUp ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Icon name="party-popper" size={20} color={c.nectar} />
-                <T v="bodyBold">{t('Levelled up to {level}', { level: existing.newLevel ?? '' })}</T>
+                <T v="bodyBold">{t('Leveled up to {level}', { level: existing.newLevel ?? '' })}</T>
               </View>
             ) : null}
             <PillButton label={isToday ? t('Edit today') : t('Edit this day')} variant="secondary" icon="pencil" size="md" onPress={() => setEditing(true)} />
@@ -270,7 +278,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
             ) : forReq && quest ? (
               <NumberField label={questToGoLabel(quest.kind)} hint={taskText(forReq.task)} value={questLeft} onChange={setQuestLeft} size="lg" max={quest.count} />
             ) : null}
-            <Toggle label={t('Levelled Up!')} value={leveled} onChange={setLeveled} hint={leveled ? t('The level the game shows now.') : undefined} />
+            <Toggle label={t('Leveled Up!')} value={leveled} onChange={setLeveled} hint={leveled ? t('The level the game shows now.') : undefined} />
             {leveled ? (
               <View style={{ gap: 8 }}>
                 <Stepper label={t('New level')} value={newLevel} min={Math.min(maxLevel, baseLevel + 1)} max={maxLevel} onChange={setNewLevel} size={56} />
@@ -337,7 +345,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
                   </T>
                 </View>
                 <PillButton
-                  label={t('Yes, levelled up')}
+                  label={t('Yes, leveled up')}
                   icon="party-popper"
                   size="md"
                   onPress={() => {
@@ -353,7 +361,17 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
                 <PillButton label={existing ? t('Save changes') : isToday ? t('Log today') : t('Log this day')} icon="sprout" onPress={() => void submit()} disabled={!canLog} haptic={false} />
               </View>
             )}
-            {existing ? <PillButton label={t('Cancel')} variant="ghost" size="sm" onPress={() => setEditing(false)} /> : null}
+            {existing ? (
+              <PillButton
+                label={t('Cancel')}
+                variant="ghost"
+                size="sm"
+                onPress={() => {
+                  dropDraft(date);
+                  setEditing(false);
+                }}
+              />
+            ) : null}
           </View>
         )}
         {missed ? (

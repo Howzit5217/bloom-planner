@@ -4,7 +4,7 @@ A warm little planner for Pikmin Bloom that answers one question every day:
 **am I on pace to hit my goal level by my goal date?**
 
 Log each evening (the day's steps and flowers, or what the game shows still to go, plus the
-level's quest and whether you levelled up) and Bloom Planner works out the rest: how far ahead
+level's quest and whether you leveled up) and Bloom Planner works out the rest: how far ahead
 or behind you are, how many steps and flowers today needs, how long that takes on foot or by
 bike, and when each level should land, with your local weather built in. Missed a day? Fill it
 in later. Reached the goal? It asks for the next one, and at the top level the goal is your own
@@ -53,9 +53,9 @@ Only from the icon, so the log lives in one place (Safari keeps a home-screen ap
 the browser's). Everything works except evening reminders, which only the Android app can send.
 `npx expo start` (development) skips the home-screen check.
 
-## How the maths works
+## How the math works
 
-The planner follows the game's actual levelling rules:
+The planner follows the game's actual leveling rules:
 
 - **Flowers never carry over.** Each level needs its full flower quota planted *while at that level*.
 - **Steps carry over only up to level 100.** Levels 3 to 100 ask you to "Walk a total of X steps",

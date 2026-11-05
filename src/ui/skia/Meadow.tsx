@@ -8,6 +8,7 @@ import type { Palette } from '@/theme/tokens';
 import { rng } from './shapes';
 import { fieldSprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
+import { useBloomFactor } from '@/ui/bloom';
 import { useAppWidth } from '@/ui/layout';
 import { STILL } from './still';
 
@@ -231,10 +232,11 @@ export function Meadow({ height, horizon, density = 1, seed: fixedSeed, width }:
   const look = useSkyLook();
   const appWidth = useAppWidth();
   const w = width ?? appWidth;
+  const bloom = useBloomFactor();
   // A fresh field every visit unless a seed pins it.
   const [randomSeed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
   const seed = fixedSeed ?? randomSeed;
-  const picture = useMemo(() => drawScene(w, height, horizon, look, c, density, seed), [w, height, horizon, look, c, density, seed]);
+  const picture = useMemo(() => drawScene(w, height, horizon, look, c, density * bloom, seed), [w, height, horizon, look, c, density, bloom, seed]);
   return (
     <View pointerEvents="none" style={{ width: w, height }}>
       <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: w, height }}>

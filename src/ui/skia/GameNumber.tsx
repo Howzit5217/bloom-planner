@@ -1,10 +1,11 @@
-import { Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
-import { Canvas, Group, Path, rect, Skia, Text, useFont, type SkFont, type SkPath } from '@shopify/react-native-skia';
+import { Canvas, Group, Path, rect, Skia, Text, type SkFont, type SkPath } from '@shopify/react-native-skia';
 import { useEffect, useMemo } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Text as RNText, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useDerivedValue, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import { fmt } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
+import { font as fonts } from '@/theme/tokens';
+import { useGameFont } from './gameFont';
 
 interface Props {
   value: number;
@@ -173,12 +174,18 @@ function DigitSlot({ x, w, digit, l, font, fill, stroke, index, rollIn, outline 
 /** The game's chunky yellow numbers with a brown outline. Digits roll like an odometer. */
 export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = false, outline = true, style, accessibilityLabel }: Props) {
   const { c } = useTheme();
-  const font = useFont(Baloo2_800ExtraBold, size);
+  const font = useGameFont(size);
   const text = format(value);
   const l = useMemo(() => (font ? layout(font, text, size) : null), [font, text, size]);
   const f = fill ?? c.gameYellow;
   const s = stroke ?? c.gameOutline;
-  if (!font || !l) return <View style={[{ height: size * 1.25, minWidth: size * 0.6 * text.length }, style]} />;
+  // Until the drawn face has loaded (or if it can't), the number still shows, in the same face as text.
+  if (!font || !l)
+    return (
+      <View accessible accessibilityRole="text" accessibilityLabel={accessibilityLabel ?? text} style={[{ height: size * 1.25, minWidth: size * 0.6 * text.length, justifyContent: 'center' }, style]}>
+        <RNText style={{ fontFamily: fonts.heading, fontSize: size, lineHeight: size * 1.2, color: f, textShadowColor: s, textShadowRadius: Math.max(2, size * 0.06), textShadowOffset: { width: 0, height: Math.max(1, size * 0.04) } }}>{text}</RNText>
+      </View>
+    );
   let digitIndex = 0;
   return (
     <View accessible accessibilityRole="text" accessibilityLabel={accessibilityLabel ?? text} style={style}>

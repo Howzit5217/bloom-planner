@@ -143,10 +143,17 @@ try {
         if ($Beta) { $create += '--prerelease' }
         Run gh $create
         # Creating a release tag starts the tag-triggered build again; this one is already done, so stop it.
+        # GitHub can take a while to start that run, so look for it every few seconds for up to a minute.
         if (-not $Beta) {
-            Start-Sleep -Seconds 8
-            $dupes = gh run list -R $repo --workflow release.yml --event push --limit 5 --json databaseId,headBranch,status | ConvertFrom-Json
-            foreach ($r in ($dupes | Where-Object { $_.headBranch -eq $tag -and $_.status -ne 'completed' })) { gh run cancel $r.databaseId -R $repo | Out-Null }
+            for ($try = 0; $try -lt 10; $try++) {
+                Start-Sleep -Seconds 6
+                $dupes = gh run list -R $repo --workflow release.yml --event push --limit 5 --json databaseId,headBranch,status | ConvertFrom-Json
+                $open = @($dupes | Where-Object { $_.headBranch -eq $tag -and $_.status -ne 'completed' })
+                if ($open.Count -gt 0) {
+                    foreach ($r in $open) { gh run cancel $r.databaseId -R $repo | Out-Null }
+                    break
+                }
+            }
         }
     }
     Write-Host "Published Bloom Planner $shown ($tag)."

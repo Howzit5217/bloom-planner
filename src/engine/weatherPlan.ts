@@ -96,6 +96,3 @@ export function forecastWeights(days: ForecastWeatherDay[], th: Thresholds, limi
   }
   return { walk, ride, why, day };
 }
-
-/** °C to °F, for showing a limit both ways. */
-export const toF = (c: number) => Math.round((c * 9) / 5 + 32);

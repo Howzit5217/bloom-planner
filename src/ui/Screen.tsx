@@ -38,6 +38,8 @@ const TILT_SCROLL = 1.8;
 const CAMERA = { damping: 30, stiffness: 190, mass: 1, overshootClamping: true } as const;
 /** Where the paper pages' sheet starts, below the safe area: the meadow strip shows above it. */
 const SHEET_TOP = 66;
+/** Home: how far below the status bar the cards fade out as they scroll up under the top. */
+const TOP_FADE = 48;
 
 /** Light status-bar text under a night or stormy sky; the theme's otherwise. Only the focused page sets it. */
 function SkyStatusBar() {
@@ -133,6 +135,8 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const tilt = worldTilt;
   const wide = useWide();
   const live = useLive();
+  // The meadow's flowers sway only while Home is the page in view.
+  const inView = useIsFocused();
   const tiltScroll = (frame.cy + 36) * TILT_SCROLL;
   useAnimatedReaction(
     () => rail.y.value,
@@ -142,6 +146,8 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   );
   // The sky's colour behind the status bar while the sky is still up there.
   const skyFade = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, horizonAt(frame, tilt.value) / (insets.top + 24))) }));
+  // The tall fade comes in over the first scroll, so at rest it never washes over the header.
+  const scrolled = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, rail.y.value / 36)) }));
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const pullGrows = !!onRefresh && Platform.OS === 'ios';
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -187,17 +193,28 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   return (
     <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
       <SkyStatusBar />
-      {wide || !live ? null : <CameraMeadow frame={frame} tilt={tilt} />}
+      {wide || !live ? null : <CameraMeadow frame={frame} tilt={tilt} animate={inView} />}
       {onRefresh && live ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 2, left: 0, right: 0, alignItems: 'center', zIndex: 2 }, sprout]}>
           <Seedling growth={growth} size={70} />
         </Animated.View>
       ) : null}
       {live ? scroller : null}
-      {/* Cards scroll up under a soft fade, never into the clock and battery. */}
-      <EdgeFade edge="top" color={look.groundFar} height={insets.top + 14} />
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 15 }, skyFade]}>
-        <EdgeFade edge="top" color={look.top} height={insets.top + 14} />
+      {/* The clock and battery always sit on the sky or field, never on a card. */}
+      {insets.top > 0 ? (
+        <>
+          <EdgeFade edge="top" color={look.groundFar} height={insets.top + 6} solid={insets.top} />
+          <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 7 }, skyFade]}>
+            <EdgeFade edge="top" color={look.top} height={insets.top + 6} solid={insets.top} />
+          </Animated.View>
+        </>
+      ) : null}
+      {/* Once the page moves, cards scroll up under a taller, eased fade into the sky (or the field). */}
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
+        <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, skyFade]}>
+          <EdgeFade edge="top" color={look.top} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+        </Animated.View>
       </Animated.View>
       {bottomExtra}
     </View>

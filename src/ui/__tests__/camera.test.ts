@@ -64,6 +64,18 @@ describe("Home's camera", () => {
     }
   });
 
+  it("gives an upright flower the camera's width-ways scale where it stands", () => {
+    for (const p of [0, 0.5, 1]) {
+      const m = cameraMatrix(fr, tiltAt(fr, p));
+      const u = fr.pad + 120;
+      const v = fr.cy + 420;
+      const across = project(m, u + 1, v).x - project(m, u, v).x;
+      expect(1 / (m[7] * v + m[8])).toBeCloseTo(across, 6);
+      // Down the screen the ground is squashed more than across, which is why flowers don't take that scale.
+      if (p > 0) expect(project(m, u, v + 1).y - project(m, u, v).y).toBeLessThan(across);
+    }
+  });
+
   it('eases into the full tilt and never tilts up', () => {
     expect(tiltAt(fr, -1)).toBe(0);
     expect(tiltAt(fr, 2)).toBeCloseTo(fr.tiltMax);

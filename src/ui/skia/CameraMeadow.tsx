@@ -1,19 +1,69 @@
 import { Canvas, createPicture, Group, Image, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkImage, type SkPicture } from '@shopify/react-native-skia';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import { useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { bladeColorOf, color, drawBlade, drawHaze, drawSky, drawWeather } from './Meadow';
-import { fieldSprig, type Sprig } from './sprigLayout';
+import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
 import { rng } from './shapes';
+import { useBloomFactor } from '../bloom';
 import { cameraMatrix, tiltAt, type CameraFrame } from '../camera';
 
-function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number): SkPicture {
-  return createPicture((canvas) => {
+/**
+ * The nearest flowers are drawn live, upright on screen and swaying; the rest go into the still
+ * picture. At most this many, whatever the level, so it stays light to run.
+ */
+const LIVE_MIN_R = 7;
+const LIVE_MAX = 56;
+
+interface Scene {
+  /** Sky, grass and the far flowers, still. */
+  picture: SkPicture;
+  /** The near flowers, each drawn on its own about its base, to sway. */
+  live: Array<{ s: Sprig; picture: SkPicture }>;
+}
+
+/**
+ * Flowers planted across the field, back to front: a head about 20 points across nearby, smaller
+ * toward the horizon. Each keeps clear of the heads already planted (a few tries for a spot, else
+ * that one isn't planted), so the field reads as flowers, not a heap.
+ */
+function plant(f: CameraFrame, rand: () => number, colors: string[], many: (y0: number, perPoint: number, most: number) => number, near: (y0: number) => number, bloom: number): Sprig[] {
+  const hz = f.cy;
+  const depth = f.picH - hz;
+  const sprigs: Sprig[] = [];
+  const heads: Array<{ x: number; y: number; r: number }> = [];
+  const clear = (h: { x: number; y: number; r: number }) => heads.every((o) => Math.abs(o.y - h.y) >= o.r + h.r || Math.hypot(o.x - h.x, o.y - h.y) >= (o.r + h.r) * 1.1);
+  for (let y0 = 3; y0 < depth; y0 += 2) {
+    const n = Math.floor(many(y0, 0.00011 * bloom, 0.0009 * bloom) * f.picW * 2 + rand());
+    for (let i = 0; i < n; i++) {
+      const r = Math.max(1, 20 * near(y0)) * (0.75 + rand() * 0.5);
+      const col = colors[Math.floor(rand() * colors.length)];
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const sp = fieldSprig(rand() * f.picW, hz + y0 + rand() * 2, r, col, rand);
+        const top = geometry(sp).top;
+        const head = { x: sp.x + top.x, y: sp.y + top.y, r };
+        // Specks far off may crowd; flowers you can make out may not.
+        if (r >= 2.4 && !clear(head)) continue;
+        sprigs.push(sp);
+        heads.push(head);
+        break;
+      }
+    }
+  }
+  return sprigs.sort((a, b) => a.y - b.y);
+}
+
+/** `bloom`: how full of flowers, for the player's level (useBloomFactor). */
+function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number, bloom: number): Scene {
+  const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
+  const paintSprig = sprigPainter(c, look);
+  let live: Scene['live'] = [];
+  const picture = createPicture((canvas) => {
     const rand = rng(seed);
     const hz = f.cy;
     const depth = f.picH - hz;
@@ -52,24 +102,46 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       for (let i = 0; i < n; i++) drawBlade(canvas, blade, rand() * f.picW, hz + y0 + rand() * 2, Math.max(1.2, (5 + rand() * 7) * k), (rand() - 0.5) * 6 * k, 2 * k);
     }
 
-    // Fewer flowers than grass, and the setup screens' big stemmed ones: a head about 20 points
-    // across in the field nearby, smaller and closer together toward the horizon.
-    const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
-    const sprigs: Sprig[] = [];
-    for (let y0 = 3; y0 < depth; y0 += 2) {
-      const n = Math.floor(many(y0, 0.00011, 0.0009) * f.picW * 2 + rand());
-      for (let i = 0; i < n; i++) {
-        const r = Math.max(1, 20 * near(y0)) * (0.75 + rand() * 0.5);
-        sprigs.push(fieldSprig(rand() * f.picW, hz + y0 + rand() * 2, r, colors[Math.floor(rand() * colors.length)], rand));
-      }
-    }
-    sprigs.sort((a, b) => a.y - b.y);
-    const paintSprig = sprigPainter(c, look);
-    for (const sp of sprigs) paintSprig(canvas, sp);
+    // Fewer flowers than grass, and the setup screens' big stemmed ones. The nearest ones (the last,
+    // back to front) sway, so they're drawn live; everything behind them stays in this picture.
+    const sprigs = plant(f, rand, colors, many, near, bloom);
+    let cut = sprigs.length;
+    while (cut > 0 && sprigs.length - cut < LIVE_MAX && sprigs[cut - 1].r >= LIVE_MIN_R) cut--;
+    for (const sp of sprigs.slice(0, cut)) paintSprig(canvas, sp);
+    live = sprigs.slice(cut).map((sp) => ({
+      s: sp,
+      picture: createPicture((cv) => paintSprig(cv, { ...sp, x: 0, y: 0 }), Skia.XYWHRect(-sp.r * 6 - sp.len, -sp.len - sp.r * 3, (sp.r * 6 + sp.len) * 2, sp.len + sp.r * 4)),
+    }));
 
     drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.1), look.fog ? 400 : 60), look.fog ? 0.85 : 0.55, look);
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c);
   }, Skia.XYWHRect(0, 0, f.picW, f.picH));
+  return { picture, live };
+}
+
+/**
+ * A near flower, standing upright where its base meets the ground on screen. The camera's tilt
+ * squashes the ground top to bottom up close; the flower takes only the tilt's scale across there
+ * (the same both ways), so it keeps its shape, and sways from its base on its own slow rhythm.
+ */
+function SwaySprig({ s, picture, clock, matrix }: { s: Sprig; picture: SkPicture; clock: SharedValue<number>; matrix: SharedValue<number[]> }) {
+  const period = 4200 + s.phase * 2600;
+  const transform = useDerivedValue(() => {
+    const m = matrix.value;
+    // The camera's matrix has no x in its bottom row (m[6]) or in y's (m[3]).
+    const w = m[7] * s.y + m[8];
+    return [
+      { translateX: (m[0] * s.x + m[1] * s.y + m[2]) / w },
+      { translateY: (m[4] * s.y + m[5]) / w },
+      { scale: 1 / w },
+      { rotate: Math.sin((clock.value / period + s.phase) * Math.PI * 2) * 0.05 },
+    ];
+  });
+  return (
+    <Group transform={transform}>
+      <Picture picture={picture} />
+    </Group>
+  );
 }
 
 /**
@@ -97,19 +169,35 @@ function snapshot(picture: SkPicture, f: CameraFrame): SkImage | null {
   }
 }
 
-/** Home's sky and field, through the camera; `tilt` is how far down it looks, 0 (level) to 1. */
-export function CameraMeadow({ frame, tilt }: { frame: CameraFrame; tilt: SharedValue<number> }) {
-  const { c } = useTheme();
+/**
+ * Home's sky and field, through the camera; `tilt` is how far down it looks, 0 (level) to 1. The
+ * near flowers sway while `animate` is on (the page in view), at about 30 frames a second, and not
+ * at all with reduced motion.
+ */
+export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFrame; tilt: SharedValue<number>; animate?: boolean }) {
+  const { c, reduceMotion } = useTheme();
   const look = useSkyLook();
+  const bloom = useBloomFactor();
   // A fresh field every visit.
   const [seed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
-  const picture = useMemo(() => drawCameraScene(frame, look, c, seed), [frame, look, c, seed]);
-  const image = useMemo(() => snapshot(picture, frame), [picture, frame]);
+  const scene = useMemo(() => drawCameraScene(frame, look, c, seed, bloom), [frame, look, c, seed, bloom]);
+  const image = useMemo(() => snapshot(scene.picture, frame), [scene, frame]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
+  const clock = useSharedValue(0);
+  const ticker = useFrameCallback((info) => {
+    if (info.timestamp - clock.value >= 33) clock.value = info.timestamp;
+  }, false);
+  const sway = animate && !reduceMotion && scene.live.length > 0;
+  useEffect(() => {
+    ticker.setActive(sway);
+  }, [sway, ticker]);
   return (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.H }}>
       <Canvas style={{ width: frame.W, height: frame.H }}>
-        <Group matrix={matrix}>{image ? <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : <Picture picture={picture} />}</Group>
+        <Group matrix={matrix}>{image ? <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : <Picture picture={scene.picture} />}</Group>
+        {scene.live.map(({ s, picture }, i) => (
+          <SwaySprig key={i} s={s} picture={picture} clock={clock} matrix={matrix} />
+        ))}
       </Canvas>
     </View>
   );

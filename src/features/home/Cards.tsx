@@ -367,9 +367,13 @@ export function WeekCard({ dash }: { dash: Dashboard }) {
                 {fmtWeekday(d.date)}
               </T>
               {/* An easy day: a leaf, and less asked of it. */}
-              <View style={{ height: 12, justifyContent: 'center' }} accessible={isEasyDay(rhythm, fromKey(d.date))} accessibilityLabel={t('Easy day')}>
-                {isEasyDay(rhythm, fromKey(d.date)) ? <Icon name="leaf" size={12} color={c.leaf} /> : null}
-              </View>
+              {isEasyDay(rhythm, fromKey(d.date)) ? (
+                <View style={{ height: 12, justifyContent: 'center' }} accessible accessibilityLabel={t('Easy day')}>
+                  <Icon name="leaf" size={12} color={c.leaf} />
+                </View>
+              ) : (
+                <View style={{ height: 12 }} />
+              )}
               {hasWeather ? <Icon name={d.walk != null ? dayIcon(d, bikes) : 'minus'} size={22} color={poor ? c.alert : c.leafDeep} /> : null}
               {hasWeather ? (
                 <T v="caption" soft>
@@ -402,6 +406,15 @@ export function WeekCard({ dash }: { dash: Dashboard }) {
             {t('flowers')}
           </T>
         </View>
+        {/* What the leaf over a day means, when the week has one. */}
+        {dash.week.some((d) => isEasyDay(rhythm, fromKey(d.date))) ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Icon name="leaf" size={14} color={c.leaf} />
+            <T v="caption" soft>
+              {t('easy day')}
+            </T>
+          </View>
+        ) : null}
       </View>
       {hasWeather ? null : (
         <Pressable accessibilityRole="button" onPress={() => router.push('/location')} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 40 }}>

@@ -1,8 +1,9 @@
-import { Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
-import { Canvas, PaintStyle, Picture, Skia, StrokeJoin, TileMode, useFont, vec, createPicture, type SkCanvas, type SkFont } from '@shopify/react-native-skia';
+import { Canvas, PaintStyle, Picture, Skia, StrokeJoin, TileMode, vec, createPicture, type SkCanvas, type SkFont } from '@shopify/react-native-skia';
 import { useMemo } from 'react';
-import { Image, PixelRatio, Platform, View } from 'react-native';
+import { Image, PixelRatio, Platform, Text, View } from 'react-native';
 import { badgeTier, type BadgeTier } from '@/engine/badge';
+import { font as fonts } from '@/theme/tokens';
+import { useGameFont } from './gameFont';
 import { hexPath } from './shapes';
 import { t } from '@/i18n';
 
@@ -89,8 +90,8 @@ function webBadge(level: number, size: number, big: SkFont | null, small: SkFont
 
 /** The hexagon level badge ("Lv 110"), in the metal of its level. */
 export function LevelBadge({ level, size = 96 }: { level: number; size?: number }) {
-  const big = useFont(Baloo2_800ExtraBold, size * (level >= 100 ? 0.36 : 0.42));
-  const small = useFont(Baloo2_800ExtraBold, size * 0.2);
+  const big = useGameFont(size * (level >= 100 ? 0.36 : 0.42));
+  const small = useGameFont(size * 0.2);
   const web = Platform.OS === 'web';
   const uri = useMemo(() => (web ? webBadge(level, size, big, small) : null), [web, level, size, big, small]);
   const picture = useMemo(() => (web ? null : createPicture((canvas) => drawBadge(canvas, level, size, big, small), Skia.XYWHRect(0, 0, size, size))), [web, level, size, big, small]);
@@ -103,6 +104,12 @@ export function LevelBadge({ level, size = 96 }: { level: number; size?: number 
           <Picture picture={picture} />
         </Canvas>
       ) : null}
+      {/* Until the drawn lettering has its face (or if it can't load), the number shows as text. */}
+      {big && small ? null : (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: size * 0.05, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontFamily: fonts.heading, fontSize: size * (level >= 100 ? 0.32 : 0.38), lineHeight: size * 0.46, color: '#FFFFFF', textShadowColor: METALS[badgeTier(level)].deep, textShadowRadius: Math.max(2, size * 0.05) }}>{level}</Text>
+        </View>
+      )}
     </View>
   );
 }

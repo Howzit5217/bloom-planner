@@ -36,7 +36,7 @@ interface Style {
 const NNBSP = ' ';
 
 const STYLES: Record<FormatLang, Style> = {
-  en: { group: ',', date: 'd MMM yyyy', longDay: 'EEEE, MMMM d', longDate: 'EEEE, MMMM d, yyyy', short: 'MMM d', monthYear: 'LLLL yyyy', min: '{m} min', hour: '{h}h', hourMin: '{h}h {m}m', and: ' and ', capitalise: false },
+  en: { group: ',', date: 'MMM d, yyyy', longDay: 'EEEE, MMMM d', longDate: 'EEEE, MMMM d, yyyy', short: 'MMM d', monthYear: 'LLLL yyyy', min: '{m} min', hour: '{h}h', hourMin: '{h}h {m}m', and: ' and ', capitalise: false },
   es: { locale: es, group: '.', date: 'd MMM yyyy', longDay: "EEEE, d 'de' MMMM", longDate: "EEEE, d 'de' MMMM 'de' yyyy", short: 'd MMM', monthYear: "LLLL 'de' yyyy", min: '{m} min', hour: '{h} h', hourMin: '{h} h {m} min', and: ' y ', capitalise: true },
   fr: { locale: fr, group: NNBSP, date: 'd MMM yyyy', longDay: 'EEEE d MMMM', longDate: 'EEEE d MMMM yyyy', short: 'd MMM', monthYear: 'LLLL yyyy', min: '{m} min', hour: '{h} h', hourMin: '{h} h {m}', and: ' et ', capitalise: true },
   'pt-BR': { locale: ptBR, group: '.', date: "d 'de' MMM 'de' yyyy", longDay: "EEEE, d 'de' MMMM", longDate: "EEEE, d 'de' MMMM 'de' yyyy", short: "d 'de' MMM", monthYear: "LLLL 'de' yyyy", min: '{m} min', hour: '{h} h', hourMin: '{h} h {m} min', and: ' e ', capitalise: true },

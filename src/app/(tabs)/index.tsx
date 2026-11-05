@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { fmt, fmtHours } from '@/engine/format';
 import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, showsWeekCard, StreakCard, TimeCard, WeekCard } from '@/features/home/Cards';
@@ -12,6 +12,7 @@ import { requestPermission } from '@/services/notifications';
 import { isNewerThanThisBuild } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
 import { Banner } from '@/ui/Banner';
+import { useBloom } from '@/ui/bloom';
 import { fmtClock } from '@/ui/TimeWheel';
 import { Screen } from '@/ui/Screen';
 import { StaggerIn } from '@/ui/StaggerIn';
@@ -26,6 +27,13 @@ export default function Home() {
   const refreshToday = useApp((s) => s.refreshToday);
   const [levelUpRequest, setLevelUpRequest] = useState(0);
   const [updating, setUpdating] = useState(false);
+  // The meadow grows fuller with the level reached.
+  const level = dash?.current.level ?? null;
+  const maxLevel = useApp((s) => s.table.maxLevel);
+  const setBloom = useBloom((s) => s.setShare);
+  useEffect(() => {
+    if (level != null) setBloom(level / Math.max(1, maxLevel));
+  }, [level, maxLevel, setBloom]);
   if (!dash) return null;
 
   const dismissed = settings.dismissed;
@@ -83,7 +91,7 @@ export default function Home() {
           tone="nectar"
           text={t('Everything for Level {level} looks cleared. Did you level up?', { level: dash.current.level + 1 })}
           action={{
-            label: t('Yes, levelled up'),
+            label: t('Yes, leveled up'),
             onPress: () => {
               if (dash.todayEntry) void saveEntry({ ...dash.todayEntry, leveledUp: true, newLevel: dash.current.level + 1 });
               else setLevelUpRequest((n) => n + 1);

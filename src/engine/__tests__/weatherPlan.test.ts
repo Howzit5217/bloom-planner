@@ -1,6 +1,7 @@
 import { PRESETS } from '../climate';
 import { buildPlan, plannedForDay } from '../plan';
-import { forecastWeights, rideVerdict, toF, walkVerdict, type ForecastWeatherDay } from '../weatherPlan';
+import { forecastWeights, rideVerdict, walkVerdict, type ForecastWeatherDay } from '../weatherPlan';
+import { fmtTemp } from '../units';
 import { reqOf, table } from './helpers';
 
 const day = (date: string, d: Partial<ForecastWeatherDay> = {}): ForecastWeatherDay => ({
@@ -65,7 +66,7 @@ describe('the forecast in the plan', () => {
   });
 
   it('shows a limit in Fahrenheit too', () => {
-    expect(toF(35)).toBe(95);
-    expect(toF(30)).toBe(86);
+    expect(fmtTemp(35, true)).toBe('95°F');
+    expect(fmtTemp(30, true)).toBe('86°F');
   });
 });
