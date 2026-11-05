@@ -139,7 +139,7 @@ export function planNotifications(args: {
 
     if (!pick) {
       if (isToday && (dash.loggedToday || reminderPassed)) continue;
-      pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: t("How'd Today Go?"), body: t('Pop in your steps and flowers. It takes ten seconds.') };
+      pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: t("How'd Today Go?"), body: t('Pop in your steps and flowers.') };
     }
     out.push(pick);
   }

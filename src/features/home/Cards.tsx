@@ -158,10 +158,7 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
     sub = t("Log your first day tonight to see how you're doing.");
   }
   const active = dash.phase === 'active' && dash.plan.status === 'ok';
-  const bindingText =
-    dash.pace.binding === 'flowers' ? t('Flowers set the pace on this level.') : dash.pace.binding === 'steps' ? t('Steps set the pace on this level.') : null;
   const note = [
-    bindingText,
     dash.pace.scale > 1.02
       ? dash.current.level >= 100
         ? t('Includes about {pct}% extra, because unused steps and flowers reset at each level-up.', { pct: Math.round((dash.pace.scale - 1) * 100) })
@@ -231,8 +228,8 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
   const ride =
     tc.bikeHours > 0.01
       ? walk
-        ? t('About {bike} biking for the flowers, plus {walk} for the steps. Riding earns no steps.', { bike: fmtHours(tc.bikeHours), walk })
-        : t('About {bike} biking for the flowers. Riding earns no steps.', { bike: fmtHours(tc.bikeHours) })
+        ? t('About {bike} biking for the flowers, plus {walk} for the steps.', { bike: fmtHours(tc.bikeHours), walk })
+        : t('About {bike} biking for the flowers.', { bike: fmtHours(tc.bikeHours) })
       : walk
         ? t('About {walk}.', { walk })
         : t('Nothing left to do.');
@@ -255,11 +252,6 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
         <View style={{ marginTop: 8, backgroundColor: c.alertPale, borderRadius: 14, padding: 12 }}>
           <T v="small">{t("That's more than 6 hours of movement. A later goal date would make this a lot kinder.")}</T>
         </View>
-      ) : null}
-      {dash.rates.estimated.length > 0 ? (
-        <T v="caption" soft style={{ marginTop: 8 }}>
-          {t('Using typical rates for now. Log a few days to work out your real ones.')}
-        </T>
       ) : null}
     </Card>
   );

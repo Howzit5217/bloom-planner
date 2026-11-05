@@ -41,7 +41,7 @@ export default function Progress() {
     <Card key="burn">
       <T v="h3">{t('Burn-Down to Level {level}', { level: dash.goal.level })}</T>
       <T v="small" soft style={{ marginBottom: 12 }}>
-        {t("What's left, against the pace that gets you there on time. The shaded gap is the story: green when you're ahead, red when you're behind.")}
+        {t("What's left, against the pace that gets you there on time.")}
       </T>
       {data.burn.totalDays > 0 ? (
         <BurnDownChart data={data.burn} width={inner} startLabel={fmtDate(profile.startDate)} endLabel={fmtDate(dash.goal.date)} />
@@ -59,7 +59,7 @@ export default function Progress() {
     <Card key="timeline">
       <T v="h3">{t('Level Timeline')}</T>
       <T v="small" soft style={{ marginBottom: 8 }}>
-        {t('Bloomed flowers are done, the half-open one is where you are, buds are still to come. Dates with ~ are projected.')}
+        {t('Dates with ~ are projected.')}
       </T>
       <View style={{ marginHorizontal: -18 }}>
         <LevelTimeline items={data.timeline} />
@@ -71,7 +71,7 @@ export default function Progress() {
           <Card key="season">
             <T v="h3">{t('Seasons')}</T>
             <T v="small" soft style={{ marginBottom: 12 }}>
-              {t("Flowers the plan needs each month, against what you've planted. Short bars are the months the weather slows you down.")}
+              {t("Flowers the plan needs each month, against what you've planted.")}
             </T>
             <SeasonalChart bars={data.seasonal} width={inner} />
           </Card>,

@@ -68,14 +68,14 @@ interface RateDraft {
   unknown: boolean;
 }
 
-type RateQuestion = { key: RateKey; label: string; why: string; suffix: string };
+type RateQuestion = { key: RateKey; label: string; suffix: string };
 
 // Walking first (it earns every step and plants flowers too), then the bike (flowers only).
 const WALK_RATES: RateQuestion[] = [
-  { key: 'walkStepsPerHour', label: tk('Steps per hour walking'), why: tk('Sets how long your step target takes.'), suffix: tk('steps/h') },
-  { key: 'walkFlowersPerHour', label: tk('Flowers per hour walking'), why: tk('Flowers you plant on foot.'), suffix: tk('flowers/h') },
+  { key: 'walkStepsPerHour', label: tk('Steps per hour walking'), suffix: tk('steps/h') },
+  { key: 'walkFlowersPerHour', label: tk('Flowers per hour walking'), suffix: tk('flowers/h') },
 ];
-const BIKE_RATES: RateQuestion[] = [{ key: 'bikeFlowersPerHour', label: tk('Flowers per hour biking'), why: tk('Flowers you plant on a ride.'), suffix: tk('flowers/h') }];
+const BIKE_RATES: RateQuestion[] = [{ key: 'bikeFlowersPerHour', label: tk('Flowers per hour biking'), suffix: tk('flowers/h') }];
 
 export function Wizard() {
   const { c, reduceMotion } = useTheme();
@@ -180,7 +180,7 @@ export function Wizard() {
               </Card>
             </View>
           ) : (
-            <NumberField label={t(q.label)} value={r.value} onChange={(v) => setRates((s) => ({ ...s, [q.key]: { ...s[q.key], value: v } }))} suffix={t(q.suffix)} hint={t(q.why)} size="md" />
+            <NumberField label={t(q.label)} value={r.value} onChange={(v) => setRates((s) => ({ ...s, [q.key]: { ...s[q.key], value: v } }))} suffix={t(q.suffix)} size="md" />
           )}
           <Chip
             label={t('Not sure yet')}
@@ -271,7 +271,6 @@ export function Wizard() {
                 </T>
               ) : null}
               <T v="caption" soft style={{ marginTop: 8 }}>
-                {next.source === 'game' ? t('Checked in the game.') : next.source === 'estimated' ? t("Nobody has published this level yet, so it's an estimate.") : t('From the Pikmin wiki.')}{' '}
                 {next.stepsMode === 'perLevel' ? t('From level 101 on, extra steps do not carry over to the next level.') : t('Up to level 100 the game counts lifetime steps, so extra steps carry over.')}
               </T>
             </Card>
@@ -375,8 +374,8 @@ export function Wizard() {
                 {preview && preview.status === 'ok' ? (
                   <T v="small" color={c.onPanelSoft} style={{ marginTop: 4 }}>
                     {preview.remaining.flowers > 0
-                      ? t('Roughly {steps} steps a day and {flowers} flowers per riding day, before weather. Your seasons will fine-tune it.', { steps: fmt(roundNice(preview.avgStepsPerDay)), flowers: fmt(roundNice(preview.avgFlowersPerRideDay)) })
-                      : t('Roughly {steps} steps a day, before weather. Your seasons will fine-tune it.', { steps: fmt(roundNice(preview.avgStepsPerDay)) })}
+                      ? t('Roughly {steps} steps a day and {flowers} flowers per riding day, before weather.', { steps: fmt(roundNice(preview.avgStepsPerDay)), flowers: fmt(roundNice(preview.avgFlowersPerRideDay)) })
+                      : t('Roughly {steps} steps a day, before weather.', { steps: fmt(roundNice(preview.avgStepsPerDay)) })}
                   </T>
                 ) : null}
                 {difficulty ? (
@@ -391,15 +390,15 @@ export function Wizard() {
       case 4:
         return (
           <View style={{ gap: 18 }}>
-            <Title sub={t('Walking earns every step, and plants flowers too. Rough guesses are fine.')}>{t('How Do You Walk?')}</Title>
+            <Title sub={t('Rough guesses are fine.')}>{t('How Do You Walk?')}</Title>
             {rateFields(WALK_RATES)}
             <View style={{ gap: 12, marginTop: 4 }}>
               <T v="h3">{t('Can You Get Steps Indoors?')}</T>
               <T v="small" soft style={{ marginTop: -8 }}>
                 {t('Like a treadmill, or walking at work.')}
               </T>
-              <Choice icon="walk" title={t('Yes, Indoors Too')} text={t('Steps count anywhere, so the plan includes walking inside as well as out.')} on={treadmill === true} onPress={() => setTreadmill(true)} />
-              <Choice icon="pine-tree" title={t('No, Only Outside')} text={t('All your walking counts as time outdoors, with a plain warning if a day gets too long.')} on={treadmill === false} onPress={() => setTreadmill(false)} />
+              <Choice icon="walk" title={t('Yes, Indoors Too')} on={treadmill === true} onPress={() => setTreadmill(true)} />
+              <Choice icon="pine-tree" title={t('No, Only Outside')} on={treadmill === false} onPress={() => setTreadmill(false)} />
             </View>
           </View>
         );
@@ -407,27 +406,12 @@ export function Wizard() {
         return (
           <View style={{ gap: 18 }}>
             <Title sub={t('A ride plants flowers far faster than walking, but earns no steps.')}>{t('And on the Bike?')}</Title>
-            <Toggle label={t('Biking for Flowers')} hint={t('Turn off to plan flowers from walking only. Walking plants them on any day, rain or shine.')} value={bikes} onChange={setBikes} />
+            <Toggle label={t('Biking for Flowers')} hint={t('Turn off to plan flowers from walking only.')} value={bikes} onChange={setBikes} />
             {bikes ? (
               <Animated.View key="bike" entering={FadeIn.duration(220)} style={{ gap: 18 }}>
                 {rateFields(BIKE_RATES)}
-                <Card variant="deep" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                  <IconChip name="bike" bg={c.card} />
-                  <T v="small" style={{ flex: 1 }}>
-                    {t("Steps come from your phone's step counter, so a bike ride adds none. Your steps are planned from walking only.")}
-                  </T>
-                </Card>
               </Animated.View>
-            ) : (
-              <Animated.View key="walk" entering={FadeIn.duration(220)}>
-                <Card variant="deep" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                  <IconChip name="walk" bg={c.card} />
-                  <T v="small" style={{ flex: 1 }}>
-                    {t('Walking it is. Flowers are planned at your walking pace, and the weather step is skipped, since it only matters for riding.')}
-                  </T>
-                </Card>
-              </Animated.View>
-            )}
+            ) : null}
           </View>
         );
       case 6:
@@ -475,9 +459,6 @@ export function Wizard() {
                 <PillButton label={t('Look up a place instead')} variant="ghost" onPress={() => setPlaceMode('find')} />
               </View>
             ) : null}
-            <T v="small" soft>
-              {t("This stops the app promising you a January you can't ride.")}
-            </T>
           </View>
         );
       default:
@@ -611,7 +592,7 @@ function Chip({ label, icon, on, onPress }: { label: string; icon: IconName; on:
   );
 }
 
-function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: string; text: string; on: boolean; onPress: () => void }) {
+function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: string; text?: string; on: boolean; onPress: () => void }) {
   const { c, reduceMotion } = useTheme();
   const pop = useSharedValue(1);
   useEffect(() => {

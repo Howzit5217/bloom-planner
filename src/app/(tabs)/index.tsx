@@ -89,7 +89,7 @@ export default function Home() {
       node: (
         <Banner
           icon="bell-ring"
-          text={t('Want a gentle nudge each evening? One reminder a day at most, never a guilt trip.')}
+          text={t('Want a gentle nudge each evening?')}
           action={{
             label: t('Yes, at {time}', { time: fmtClock(settings.notifications.hour, settings.notifications.minute) }),
             onPress: async () => {

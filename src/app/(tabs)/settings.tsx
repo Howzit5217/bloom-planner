@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -14,7 +13,7 @@ import { DifficultyPill } from '@/features/shared/Difficulty';
 import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
-import { APP_VERSION, REPO_URL } from '@/services/updates';
+import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
 import { shareTextFile } from '@/services/shareFile';
 import { useApp, useDashboard, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
@@ -48,7 +47,6 @@ const PRESET_NAMES: Record<ThresholdPreset, string> = {
 
 
 const IS_WEB = Platform.OS === 'web';
-const DEV_TAPS = 7;
 function Section({ title, icon, children }: { title: string; icon: IconName; children: ReactNode }) {
   return (
     <Card style={{ gap: 14 }}>
@@ -96,8 +94,6 @@ export default function Settings() {
   const [timeSheet, setTimeSheet] = useState(false);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
   const [checking, setChecking] = useState<string | null>(null);
-  // Taps on the version line: seven open the developer options, like Android's own.
-  const [devTaps, setDevTaps] = useState(0);
   // A goal change is checked first: a reasonable one saves (a moment after you stop sliding),
   // an unreasonable one stays here as a draft with the earliest date that would work.
   const [goalDraft, setGoalDraft] = useState<{
@@ -146,15 +142,6 @@ export default function Settings() {
   const minGoal = dash.current.level + 1;
   const notif = st.settings.notifications;
   const dev = st.settings.dev;
-  const tapVersion = () => {
-    if (dev.unlocked) return;
-    const n = devTaps + 1;
-    if (n >= DEV_TAPS) {
-      setDevTaps(0);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      void st.updateSettings({ dev: { ...dev, unlocked: true } });
-    } else setDevTaps(n);
-  };
   const overrides = Object.values(st.overrides).sort((a, b) => a.level - b.level);
   const obs = dash.observed;
   const bikes = dash.rates.bikes;
@@ -211,7 +198,7 @@ export default function Settings() {
             })}
           </T>
         ) : null}
-        <Toggle label={t('Biking for Flowers')} hint={t('Turn off to plan flowers from walking only. Walking plants them on any day, rain or shine.')} value={bikes} onChange={(b) => void st.setRates({ ...profile.rates, bikes: b })} />
+        <Toggle label={t('Biking for Flowers')} hint={t('Turn off to plan flowers from walking only.')} value={bikes} onChange={(b) => void st.setRates({ ...profile.rates, bikes: b })} />
         {RATE_KEYS.filter((k) => bikes || k !== 'bikeFlowersPerHour').map((k) => {
           const v = profile.rates[k];
           const suggestion = k === 'bikeFlowersPerHour' ? obs.bikeFlowersPerHour : k === 'walkFlowersPerHour' ? obs.walkFlowersPerHour : null;
@@ -253,7 +240,7 @@ export default function Settings() {
             </View>
           );
         })}
-        <Toggle label={t('Indoor Walking')} hint={t('Treadmill, walking at work. Splits steps into outdoor and indoor time.')} value={profile.rates.treadmillAvailable} onChange={(b) => void st.setRates({ ...profile.rates, treadmillAvailable: b })} />
+        <Toggle label={t('Indoor Walking')} hint={t('Treadmill, walking at work.')} value={profile.rates.treadmillAvailable} onChange={(b) => void st.setRates({ ...profile.rates, treadmillAvailable: b })} />
       </Section>
 
       <Section title={t('Where You Play')} icon="map-marker-radius">
@@ -287,9 +274,6 @@ export default function Settings() {
                 {st.seasonRates.some((r) => r.source === 'manual') ? ` ${t('Your hand-set months stay as they are.')}` : ''}
               </T>
             </View>
-            <T v="caption" soft>
-              {t('Only coordinates go to Open-Meteo, for weather. No analytics, no other third party.')}
-            </T>
           </>
         ) : (
           <T v="small" soft>
@@ -434,21 +418,14 @@ export default function Settings() {
             })
           }
         />
-        <Pressable onPress={tapVersion} accessible={false}>
-          <T v="small" soft>
-            {t('Version {version} · level data v{data} (checked {date})', {
-              version: APP_VERSION,
-              data: st.table.version,
-              date: retrieved,
-            })}
-            {st.settings.updates.lastCheck ? ` · ${t('last check {date}', { date: fmtDate(toKey(new Date(st.settings.updates.lastCheck))) })}` : ''}
-          </T>
-          {!dev.unlocked && devTaps >= 3 ? (
-            <T v="caption" color={c.leafDeep} style={{ marginTop: 4 }}>
-              {tn(DEV_TAPS - devTaps, '{n} more tap for developer options', '{n} more taps for developer options')}
-            </T>
-          ) : null}
-        </Pressable>
+        <T v="small" soft>
+          {t('Version {version} · level data v{data} (checked {date})', {
+            version: APP_VERSION,
+            data: st.table.version,
+            date: retrieved,
+          })}
+          {st.settings.updates.lastCheck ? ` · ${t('last check {date}', { date: fmtDate(toKey(new Date(st.settings.updates.lastCheck))) })}` : ''}
+        </T>
         <PillButton
           label={checking ?? t('Check now')}
           size="md"
@@ -478,18 +455,18 @@ export default function Settings() {
         </T>
       </Section>
 
-      {!IS_WEB && dev.unlocked ? (
+      {/* Only in beta builds (tools/beta.ps1): release builds have no developer options at all. */}
+      {IS_BETA_BUILD ? (
         <Section title={t('Developer')} icon="code-braces">
           <Toggle
             label={t('Beta Updates')}
-            hint={t("Test builds as soon as they're out (GitHub pre-releases). Everyone else stays on the released version.")}
+            hint={t('This test build takes new test builds too. Turn off to wait for releases, like everyone else.')}
             value={dev.betaUpdates}
             onChange={async (b) => {
-              await st.updateSettings({ dev: { ...dev, betaUpdates: b } });
-              if (b) void runUpdateCheck().catch(() => {});
+              await st.updateSettings({ dev: { betaUpdates: b } });
+              void runUpdateCheck().catch(() => {});
             }}
           />
-          <PillButton label={t('Hide developer options')} variant="ghost" size="md" icon="eye-off" onPress={() => void st.updateSettings({ dev: { unlocked: false, betaUpdates: false } })} />
         </Section>
       ) : null}
 
