@@ -87,8 +87,11 @@ try {
     if (Test-Path $out) { Remove-Item $out -Recurse -Force }
     New-Item -ItemType Directory $out | Out-Null
     $apk = Join-Path $out "BloomPlanner-$tag.apk"
-    gh release view $tag -R $repo *> $null
+    # "release not found" on stderr is the usual answer here; Windows PowerShell would treat it as fatal.
+    $ErrorActionPreference = 'Continue'
+    gh release view $tag -R $repo 2>&1 | Out-Null
     $published = $LASTEXITCODE -eq 0
+    $ErrorActionPreference = 'Stop'
     if ($published) {
         Run gh @('release', 'download', $tag, '-R', $repo, '-p', '*.apk', '-D', $out)
     } else {
