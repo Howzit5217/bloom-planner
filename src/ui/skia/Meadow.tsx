@@ -5,7 +5,9 @@ import { mix, type SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { CENTRE_COLOR, CENTRE_R, flowerPath, rng, stemPath } from './shapes';
+import { rng } from './shapes';
+import { fieldSprig } from './sprigLayout';
+import { sprigPainter } from './sprigPainter';
 import { useAppWidth } from '@/ui/layout';
 import { STILL } from './still';
 
@@ -108,47 +110,6 @@ export function drawBlade(canvas: SkCanvas, blade: SkPaint, x: number, y: number
   canvas.drawPath(Skia.PathBuilder.Make().moveTo(x, y).quadTo(x + lean * 0.3, y - len * 0.6, x + lean, y - len).build(), blade);
 }
 
-export interface FieldFlower {
-  x: number;
-  y: number;
-  /** Petal radius. */
-  r: number;
-  col: string;
-  rot: number;
-}
-
-/** Draws the field's flowers (stem, leaf, shadow, petals): the game's red, yellow, white and blue. */
-export function flowerPainter(c: Palette, look: SkyLook) {
-  const nightTint = (hex: string) => mix(hex, '#2A3466', look.night * 0.4);
-  const stem = Skia.Paint();
-  stem.setAntiAlias(true);
-  color(stem, nightTint(mix(c.grassBlade, '#16361A', 0.25)), 0.85);
-  const leafPaint = Skia.Paint();
-  leafPaint.setAntiAlias(true);
-  color(leafPaint, nightTint(c.leaf), 0.9);
-  const petal = Skia.Paint();
-  petal.setAntiAlias(true);
-  return (canvas: SkCanvas, f: FieldFlower) => {
-    const r = f.r;
-    // Far off, a flower is a speck of colour.
-    if (r < 2.2) {
-      color(petal, nightTint(f.col), 0.95);
-      canvas.drawCircle(f.x, f.y, Math.max(0.8, r * 0.9), petal);
-      return;
-    }
-    const k = r / 9;
-    const sl = r * (1.4 + (f.rot % 1) * 0.8);
-    canvas.drawPath(stemPath(f.x - r * 0.1, f.y + sl, f.x + r * 0.25, f.y + sl * 0.5, f.x, f.y, Math.max(1.2, r * 0.34), Math.max(1, r * 0.22)), stem);
-    if (f.rot > 1.2 && r > 3) canvas.drawPath(Skia.PathBuilder.Make().moveTo(f.x + r * 0.1, f.y + sl * 0.55).quadTo(f.x + r * 0.9, f.y + sl * 0.3, f.x + r * 1.1, f.y + sl * 0.65).quadTo(f.x + r * 0.6, f.y + sl * 0.75, f.x + r * 0.1, f.y + sl * 0.55).close().build(), leafPaint);
-    color(petal, '#000000', 0.12);
-    canvas.drawPath(flowerPath(f.x + 0.8 * k, f.y + 1.2 * k, r, 1, 5, f.rot), petal);
-    color(petal, nightTint(f.col));
-    canvas.drawPath(flowerPath(f.x, f.y, r, 1, 5, f.rot), petal);
-    color(petal, nightTint(CENTRE_COLOR));
-    canvas.drawCircle(f.x, f.y, r * CENTRE_R, petal);
-  };
-}
-
 /** A soft haze where the ground meets the sky, `haze` deep, fading down from the horizon. */
 export function drawHaze(canvas: SkCanvas, w: number, hz: number, haze: number, alpha: number, look: SkyLook) {
   const paint = Skia.Paint();
@@ -241,16 +202,16 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
       const k = 0.35 + 0.75 * t;
       drawBlade(canvas, blade, x, y, (5 + rand() * 7) * k, (rand() - 0.5) * 6 * k, 2 * k);
     }
-    // Flowers planted across the field, back to front.
+    // A few of the setup screens' stemmed flowers across the field, back to front.
     const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
-    const n = Math.round(((w * groundH) / 1700) * density);
-    const flowers: FieldFlower[] = Array.from({ length: n }, () => {
+    const n = Math.round(((w * groundH) / 1700) * density * 0.4);
+    const sprigs = Array.from({ length: n }, () => {
       const t = Math.pow(rand(), 0.9);
-      return { x: rand() * w, y: hz + 6 + t * (groundH - 6), r: (5 + rand() * 7) * (0.45 + 0.75 * t), col: colors[Math.floor(rand() * colors.length)], rot: rand() * Math.PI };
+      return fieldSprig(rand() * w, hz + 6 + t * (groundH - 6), (6 + rand() * 6) * (0.5 + 0.7 * t), colors[Math.floor(rand() * colors.length)], rand);
     });
-    flowers.sort((a, b) => a.y - b.y);
-    const paintFlower = flowerPainter(c, look);
-    for (const f of flowers) paintFlower(canvas, f);
+    sprigs.sort((a, b) => a.y - b.y);
+    const paintSprig = sprigPainter(c, look);
+    for (const sp of sprigs) paintSprig(canvas, sp);
     // Haze where the ground meets the sky (and a thicker one in fog). A field drawn on its own (its
     // horizon at the top edge) meets a separately drawn sky there, so its haze is fuller.
     const own = horizon <= 0;

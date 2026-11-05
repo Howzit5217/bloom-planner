@@ -6,7 +6,9 @@ import type { SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, color, drawBlade, drawHaze, drawSky, drawWeather, flowerPainter, type FieldFlower } from './Meadow';
+import { bladeColorOf, color, drawBlade, drawHaze, drawSky, drawWeather } from './Meadow';
+import { fieldSprig, type Sprig } from './sprigLayout';
+import { sprigPainter } from './sprigPainter';
 import { rng } from './shapes';
 import { cameraMatrix, tiltAt, type CameraFrame } from '../camera';
 
@@ -50,17 +52,20 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       for (let i = 0; i < n; i++) drawBlade(canvas, blade, rand() * f.picW, hz + y0 + rand() * 2, Math.max(1.2, (5 + rand() * 7) * k), (rand() - 0.5) * 6 * k, 2 * k);
     }
 
+    // Fewer flowers than grass, and the setup screens' big stemmed ones: a head about 20 points
+    // across in the field nearby, smaller and closer together toward the horizon.
     const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
-    const flowers: FieldFlower[] = [];
+    const sprigs: Sprig[] = [];
     for (let y0 = 3; y0 < depth; y0 += 2) {
-      const n = Math.floor(many(y0, 0.0004, 0.003) * f.picW * 2 + rand());
+      const n = Math.floor(many(y0, 0.00011, 0.0009) * f.picW * 2 + rand());
       for (let i = 0; i < n; i++) {
-        flowers.push({ x: rand() * f.picW, y: hz + y0 + rand() * 2, r: Math.max(1, 12 * near(y0)) * (0.7 + rand() * 0.6), col: colors[Math.floor(rand() * colors.length)], rot: rand() * Math.PI });
+        const r = Math.max(1, 20 * near(y0)) * (0.75 + rand() * 0.5);
+        sprigs.push(fieldSprig(rand() * f.picW, hz + y0 + rand() * 2, r, colors[Math.floor(rand() * colors.length)], rand));
       }
     }
-    flowers.sort((a, b) => a.y - b.y);
-    const paintFlower = flowerPainter(c, look);
-    for (const fl of flowers) paintFlower(canvas, fl);
+    sprigs.sort((a, b) => a.y - b.y);
+    const paintSprig = sprigPainter(c, look);
+    for (const sp of sprigs) paintSprig(canvas, sp);
 
     drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.1), look.fog ? 400 : 60), look.fog ? 0.85 : 0.55, look);
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c);

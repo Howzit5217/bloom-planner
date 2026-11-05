@@ -252,3 +252,26 @@ export function sideLayout(w: number, h: number, seed: number, colors: string[])
   });
   return out;
 }
+
+/**
+ * One of the setup screens' stemmed flowers standing in a field, its base at (x, y), its head `r`
+ * across: a stem about three heads tall, leaning and bending a little, with a leaf or two.
+ */
+export function fieldSprig(x: number, y: number, r: number, color: string, rand: () => number): Sprig {
+  return finish(
+    {
+      x,
+      y,
+      len: r * (2.4 + rand() * 1.5),
+      lean: (rand() - 0.5) * 0.32,
+      bend: (rand() - 0.5) * 0.5,
+      r,
+      color,
+      rot: rand() * Math.PI,
+      delay: 0,
+      phase: rand(),
+      leaves: twoLeaves(rand, rand() < 0.55 ? 1 : 2, 0.28 + rand() * 0.2),
+    },
+    rand,
+  );
+}
