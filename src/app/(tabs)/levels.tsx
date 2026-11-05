@@ -2,29 +2,41 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { badgeTier } from '@/engine/badge';
 import { fmt } from '@/engine/format';
 import { makeReq } from '@/engine/levels';
+import { questOf } from '@/engine/quest';
 import type { LevelRow, Requirement } from '@/engine/types';
+import { QUEST_ICON } from '@/features/shared/quest';
 import { useApp, useDashboard } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
-import { Icon } from '@/ui/Icon';
+import { Icon, type IconName } from '@/ui/Icon';
 import { NumberField } from '@/ui/NumberField';
 import { PillButton } from '@/ui/PillButton';
 import { FocusFade, PaperSheet } from '@/ui/Screen';
 import { ScrollRail, useScrollRail } from '@/ui/ScrollRail';
 import { Sheet } from '@/ui/Sheet';
 import { FlowerAccent } from '@/ui/skia/FlowerAccent';
-import { LevelBadge, METALS } from '@/ui/skia/LevelBadge';
-import { mixHex } from '@/ui/skia/shapes';
+import { LevelBadge } from '@/ui/skia/LevelBadge';
 import { T } from '@/ui/T';
 import { TAB_BAR_SPACE } from '@/ui/TabBar';
 import { useT } from '@/i18n';
 import { noteText, taskText } from '@/i18n/level-text';
 
-const ROW_H = 92;
+/** A tile: padding above and below, an objective per line, the note under them, and the gap to the next. */
+const PAD = 14;
+const LINE = 23;
+const NOTE = 19;
+const GAP = 8;
+const BADGE = 52;
+
+/** How many lines a level's objectives take (steps, flowers, its quest), and whether a note sits under them. */
+function tileLines(row: LevelRow, r: Requirement, current: number) {
+  if (row.level <= 2) return { lines: 1, note: row.level === current || row.level === current + 1 };
+  return { lines: 1 + (r.flowers > 0 ? 1 : 0) + (row.task ? 1 : 0), note: true };
+}
+const tileHeight = (t: { lines: number; note: boolean }) => PAD * 2 + Math.max(BADGE, t.lines * LINE + (t.note ? NOTE : 0));
 
 export default function Levels() {
   const { t, lang } = useT();
@@ -39,6 +51,16 @@ export default function Levels() {
   const rows = useMemo(() => Array.from({ length: table.maxLevel }, (_, i) => table.byLevel[i + 1]), [table]);
   const req = useMemo(() => makeReq(table, overrides), [table, overrides]);
   const current = dash?.current.level ?? 1;
+  // Each tile is as tall as its objectives; the list still knows where every one sits.
+  const layout = useMemo(() => {
+    let at = 0;
+    return rows.map((row) => {
+      const length = tileHeight(tileLines(row, req(row.level)!, current)) + GAP;
+      const item = { length, offset: at };
+      at += length;
+      return item;
+    });
+  }, [rows, req, current]);
 
   const header = (
     <View style={{ gap: 14, marginBottom: 14 }}>
@@ -66,7 +88,7 @@ export default function Levels() {
           contentContainerStyle={{ paddingTop: 14, paddingHorizontal: 16, paddingBottom: TAB_BAR_SPACE + insets.bottom + 24 }}
           initialNumToRender={20}
           windowSize={9}
-          getItemLayout={(_, index) => ({ length: ROW_H, offset: ROW_H * index, index })}
+          getItemLayout={(_, index) => ({ ...layout[index], index })}
           onLayout={() => {
             // Scroll to the current level on mount.
             setTimeout(() => scrollRef.current?.scrollToIndex({ index: Math.max(0, current - 2), animated: true, viewOffset: 0 }), 350);
@@ -86,13 +108,23 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
   const { t } = useT();
   const isCurrent = row.level === current;
   const isNext = row.level === current + 1;
-  // Reached: every level up to and including the one you're on.
-  const reached = row.level <= current;
   const done = row.level < current;
-  const metal = METALS[badgeTier(row.level)];
+  const quest = row.level > 2 ? questOf(row.task) : null;
+  // The level's objectives, one per line: steps, flowers, and its quest.
+  const goals: Array<{ icon: IconName; text: string; tint: string }> =
+    row.level <= 2
+      ? [{ icon: 'school-outline', text: t('Tutorial'), tint: c.leaf }]
+      : [
+          { icon: 'shoe-print', text: t('{steps} steps', { steps: fmt(r.steps) }), tint: c.teal },
+          ...(r.flowers > 0 ? [{ icon: 'flower' as IconName, text: t('{flowers} flowers', { flowers: fmt(r.flowers) }), tint: c.petalRed }] : []),
+          ...(row.task ? [{ icon: (quest ? QUEST_ICON[quest.kind] : 'flag-outline') as IconName, text: taskText(row.task), tint: c.leafDeep }] : []),
+        ];
+  const shape = tileLines(row, r, current);
+  const note = !shape.note ? null : isCurrent ? t("You're here") : isNext ? t('Working on it now') : r.stepsMode === 'perLevel' ? t('Steps reset each level') : t('Lifetime {n} steps', { n: fmt(row.cumulativeSteps ?? 0) });
   const what = row.level <= 2 ? t('Tutorial') : r.flowers ? t('{steps} steps, {flowers} flowers', { steps: fmt(r.steps), flowers: fmt(r.flowers) }) : t('{steps} steps', { steps: fmt(r.steps) });
   const task = row.task && row.level > 2 ? `, ${taskText(row.task)}` : '';
   const label = `${t('Level {level}', { level: row.level })}. ${what}${task}.${done ? ` ${t('Done')}.` : ''}`;
+  const ink = isCurrent ? c.onPanel : undefined;
   return (
     <Pressable
       accessibilityRole="button"
@@ -101,10 +133,11 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
       onPress={onPress}
       disabled={row.level <= 2}
       style={({ pressed }) => ({
-        height: ROW_H - 8,
-        marginBottom: 8,
+        height: tileHeight(shape),
+        marginBottom: GAP,
         borderRadius: radius.card,
         paddingHorizontal: 14,
+        paddingVertical: PAD,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
@@ -113,34 +146,24 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
         boxShadow: `0px 3px 12px 0px ${c.shadow}`,
       })}
     >
-      {reached ? (
-        // Every level you've reached wears its rank badge, in its metal.
-        <View style={{ width: 52, height: 52, alignItems: 'center', justifyContent: 'center' }}>
-          <LevelBadge level={row.level} size={58} />
-        </View>
-      ) : (
-        // The ones still to come: just the number, on a tile tinted in the metal it will be.
-        <View style={{ width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: mixHex(c.card, metal.rim[1], c.dark ? 0.32 : 0.28) }}>
-          <T v="h2" color={c.dark ? metal.rim[0] : metal.deep}>
-            {row.level}
-          </T>
-        </View>
-      )}
-      <View style={{ flex: 1, gap: 2 }}>
-        {row.level <= 2 ? (
-          <T v="bodyBold" color={isCurrent ? c.onPanel : undefined}>
-            {t('Tutorial')}
-          </T>
-        ) : (
-          <>
-            <T v="bodyBold" color={isCurrent ? c.onPanel : undefined} numberOfLines={1}>
-              {r.flowers ? t('{steps} steps · {flowers} flowers', { steps: fmt(r.steps), flowers: fmt(r.flowers) }) : t('{steps} steps', { steps: fmt(r.steps) })}
+      {/* Every level wears its rank badge, in its metal: the ones reached and the ones still to come. */}
+      <View style={{ width: BADGE, height: BADGE, alignItems: 'center', justifyContent: 'center' }}>
+        <LevelBadge level={row.level} size={58} />
+      </View>
+      <View style={{ flex: 1 }}>
+        {goals.map((g) => (
+          <View key={g.icon + g.text} style={{ height: LINE, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <Icon name={g.icon} size={16} color={isCurrent ? c.onPanel : g.tint} />
+            <T v="bodyBold" color={ink} numberOfLines={1} style={{ flex: 1 }}>
+              {g.text}
             </T>
-            <T v="caption" color={isCurrent ? c.onPanelSoft : undefined} soft={!isCurrent} numberOfLines={1}>
-              {isCurrent ? t("You're here") : isNext ? t('Working on it now') : row.task ? taskText(row.task) : r.stepsMode === 'perLevel' ? t('Steps reset each level') : t('Lifetime {n} steps', { n: fmt(row.cumulativeSteps ?? 0) })}
-            </T>
-          </>
-        )}
+          </View>
+        ))}
+        {note ? (
+          <T v="caption" color={isCurrent ? c.onPanelSoft : undefined} soft={!isCurrent} numberOfLines={1} style={{ height: NOTE, paddingTop: 2 }}>
+            {note}
+          </T>
+        ) : null}
       </View>
       {done ? (
         // Finished: steps, flowers and the level's task, all done.
