@@ -17,13 +17,13 @@
     --canvas: #FBF7EC; --canvas-deep: #F2EADA; --card: #FFFDF8; --ink: #3A3226; --ink-soft: #6E6455;
     --leaf: #5BA85A; --leaf-deep: #3C7A3E; --leaf-pale: #DCEEDA; --button: #43853F; --button-pressed: #336B31;
     --panel: #346E36; --on-panel: #FFFFFF; --on-panel-soft: rgba(255,255,255,0.86);
-    --shadow: rgba(120,100,70,0.12); --meadow-top: #D8F0B8; --meadow-bottom: #A9DB7E; --tile: #E7E2D9;
+    --shadow: rgba(120,100,70,0.12); --tile: #E7E2D9; --stem: #4E934E; --petal-under: #D3CBBD;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --canvas: #241F18; --canvas-deep: #1B1712; --card: #30291F; --ink: #F2EADA; --ink-soft: #C9BFAE;
       --leaf: #6FBF6B; --leaf-deep: #9CD597; --leaf-pale: #2E4A2C; --button: #4F9A4A; --button-pressed: #3F7F3B;
-      --panel: #264E28; --shadow: rgba(0,0,0,0.35); --meadow-top: #2F4A24; --meadow-bottom: #3D5E2E; --tile: #3A342C;
+      --panel: #264E28; --shadow: rgba(0,0,0,0.35); --tile: #3A342C; --stem: #65B162; --petal-under: #B9AD95;
     }
   }
   * { box-sizing: border-box; }
@@ -37,8 +37,16 @@
   body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 17px/1.55 Nunito, system-ui, sans-serif; }
   a { color: var(--leaf-deep); font-weight: 700; }
   h1, h2, h3 { font-family: 'Baloo 2', Nunito, sans-serif; line-height: 1.15; margin: 0; }
-  .meadow { position: relative; height: 150px; background: linear-gradient(var(--meadow-top), var(--meadow-bottom)); overflow: hidden; }
-  .meadow svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* The app's welcome flowers: stemmed sprigs growing up from the page, swaying a little. */
+  .meadow { position: relative; height: 150px; background: var(--canvas); overflow: hidden; }
+  .meadow svg { position: absolute; left: 0; top: 0; width: 100%; height: 122px; overflow: visible; }
+  .sprig { transform-box: view-box; animation: sway 7s ease-in-out infinite; }
+  .sprig .stem { transform-box: view-box; animation: grow-stem 0.8s cubic-bezier(.2,.7,.3,1) both; }
+  .sprig .leaf, .sprig .head { transform-box: view-box; animation: pop 0.5s cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes sway { 0%, 100% { transform: rotate(-2.4deg); } 50% { transform: rotate(2.4deg); } }
+  @keyframes grow-stem { from { transform: scaleY(0.001); } to { transform: scaleY(1); } }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .sprig, .sprig .stem, .sprig .leaf, .sprig .head { animation: none; } }
   .sheet { position: relative; margin-top: -28px; background: var(--canvas); border-radius: 28px 28px 0 0; }
   .wrap { max-width: 880px; margin: 0 auto; padding: 0 16px; }
   .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 0 24px; }
@@ -96,7 +104,7 @@
           Web App
         </a>
       </div>
-      <div class="fine" id="release-line">Free. No ads, no account, no tracking.</div>
+      <div class="fine" id="release-line">Free. No ads. No account. No tracking.</div>
     </div>
 
     <section>
@@ -182,21 +190,120 @@
   }
   var COLORS = ['#E8614D', '#F2C14E', '#FFFFFF', '#5B9BD5'];
 
-  // A meadow along the top, different every visit.
+  // The app's welcome flowers along the top: the same layout rules, shapes and colours as the app
+  // (src/ui/skia/sprigLayout.ts and FlowerSprigs.tsx), different every visit, clear of the icon.
   (function () {
     var svg = document.getElementById('meadow');
-    var w = Math.max(360, window.innerWidth), h = 150, out = '';
-    var n = Math.round(w / 34);
-    for (var i = 0; i < n; i++) {
-      var x = (i + 0.5) * (w / n) + (Math.random() - 0.5) * 24;
-      var y = 18 + Math.random() * 96;
-      var r = 6 + Math.random() * 9;
-      out += '<line x1="' + x + '" y1="' + (y + r * 0.6) + '" x2="' + (x + (Math.random() - 0.5) * 6) + '" y2="' + (y + r * 2.4) + '" stroke="#4F9A4A" stroke-width="2.4" stroke-linecap="round"/>';
-      out += flower(x, y, r, COLORS[Math.floor(Math.random() * 4)], Math.random() * Math.PI);
+    var w = Math.max(320, Math.min(window.innerWidth, 1600)), h = 122;
+    var seed = 1 + Math.floor(Math.random() * 2147483000);
+    var rand = function () { return (seed = (seed * 16807) % 2147483647) / 2147483647; };
+    var COLORS = ['#E8614D', '#F2C14E', '#FFFFFF', '#5B9BD5'];
+    function geometry(sp) {
+      var top = { x: Math.sin(sp.lean) * sp.len, y: -Math.cos(sp.lean) * sp.len };
+      var ctrl = { x: top.x * 0.5 + sp.bend * sp.len * 0.25, y: top.y * 0.55 };
+      return { top: top, ctrl: ctrl, at: function (t) {
+        return { x: 2 * (1 - t) * t * ctrl.x + t * t * top.x, y: 2 * (1 - t) * t * ctrl.y + t * t * top.y,
+          along: Math.atan2(2 * (1 - t) * ctrl.y + 2 * t * (top.y - ctrl.y), 2 * (1 - t) * ctrl.x + 2 * t * (top.x - ctrl.x)) };
+      } };
     }
+    var leafAngle = function (along, side) { return along + side * (Math.PI / 2 - 0.6); };
+    function twoLeaves(count, first) {
+      var side = rand() < 0.5 ? 1 : -1;
+      if (count < 2) return [{ at: first, side: side, size: 0.8 + rand() * 0.3 }];
+      var low = Math.min(first, 0.2 + rand() * 0.1);
+      return [{ at: low, side: side, size: 0.8 + rand() * 0.25 }, { at: low + 0.2 + rand() * 0.08, side: -side, size: 0.62 + rand() * 0.22 }];
+    }
+    function finish(d) {
+      d.leafLen = 1.45 + rand() * 0.45; d.leafWid = 0.3 + rand() * 0.14; d.stemW = 0.36 + rand() * 0.14;
+      var room = function (at) { return (1 - at) * d.len - d.r * 1.2; }, leaves = [];
+      d.leaves.slice().sort(function (a, b) { return a.at - b.at; }).forEach(function (l) {
+        var at = Math.max(0.16, Math.min(l.at, 0.85)), size = Math.min(l.size, room(at) / (0.62 * d.leafLen * d.r));
+        if (size < 0.55 || (leaves.length && at - leaves[leaves.length - 1].at < 0.18)) return;
+        leaves.push({ at: at, side: l.side, size: size });
+      });
+      if (!leaves.length && d.leaves.length) {
+        var size = Math.min(d.leaves[0].size, room(0.2) / (0.62 * d.leafLen * d.r));
+        if (size >= 0.55) leaves.push({ at: 0.2, side: d.leaves[0].side, size: size });
+      }
+      d.leaves = leaves;
+      return d;
+    }
+    function discs(sp) {
+      var g = geometry(sp), out = [{ x: sp.x + g.top.x, y: sp.y + g.top.y, r: sp.r * 1.05, head: true }];
+      var stemR = Math.max(3.5, sp.r * sp.stemW) / 2 + 1;
+      for (var i = 1; i <= 12; i++) { var p = g.at(i / 13); out.push({ x: sp.x + p.x, y: sp.y + p.y, r: stemR }); }
+      sp.leaves.forEach(function (l) {
+        var q = g.at(l.at), a = leafAngle(q.along, l.side), L = sp.r * sp.leafLen * l.size;
+        out.push({ x: sp.x + q.x + Math.cos(a) * L * 0.5, y: sp.y + q.y + Math.sin(a) * L * 0.5, r: L * 0.42 });
+      });
+      return out;
+    }
+    function clear(mine, placed) {
+      return mine.every(function (a) { return placed.every(function (b) {
+        var d = Math.hypot(a.x - b.x, a.y - b.y);
+        return a.head && b.head ? d > (a.r + b.r) * 1.3 : d > a.r + b.r + 4;
+      }); });
+    }
+    // A row growing up from the bottom, one per slot at clearly different heights, none touching,
+    // with the middle left open for the app icon.
+    var gap = 84, slotW = w < 600 ? 62 : 78, n = Math.max(4, Math.round(w / slotW)), slot = w / n;
+    var out = [], placed = [], lastColor = -1, lastLen = -1;
+    for (var i = 0; i < n; i++) {
+      var cx = slot * (i + 0.5);
+      if (Math.abs(cx - w / 2) < gap) { lastLen = -1; continue; }
+      var ci = Math.floor(rand() * 4);
+      if (ci === lastColor) ci = (ci + 1 + Math.floor(rand() * 3)) % 4;
+      for (var attempt = 0; attempt < 30; attempt++) {
+        var r = Math.min(21, h * (0.13 + rand() * 0.05));
+        var x = Math.max(h * 0.3, Math.min(w - h * 0.3, cx + (rand() - 0.5) * slot * 0.7));
+        if (Math.abs(x - w / 2) < gap - 10) continue;
+        var len = Math.min(h * (0.36 + rand() * 0.36), h - r * 1.35);
+        if (lastLen >= 0 && Math.abs(len - lastLen) < h * (attempt < 16 ? 0.13 : 0.1)) continue;
+        var sp = finish({ x: x, y: h, len: len, lean: (rand() - 0.5) * 0.32, bend: (rand() - 0.5) * 0.5, r: r, color: COLORS[ci],
+          rot: rand() * Math.PI, delay: 0.08 * out.length + rand() * 0.12, phase: rand(), leaves: twoLeaves(rand() < 0.55 ? 1 : 2, 0.28 + rand() * 0.2) });
+        if (!sp.leaves.length) continue;
+        var ds = discs(sp);
+        if (!clear(ds, placed)) continue;
+        out.push(sp); placed = placed.concat(ds); lastColor = ci; lastLen = len;
+        break;
+      }
+    }
+    var f = function (v) { return v.toFixed(1); };
+    function stem(g, w0, w1) {
+      var L = [], R = [], N = 14;
+      for (var k = 0; k <= N; k++) {
+        var t = k / N, px = 2 * (1 - t) * t * g.ctrl.x + t * t * g.top.x, py = 2 * (1 - t) * t * g.ctrl.y + t * t * g.top.y;
+        var dx = 2 * (1 - t) * g.ctrl.x + 2 * t * (g.top.x - g.ctrl.x), dy = 2 * (1 - t) * g.ctrl.y + 2 * t * (g.top.y - g.ctrl.y), l = Math.hypot(dx, dy) || 1;
+        var hw = (w0 + (w1 - w0) * t) / 2;
+        L.push(f(px - (dy / l) * hw) + ' ' + f(py + (dx / l) * hw)); R.unshift(f(px + (dy / l) * hw) + ' ' + f(py - (dx / l) * hw));
+      }
+      return 'M' + L.join(' L') + ' L' + R.join(' L') + 'Z';
+    }
+    function head(r, color, rot) {
+      var petals = '';
+      for (var k = 0; k < 5; k++) {
+        var a = rot + (k / 5) * Math.PI * 2;
+        petals += '<circle cx="' + f(Math.sin(a) * r * 0.57) + '" cy="' + f(-Math.cos(a) * r * 0.57) + '" r="' + f(r * 0.43) + '"/>';
+      }
+      var under = color === '#FFFFFF' ? '<g fill="var(--petal-under)" transform="translate(0 ' + f(Math.max(0.8, r * 0.07)) + ')">' + petals + '</g>' : '';
+      return under + '<g fill="' + color + '">' + petals + '</g><circle r="' + f(r * 0.33) + '" fill="#FFB400"/>';
+    }
+    var html = '';
+    out.forEach(function (sp) {
+      var g = geometry(sp), base = 'transform-origin:' + f(sp.x) + 'px ' + f(sp.y) + 'px;';
+      var leafD = function (len, wid) { return 'M0 0C' + f(len * 0.18) + ' ' + f(-wid * 1.25) + ' ' + f(len * 0.72) + ' ' + f(-wid * 1.2) + ' ' + f(len) + ' 0C' + f(len * 0.72) + ' ' + f(wid * 0.85) + ' ' + f(len * 0.2) + ' ' + f(wid * 0.85) + ' 0 0Z'; };
+      var LL = sp.r * sp.leafLen, d0 = sp.delay * 1.4;
+      var leaves = sp.leaves.map(function (l) {
+        var q = g.at(l.at), deg = leafAngle(q.along, l.side) * 180 / Math.PI;
+        return '<g transform="translate(' + f(sp.x + q.x) + ' ' + f(sp.y + q.y) + ') rotate(' + f(deg) + ') scale(' + f(l.size) + ' ' + f(l.size * l.side) + ')"><path class="leaf" style="transform-origin:0 0;animation-delay:' + (d0 + 0.3 + l.at * 0.4).toFixed(2) + 's" d="' + leafD(LL, LL * sp.leafWid) + '" fill="var(--leaf)"/></g>';
+      }).join('');
+      html += '<g class="sprig" style="' + base + 'animation-delay:-' + (sp.phase * 7).toFixed(2) + 's"><g transform="translate(' + f(sp.x) + ' ' + f(sp.y) + ')">' +
+        '<path class="stem" style="transform-origin:0 0;animation-delay:' + d0.toFixed(2) + 's" d="' + stem(g, Math.max(3.5, sp.r * sp.stemW), Math.max(2.5, sp.r * sp.stemW * 0.62)) + '" fill="var(--stem)"/></g>' +
+        leaves + '<g transform="translate(' + f(sp.x + g.top.x) + ' ' + f(sp.y + g.top.y) + ')"><g class="head" style="transform-origin:0 0;animation-delay:' + (d0 + 0.55).toFixed(2) + 's">' + head(sp.r, sp.color, sp.rot) + '</g></g></g>';
+    });
     svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
-    svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-    svg.innerHTML = out;
+    svg.setAttribute('preserveAspectRatio', 'xMidYMax meet');
+    svg.innerHTML = html;
   })();
 
   // The app icon: the red flower on flat grass green, small flowers planted evenly all round it.
@@ -233,7 +340,7 @@
       if (!apk) return;
       document.getElementById('get-android').href = apk.browser_download_url;
       var mb = (apk.size / 1048576).toFixed(0);
-      document.getElementById('release-line').textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB · Free. No ads, no account, no tracking.';
+      document.getElementById('release-line').textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB · Free. No ads. No account. No tracking.';
     })
     .catch(function () {});
 </script>
