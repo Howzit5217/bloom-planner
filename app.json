@@ -2,7 +2,7 @@
   "expo": {
     "name": "Bloom Planner",
     "slug": "bloom-planner",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "bloomplanner",
@@ -84,7 +84,7 @@
     },
     "extra": {
       "githubRepo": "Howzit5217/bloom-planner",
-      "beta": 1
+      "beta": 0
     }
   }
 }
