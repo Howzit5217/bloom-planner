@@ -17,25 +17,31 @@ const day = (date: string, d: Partial<ForecastWeatherDay> = {}): ForecastWeather
   code: 1,
   ...d,
 });
-const heat = { walk: 32, bike: 30 };
+const limits = { hot: 31, cold: 2 };
 
 describe('the forecast in the plan', () => {
-  it('judges heat on the feels-like high, and the other weather for riding', () => {
+  it('judges heat and cold on the feels-like high, the same for walking and riding', () => {
     // 29 on the thermometer, 34 with the humidity: too hot for both.
-    expect(walkVerdict(day('2026-07-01', { tmax: 29, feelsMax: 34 }), heat)).toBe('hot');
-    expect(rideVerdict(day('2026-07-01', { tmax: 29, feelsMax: 31 }), PRESETS.normal, heat)).toBe('hot');
-    expect(walkVerdict(day('2026-07-01', { tmax: 29, feelsMax: 31 }), heat)).toBe('good');
-    expect(rideVerdict(day('2026-07-01', { precip: 8 }), PRESETS.normal, heat)).toBe('wet');
-    expect(rideVerdict(day('2026-07-01', { wind: 30, gusts: 80 }), PRESETS.normal, heat)).toBe('wind');
-    expect(walkVerdict(day('2026-07-01', { code: 95 }), heat)).toBe('storm');
-    expect(walkVerdict(day('2026-07-01', { precip: 8 }), heat)).toBe('good');
+    expect(walkVerdict(day('2026-07-01', { tmax: 29, feelsMax: 34 }), limits)).toBe('hot');
+    expect(rideVerdict(day('2026-07-01', { tmax: 29, feelsMax: 34 }), PRESETS.normal, limits)).toBe('hot');
+    expect(walkVerdict(day('2026-07-01', { tmax: 29, feelsMax: 31 }), limits)).toBe('good');
+    expect(rideVerdict(day('2026-07-01', { tmax: 29, feelsMax: 31 }), PRESETS.normal, limits)).toBe('good');
+    // 4 on the thermometer, 0 with the wind: too cold for both; the cold limit is the player's, not the preset's.
+    expect(walkVerdict(day('2026-01-10', { tmax: 4, feelsMax: 0 }), limits)).toBe('cold');
+    expect(rideVerdict(day('2026-01-10', { tmax: 4, feelsMax: 0 }), PRESETS.fair, limits)).toBe('cold');
+    expect(rideVerdict(day('2026-01-10', { tmax: 4, feelsMax: 3 }), PRESETS.fair, limits)).toBe('good');
+    expect(walkVerdict(day('2026-01-10', { tmax: 4, feelsMax: 0 }), { hot: 31, cold: -5 })).toBe('good');
+    expect(rideVerdict(day('2026-07-01', { precip: 8 }), PRESETS.normal, limits)).toBe('wet');
+    expect(rideVerdict(day('2026-07-01', { wind: 30, gusts: 80 }), PRESETS.normal, limits)).toBe('wind');
+    expect(walkVerdict(day('2026-07-01', { code: 95 }), limits)).toBe('storm');
+    expect(walkVerdict(day('2026-07-01', { precip: 8 }), limits)).toBe('good');
   });
 
   it('weighs each forecast day, from today on', () => {
     const w = forecastWeights(
       [day('2026-07-01'), day('2026-07-02', { feelsMax: 36 }), day('2026-07-03', { precip: 7, precipChance: 30 }), day('2026-06-30')],
       PRESETS.normal,
-      heat,
+      limits,
       false,
       '2026-07-01',
     );
@@ -43,7 +49,7 @@ describe('the forecast in the plan', () => {
     // Rain that may well not come is half a riding day.
     expect(w.ride).toEqual({ '2026-07-01': 1, '2026-07-02': 0, '2026-07-03': 0.5 });
     // A treadmill keeps more of a hot day.
-    expect(forecastWeights([day('2026-07-02', { feelsMax: 36 })], PRESETS.normal, heat, true, '2026-07-01').walk['2026-07-02']).toBe(0.75);
+    expect(forecastWeights([day('2026-07-02', { feelsMax: 36 })], PRESETS.normal, limits, true, '2026-07-01').walk['2026-07-02']).toBe(0.75);
   });
 
   it('moves steps off a hot day onto the good ones', () => {

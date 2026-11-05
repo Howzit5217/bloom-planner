@@ -305,11 +305,12 @@ export default function Settings() {
             ]}
           />
         </View>
-        {/* Heat: judged on the feels-like high, so humidity and wind count too; set in the player's unit. */}
-        <HeatLimit label={t('Too hot to walk above')} celsius={st.settings.heat.walk ?? 35} f={tempF} onChange={(v) => void st.setHeat({ ...st.settings.heat, walk: v })} />
-        {bikes ? <HeatLimit label={t('Too hot to ride above')} celsius={st.settings.heat.bike ?? 35} f={tempF} onChange={(v) => void st.setHeat({ ...st.settings.heat, bike: v })} /> : null}
+        {/* Too hot and too cold: feels-like highs, so humidity and wind count too; for walking and riding
+            alike, set in the player's unit. */}
+        <TempLimit label={t('Too hot above')} celsius={st.settings.limits.hot} f={tempF} range={[20, 46]} onChange={(v) => void st.setLimits({ ...st.settings.limits, hot: Math.max(v, st.settings.limits.cold + 5) })} />
+        <TempLimit label={t('Too cold below')} celsius={st.settings.limits.cold} f={tempF} range={[-15, 20]} onChange={(v) => void st.setLimits({ ...st.settings.limits, cold: Math.min(v, st.settings.limits.hot - 5) })} />
         <T v="caption" soft>
-          {t('Feels-like temperature, so humidity and wind count too. Days hotter than this, and rain, snow or storms in the forecast, get less of the plan; the good days get more.')}
+          {t('Feels-like temperatures, so humidity and wind count too. Days hotter or colder than these, and rain, snow or storms in the forecast, get less walking and riding in the plan; the good days get more.')}
         </T>
         {dash.weather ? (
           <T v="smallBold">
@@ -332,10 +333,10 @@ export default function Settings() {
               />
               <T v="caption" soft>
                 {st.settings.preset === 'fair'
-                  ? t('No rain at all, at least {t} and 11 hours of daylight.', { t: fmtTemp(5, tempF) })
+                  ? t('No rain at all and at least 11 hours of daylight.')
                   : st.settings.preset === 'all'
-                    ? t('Up to 15mm of rain, 3cm of snow, down to {t}, 8 hours of daylight.', { t: fmtTemp(-5, tempF) })
-                    : t('Up to 5mm of rain, 1cm of snow, at least {t} and 9.5 hours of daylight.', { t: fmtTemp(2, tempF) })}
+                    ? t('Up to 15mm of rain, 3cm of snow and 8 hours of daylight.')
+                    : t('Up to 5mm of rain, 1cm of snow and 9.5 hours of daylight.')}
                 {st.seasonRates.some((r) => r.source === 'manual') ? ` ${t('Your hand-set months stay as they are.')}` : ''}
               </T>
             </View>
@@ -595,16 +596,17 @@ export default function Settings() {
 }
 
 /**
- * A heat limit, set in the player's unit: whole degrees °C, or whole degrees °F (kept in °C to the
- * tenth, so it reads back as set). The other unit shows underneath.
+ * A temperature limit, set in the player's unit: whole degrees °C, or whole degrees °F (kept in °C to
+ * the tenth, so it reads back as set). `range` is in °C. The other unit shows underneath.
  */
-function HeatLimit({ label, celsius, f, onChange }: { label: string; celsius: number; f: boolean; onChange: (celsius: number) => void }) {
+function TempLimit({ label, celsius, f, range, onChange }: { label: string; celsius: number; f: boolean; range: [number, number]; onChange: (celsius: number) => void }) {
   const { t } = useT();
   const shown = Math.round(f ? cToF(celsius) : celsius);
+  const [lo, hi] = f ? [Math.round(cToF(range[0])), Math.round(cToF(range[1]))] : range;
   return (
     <View style={{ gap: 8 }}>
       <T v="smallBold">{label}</T>
-      <Stepper label={label} value={shown} min={f ? 68 : 20} max={f ? 115 : 46} onChange={(v) => onChange(f ? Math.round(fToC(v) * 10) / 10 : v)} size={52} />
+      <Stepper label={label} value={shown} min={lo} max={hi} onChange={(v) => onChange(f ? Math.round(fToC(v) * 10) / 10 : v)} size={52} />
       <T v="caption" soft center>
         {t('Feels like {t} ({other})', { t: fmtTemp(celsius, f), other: fmtTemp(celsius, !f) })}
       </T>

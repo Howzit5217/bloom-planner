@@ -16,7 +16,7 @@ export default function Seasons() {
   const seasons = useApp((s) => s.seasonRates);
   const climate = useApp((s) => s.climate);
   const preset = useApp((s) => s.settings.preset);
-  const bikeMax = useApp((s) => s.settings.heat.bike);
+  const limits = useApp((s) => s.settings.limits);
   const setSeasonRates = useApp((s) => s.setSeasonRates);
   const [values, setValues] = useState(seasons.map((r) => r.rideable));
   return (
@@ -39,7 +39,7 @@ export default function Seasons() {
           label={t('Use the climate record instead')}
           variant="secondary"
           onPress={async () => {
-            await setSeasonRates(seasonRatesFromClimate(climate, preset, bikeMax));
+            await setSeasonRates(seasonRatesFromClimate(climate, preset, limits));
             router.back();
           }}
         />

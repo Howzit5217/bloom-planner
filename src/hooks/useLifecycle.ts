@@ -79,7 +79,7 @@ export async function scheduleNotifications() {
     }
   }
   setLang(st.settings.language);
-  const plan = planNotifications({ prefs, dash, seasonRates: st.seasonRates.map((r) => r.rideable), forecast, preset: st.settings.preset, now: new Date(), text: { t, tn } });
+  const plan = planNotifications({ prefs, dash, seasonRates: st.seasonRates.map((r) => r.rideable), forecast, preset: st.settings.preset, limits: st.settings.limits, now: new Date(), text: { t, tn } });
   await applySchedule(plan).catch(() => {});
   // Record caps (behind once a week, nudges twice a week, milestone once per level).
   const behind = plan.find((p) => p.kind === 'behind');
@@ -111,7 +111,7 @@ async function housekeeping() {
   void useForecast.getState().refresh(loc);
   // Once a year, quietly on wifi: refresh the climate baseline. An older history (without the
   // feels-like highs the heat limits need) is fetched again once, on any connection.
-  const old = !!st.climate && st.climate.v !== 2;
+  const old = !!st.climate && st.climate.v !== 3;
   if (loc && (old || Date.now() - new Date(loc.resolvedAt).getTime() > 365 * DAY)) {
     try {
       const net = await Network.getNetworkStateAsync();

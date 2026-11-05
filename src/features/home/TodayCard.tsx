@@ -157,11 +157,13 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
     ? null
     : wt.walk === 'hot'
       ? { icon: 'thermometer-high', text: t('Too hot for a long walk today, so the plan asks for less.') }
-      : wt.walk !== 'good'
-        ? { icon: 'weather-pouring', text: t('Rough weather today, so the plan asks for less walking.') }
-        : rideBad
-          ? { icon: wt.ride === 'hot' ? 'thermometer-high' : 'weather-rainy', text: t('Not a riding day: the flowers move to better days.') }
-          : null;
+      : wt.walk === 'cold'
+        ? { icon: 'snowflake', text: t('Too cold for a long walk today, so the plan asks for less.') }
+        : wt.walk !== 'good'
+          ? { icon: 'weather-pouring', text: t('Rough weather today, so the plan asks for less walking.') }
+          : rideBad
+            ? { icon: wt.ride === 'hot' ? 'thermometer-high' : wt.ride === 'cold' ? 'snowflake' : 'weather-rainy', text: t('Not a riding day: the flowers move to better days.') }
+            : null;
   const shownQuest = questOf(dash.req((existing?.leveledUp ? (existing.newLevel ?? baseLevel + 1) : baseLevel) + 1)?.task);
   const questBox = existing?.gameTaskToGo != null && shownQuest && shownQuest.kind !== 'seedling' ? <Logged icon={QUEST_ICON[shownQuest.kind]} value={existing.gameTaskToGo} label={questToGoLabel(shownQuest.kind)} color={c.leafDeep} /> : null;
 

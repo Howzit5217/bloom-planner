@@ -83,7 +83,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
     try {
       const climate = await fetchClimate(latitude, longitude, timezone);
       const location: PlayLocation = { label, latitude, longitude, timezone, elevation, resolvedAt: new Date().toISOString(), climateYears: climate.years };
-      setPhase({ k: 'result', r: { location, climate, rates: seasonRatesFromClimate(climate, preset, useApp.getState().settings.heat.bike) }, unnamed });
+      setPhase({ k: 'result', r: { location, climate, rates: seasonRatesFromClimate(climate, preset, useApp.getState().settings.limits) }, unnamed });
     } catch {
       setPhase({ k: 'failed', message: t("The weather history for that spot couldn't be loaded. Set your months by hand instead, and try again later from Settings.") });
     }

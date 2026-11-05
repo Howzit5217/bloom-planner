@@ -1,5 +1,5 @@
 import { addDaysKey, daysBetween, monthIndex, type DayKey } from './dates';
-import { PRESETS } from './climate';
+import { PRESETS, type TempLimits } from './climate';
 import type { Dashboard } from './summary';
 import type { ThresholdPreset } from './types';
 
@@ -40,9 +40,12 @@ export interface PlannedNotification {
 export const NOTIFY_HORIZON_DAYS = 14;
 const NUDGE_HOUR = 9;
 
-const isClear = (f: ForecastLite, preset: ThresholdPreset) => {
+/** A clear day for a ride: dry, calm, and inside the player's hot and cold limits (else the preset's). */
+const isClear = (f: ForecastLite, preset: ThresholdPreset, limits?: TempLimits) => {
   const th = PRESETS[preset];
-  return f.precipitation < 1 && f.precipitationChance < 30 && f.snowfall <= 0 && f.tmax >= th.minTmax && f.tmax <= th.maxTmax && f.wind <= th.maxWind;
+  const cold = limits?.cold ?? th.minTmax;
+  const hot = limits?.hot ?? th.maxTmax;
+  return f.precipitation < 1 && f.precipitationChance < 30 && f.snowfall <= 0 && f.tmax >= cold && f.tmax <= hot && f.wind <= th.maxWind;
 };
 
 /**
@@ -64,6 +67,8 @@ export function planNotifications(args: {
   seasonRates: number[];
   forecast: ForecastLite[];
   preset: ThresholdPreset;
+  /** The player's hot and cold limits. */
+  limits?: TempLimits;
   now: Date;
   text?: NotifyText;
 }): PlannedNotification[] {
@@ -125,7 +130,7 @@ export function planNotifications(args: {
     if (!pick && active && dash.rates.bikes && prefs.nudges && i === 1 && recentNudges < 2) {
       const todayFlowers = dash.todayEntry ? dash.todayEntry.flowers : null;
       const f = forecast.find((x) => x.date === date);
-      if (todayFlowers === 0 && f && (seasonRates[monthIndex(date)] ?? 0) >= 0.6 && isClear(f, preset)) {
+      if (todayFlowers === 0 && f && (seasonRates[monthIndex(date)] ?? 0) >= 0.6 && isClear(f, preset, args.limits)) {
         pick = {
           date,
           hour: NUDGE_HOUR,

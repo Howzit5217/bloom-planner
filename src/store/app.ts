@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import bundledJson from '@/data/bloom-levels.json';
 import { PRESETS, seasonRatesFromClimate, walkRatesFromClimate, type ClimateCache } from '@/engine/climate';
-import { DEFAULT_HEAT, forecastWeights, walkFallback, type HeatLimits } from '@/engine/weatherPlan';
+import { DEFAULT_LIMITS, forecastWeights, walkFallback, type TempLimits } from '@/engine/weatherPlan';
 import { useForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
 import { makeReq, overridesKey, parseLevelTable } from '@/engine/levels';
@@ -51,8 +51,8 @@ export interface Settings {
   updates: { enabled: boolean; lastCheck: string | null; latest: AppUpdateInfo | null; dismissedVersion: string | null };
   /** Beta builds only: take new test builds (GitHub pre-releases) as well as releases. */
   dev: { betaUpdates: boolean };
-  /** Too hot to walk far, or to ride, above these feels-like highs (°C). */
-  heat: HeatLimits;
+  /** Too hot above, too cold below these feels-like highs (°C), for walking far and for riding. */
+  limits: TempLimits;
   /** The week's rhythm: easy days, and whether the days vary at all. */
   plan: RhythmPrefs;
   /** How temperatures show: the phone's way, or °C or °F. */
@@ -79,10 +79,20 @@ export const DEFAULT_SETTINGS: Settings = {
   dismissed: {},
   updates: { enabled: true, lastCheck: null, latest: null, dismissedVersion: null },
   dev: { betaUpdates: true },
-  heat: DEFAULT_HEAT,
+  limits: DEFAULT_LIMITS,
   plan: DEFAULT_RHYTHM,
   temp: 'auto',
 };
+
+/**
+ * The hot and cold limits from saved settings. Before there was one pair for walking and riding there
+ * were two heat limits: the riding one (else the walking one) becomes the hot limit.
+ */
+function limitsFrom(saved: Partial<Settings> | null | undefined): TempLimits {
+  if (saved?.limits) return { ...DEFAULT_LIMITS, ...saved.limits };
+  const old = (saved as { heat?: { walk?: number | null; bike?: number | null } } | null | undefined)?.heat;
+  return { hot: old?.bike ?? old?.walk ?? DEFAULT_LIMITS.hot, cold: DEFAULT_LIMITS.cold };
+}
 
 export const ALL_DAYS_RIDEABLE: SeasonRate[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const }));
 
@@ -129,7 +139,7 @@ interface AppState {
   setSeasonRates: (rates: SeasonRate[]) => Promise<void>;
   setLocationAndClimate: (location: PlayLocation | null, climate: ClimateCache | null) => Promise<void>;
   setPreset: (preset: ThresholdPreset) => Promise<void>;
-  setHeat: (heat: HeatLimits) => Promise<void>;
+  setLimits: (limits: TempLimits) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   setRemoteTable: (json: unknown) => Promise<boolean>;
   dismissCelebration: () => void;
@@ -191,7 +201,7 @@ export const useApp = create<AppState>((set, get) => ({
           notifications: { ...DEFAULT_SETTINGS.notifications, ...(settings?.notifications ?? {}) },
           updates: { ...DEFAULT_SETTINGS.updates, ...(settings?.updates ?? {}) },
           dev: { ...DEFAULT_SETTINGS.dev, ...(settings?.dev ?? {}) },
-          heat: { ...DEFAULT_SETTINGS.heat, ...(settings?.heat ?? {}) },
+          limits: limitsFrom(settings),
           plan: { ...DEFAULT_SETTINGS.plan, ...(settings?.plan ?? {}) },
           dismissed: settings?.dismissed ?? {},
         },
@@ -271,20 +281,20 @@ export const useApp = create<AppState>((set, get) => ({
     set({ location, climate });
     // A new place: its forecast now, not at the next start.
     void useForecast.getState().refresh(location);
-    if (climate) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, get().settings.heat.bike));
+    if (climate) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, get().settings.limits));
   },
 
-  setHeat: async (heat) => {
-    await get().updateSettings({ heat });
+  setLimits: async (limits) => {
+    await get().updateSettings({ limits });
     const climate = get().climate;
-    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, heat.bike));
+    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, limits));
   },
 
   setPreset: async (preset) => {
     await get().updateSettings({ preset });
     const climate = get().climate;
     // Changing the preset re-derives from the stored histograms; manual edits are replaced only when they came from climate.
-    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, preset, get().settings.heat.bike));
+    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, preset, get().settings.limits));
   },
 
   updateSettings: async (patch) => {
@@ -330,21 +340,21 @@ export function useDashboard(): Dashboard | null {
   const table = useApp((s) => s.table);
   const today = useApp((s) => s.today);
   const climate = useApp((s) => s.climate);
-  const heat = useApp((s) => s.settings.heat);
+  const limits = useApp((s) => s.settings.limits);
   const preset = useApp((s) => s.settings.preset);
   const rhythmPrefs = useApp((s) => s.settings.plan);
   const forecast = useForecast((s) => s.days);
   const oKey = overridesKey(overrides);
   const sKey = seasonRates.map((r) => r.rideable.toFixed(4)).join(',');
   const pKey = profile ? JSON.stringify(profile) : '';
-  const wKey = `${heat.walk}|${heat.bike}|${preset}|${rhythmPrefs.vary}|${rhythmPrefs.easyDays.join('')}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
+  const wKey = `${limits.hot}|${limits.cold}|${preset}|${rhythmPrefs.vary}|${rhythmPrefs.easyDays.join('')}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
   return useMemo(
     () => {
       if (!profile) return null;
       const indoor = profile.rates.treadmillAvailable;
       // The weather's say: walking days from the history, the next fortnight from the forecast.
-      const walkRates = climate ? walkRatesFromClimate(climate, heat.walk, walkFallback(indoor)) : undefined;
-      const weights = forecast?.length ? forecastWeights(forecast, PRESETS[preset], heat, indoor, today) : null;
+      const walkRates = climate ? walkRatesFromClimate(climate, limits, walkFallback(indoor)) : undefined;
+      const weights = forecast?.length ? forecastWeights(forecast, PRESETS[preset], limits, indoor, today) : null;
       return computeDashboard({ table, overrides, profile, entries, seasonRates: seasonRates.map((r) => r.rideable), today, walkRates, forecast: weights, rhythm: makeRhythm(rhythmPrefs) });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

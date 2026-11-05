@@ -5,6 +5,7 @@ import Animated, { useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler
 import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
+import { clearOf } from './color';
 import { T } from './T';
 
 /** Room per number: wide enough that a drag moves calmly, a number at a time. */
@@ -51,6 +52,13 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
   const setDragging = (d: boolean) => {
     dragging.current = d;
   };
+
+  // Once laid out, sit on the value: the web ignores contentOffset, so it would open at the start.
+  useEffect(() => {
+    if (width <= 0) return;
+    const id = requestAnimationFrame(() => ref.current?.scrollTo({ x: (emitted.current - min) * TICK, animated: false }));
+    return () => cancelAnimationFrame(id);
+  }, [width, min, ref]);
 
   // A change from elsewhere: glide the ruler to it.
   useEffect(() => {
@@ -124,6 +132,9 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
           })}
         </Animated.ScrollView>
       ) : null}
+      {/* The ends fade into the ruler, so a number scrolling off goes softly, never cut in half. */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 34, backgroundImage: `linear-gradient(to right, ${c.canvasDeep}, ${clearOf(c.canvasDeep)})` }} />
+      <View pointerEvents="none" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 34, backgroundImage: `linear-gradient(to left, ${c.canvasDeep}, ${clearOf(c.canvasDeep)})` }} />
       {/* The needle: a slim green stem with a bud on top, fixed at the centre. */}
       <View pointerEvents="none" style={{ position: 'absolute', left: width / 2 - 2, top: 6, width: 4, height: 38, borderRadius: 2, backgroundColor: c.leaf }} />
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: width / 2 - 7, top: 2, width: 14, height: 14, borderRadius: 7, backgroundColor: c.petalYellow, borderWidth: 3, borderColor: c.leaf }, bud]} />
