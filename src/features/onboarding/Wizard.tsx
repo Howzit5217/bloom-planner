@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight, FadeInUp, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DEFAULT_MANUAL_RATES, type ClimateCache } from '@/engine/climate';
+import { DEFAULT_MANUAL_RATES, type ClimateCache, type TempLimits } from '@/engine/climate';
+import { DEFAULT_RHYTHM, type RhythmPrefs } from '@/engine/rhythm';
+import type { TempUnit } from '@/engine/units';
+import { DEFAULT_LIMITS } from '@/engine/weatherPlan';
 import { addDaysKey, daysBetween, fromKey, todayKey, type DayKey } from '@/engine/dates';
 import { fmt, fmtDate, roundNice } from '@/engine/format';
 import { makeReq } from '@/engine/levels';
@@ -13,11 +16,13 @@ import { checkGoal } from '@/engine/goalCheck';
 import { DEFAULT_RATES, type RateKey } from '@/engine/rates';
 import type { PlayLocation, Profile, SeasonRate } from '@/engine/types';
 import { DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
+import { EasyDays } from '@/features/shared/EasyDays';
 import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
 import { MonthBars } from '@/features/shared/MonthBars';
 import { PlaceFinder, type ClimateResult } from '@/features/shared/PlaceFinder';
 import { SeasonSliders } from '@/features/shared/SeasonSliders';
-import { useApp } from '@/store/app';
+import { WeatherLimits } from '@/features/shared/WeatherLimits';
+import { useApp, type LogMode } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
 import { ScreenshotButton } from '@/features/shared/ScreenshotButton';
@@ -43,10 +48,10 @@ import { tk, useT } from '@/i18n';
 import { taskText } from '@/i18n/level-text';
 import { useAppWidth } from '@/ui/layout';
 
-const STEPS = 8;
+const STEPS = 9;
 // Flowers on every page: a row of sprigs on the first and last, and on the rest a few leaning in
 // from both sides of the screen low down, a different mix every visit.
-const sidePage = (step: number) => step >= 1 && step <= 6;
+const sidePage = (step: number) => step >= 1 && step <= 7;
 /** Space above each page's content, inside the scroller. */
 const BODY_TOP = 12;
 
@@ -117,6 +122,13 @@ export function Wizard() {
   const [seasons, setSeasons] = useState<{ rates: SeasonRate[]; location: PlayLocation | null; climate: ClimateCache | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  // How each day gets logged: follows how the progress was entered here, until chosen.
+  const [logMode, setLogMode] = useState<LogMode | null>(null);
+  const logShown: LogMode = logMode ?? (remainingMode ? 'left' : 'daily');
+  // The weather the plan works around, and the week's easy days.
+  const [tempUnit, setTempUnit] = useState<TempUnit>('auto');
+  const [limits, setLimits] = useState<TempLimits>(DEFAULT_LIMITS);
+  const [rhythm, setRhythm] = useState<RhythmPrefs>(DEFAULT_RHYTHM);
 
   const next = req(level + 1)!;
   // A blank field means nothing entered yet: show the ring empty, not full.
@@ -235,7 +247,11 @@ export function Wizard() {
       playerName: playerName.trim() || null,
     };
     const s = seasons ?? { rates: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const })), location: null, climate: null };
+    // The choices from setup, in place before the first plan is made from them.
+    await useApp.getState().updateSettings({ logMode: logShown, temp: tempUnit, plan: rhythm, limits });
     await complete({ profile, seasonRates: s.rates, location: s.location, climate: s.climate });
+    // The place's months were worked out with the usual limits: again with these.
+    if (limits.hot !== DEFAULT_LIMITS.hot || limits.cold !== DEFAULT_LIMITS.cold) await useApp.getState().setLimits(limits);
   };
 
   const body = (() => {
@@ -374,6 +390,22 @@ export function Wizard() {
                 <NumberField label={t('Flowers so far today')} value={todayFlowers} onChange={setTodayFlowers} size="md" />
               </Card>
             ) : null}
+            {/* How each evening's log goes from here on (Settings can change it). */}
+            <View style={{ gap: 6 }}>
+              <T v="smallBold">{t('Log each day by')}</T>
+              <Segmented<LogMode>
+                label={t('Log each day by')}
+                value={logShown}
+                onChange={setLogMode}
+                options={[
+                  { key: 'daily', label: t('Step count') },
+                  { key: 'left', label: t('Amount remaining') },
+                ]}
+              />
+              <T v="caption" soft>
+                {logShown === 'left' ? t("What the game's level-up screen shows still to go: steps, flowers and the level's quest, like mushrooms or expeditions.") : t("The day's steps and flowers.")}
+              </T>
+            </View>
           </View>
         );
       case 3:
@@ -483,6 +515,17 @@ export function Wizard() {
             ) : null}
           </View>
         );
+      case 7:
+        return (
+          <View style={{ gap: 16 }}>
+            <Title sub={t('What the plan works around, for walking and riding. Settings can change any of it later.')}>{t('Weather and Easy Days')}</Title>
+            <WeatherLimits unit={tempUnit} onUnit={setTempUnit} limits={limits} onLimits={setLimits} />
+            <T v="caption" soft>
+              {t('Feels-like temperatures, so humidity and wind count too. Days hotter or colder than these, and rain, snow or storms in the forecast, get less walking and riding in the plan; the good days get more.')}
+            </T>
+            <EasyDays value={rhythm} onChange={setRhythm} />
+          </View>
+        );
       default:
         return (
           <View style={{ gap: 18 }}>
@@ -499,8 +542,8 @@ export function Wizard() {
   const room = step !== 0 && bodyH.step === step && boxH > 0 ? boxH - BODY_TOP - bodyH.h - 10 : -1;
   // Each page's flowers take the room it leaves them, and fade aside whenever the page grows into
   // it or the keyboard opens, so they never sit over a card or a field.
-  const sprigMax = step === 7 ? 130 : 300;
-  const sprigMin = step === 7 ? 100 : 140;
+  const sprigMax = step === 8 ? 130 : 300;
+  const sprigMin = step === 8 ? 100 : 140;
   const [sprigRoom, setSprigRoom] = useState({ step: -1, h: 0 });
   // While the keyboard is up the flowers step aside, and come back just as they were.
   const [keyboardUp, setKeyboardUp] = useState(false);
@@ -526,7 +569,7 @@ export function Wizard() {
   const sprigsFit = step === 0 || (!keyboardUp && sprigH >= sprigMin && room >= sprigH - 6);
   const sprigFade = useAnimatedStyle(() => ({ opacity: withTiming(sprigsFit ? 1 : 0, { duration: 220 }) }));
 
-  // Without a bike there's no weather page: it only matters for riding.
+  // Without a bike there's no place page (its months are riding days); the weather page comes next.
   const rail = useScrollRail();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const onScroll = useAnimatedScrollHandler((e) => rail.track(e));
@@ -537,7 +580,7 @@ export function Wizard() {
       ? { label: t('Time to get growing'), onPress: () => go(1) }
       : step === 6
         ? null
-        : step === 7
+        : step === 8
           ? { label: saving ? t('Planting…') : t('Start blooming'), onPress: finish }
           : { label: t('Next'), onPress: () => go(step === 5 && !bikes ? 7 : step + 1) };
 
@@ -563,7 +606,7 @@ export function Wizard() {
         {step > 0 || primary ? (
           <View style={{ flexDirection: 'row', gap: 12 }}>
             {step > 0 ? <BackTile label={t('Back')} onPress={back} /> : null}
-            {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 7 && !check?.ok)} /> : null}
+            {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 8 && !check?.ok)} /> : null}
           </View>
         ) : null}
         <FlowerSteps step={step} count={STEPS} />
