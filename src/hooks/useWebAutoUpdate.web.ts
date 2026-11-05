@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 /** Look for a new version at most this often, when the app comes back to the screen. */
-const EVERY = 30 * 60_000;
+const EVERY = 10 * 60_000;
 
 /** The app's own bundle, by its hashed file name (index-<hash>.js): a new version has a new name. */
 const entryOf = (text: string) => text.match(/\/index-[0-9a-f]+\.js/)?.[0] ?? null;

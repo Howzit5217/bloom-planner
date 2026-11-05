@@ -1,14 +1,17 @@
 import { useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, RefreshControl, useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
 import { EdgeFade } from './EdgeFade';
+import { useAppWidth } from './layout';
 import { ScrollRail, useScrollRail } from './ScrollRail';
+import { cameraFrame, horizonAt } from './camera';
+import { CameraMeadow } from './skia/CameraMeadow';
 import { Meadow } from './skia/Meadow';
 import { Seedling } from './skia/Seedling';
 import { TAB_BAR_SPACE } from './TabBar';
@@ -28,11 +31,12 @@ export function FocusFade({ children }: { children: ReactNode }) {
 }
 
 const PULL_FULL = 110;
-/** Home: where the field meets the sky, below the safe area: under the goal, so the header sits in the sky. */
-const HORIZON = 250;
-/** The camera tilting down: the near field moves at this share of the scroll, the far sky at less. */
-const FIELD_RATE = 0.8;
-const SKY_RATE = 0.4;
+/** Home: the horizon with the camera level, as a share of the screen from the top: about half, as in the game. */
+const SKY_SHARE = 0.52;
+/** Scrolling this many times the horizon's climb tilts the camera all the way down, so the scene moves slower than the cards. */
+const TILT_SCROLL = 1.8;
+/** The camera follows the scroll with a little weight, settling without overshoot. */
+const CAMERA = { damping: 30, stiffness: 190, mass: 1, overshootClamping: true } as const;
 /** Where the paper pages' sheet starts, below the safe area: the meadow strip shows above it. */
 const SHEET_TOP = 66;
 
@@ -107,12 +111,19 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
 
   const sprout = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: 0.7 + 0.3 * shown.value }] }));
   const rail = useScrollRail();
-  // Home: like a camera tilting down over the meadow. The far sky drifts up slowly, the near field
-  // faster, until the field fills the screen and the sky is gone.
-  const skyH = insets.top + HORIZON;
-  const skyLayer = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.min(skyH, Math.max(0, rail.y.value) * SKY_RATE) }] }));
-  const fieldLayer = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.min(skyH, Math.max(0, rail.y.value) * FIELD_RATE) }] }));
-  const skyFade = useAnimatedStyle(() => ({ opacity: 1 - Math.min(1, (Math.max(0, rail.y.value) * FIELD_RATE) / skyH) }));
+  // Home: a camera over the meadow that tilts down as the page scrolls, until the field fills the screen.
+  const appWidth = useAppWidth();
+  const frame = useMemo(() => cameraFrame(appWidth, height, Math.round(height * SKY_SHARE)), [appWidth, height]);
+  const tilt = useSharedValue(0);
+  const tiltScroll = (frame.cy + 36) * TILT_SCROLL;
+  useAnimatedReaction(
+    () => rail.y.value,
+    (y) => {
+      tilt.value = withSpring(Math.min(1, Math.max(0, y / tiltScroll)), CAMERA);
+    },
+  );
+  // The sky's colour behind the status bar while the sky is still up there.
+  const skyFade = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, horizonAt(frame, tilt.value) / (insets.top + 24))) }));
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const pullGrows = !!onRefresh && Platform.OS === 'ios';
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -158,14 +169,7 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   return (
     <View style={{ flex: 1, backgroundColor: look.groundNear }}>
       <SkyStatusBar />
-      {/* The sky behind the header (running a little under the field), and the field from the horizon down,
-          tall enough to fill the screen once the camera has tilted down. */}
-      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0 }, skyLayer]}>
-        <Meadow height={skyH + 60} horizon={skyH + 60} />
-      </Animated.View>
-      <Animated.View style={[{ position: 'absolute', top: skyH, left: 0, right: 0 }, fieldLayer]}>
-        <Meadow height={height + 40} horizon={0} density={1.05} />
-      </Animated.View>
+      <CameraMeadow frame={frame} tilt={tilt} />
       {onRefresh ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 2, left: 0, right: 0, alignItems: 'center', zIndex: 2 }, sprout]}>
           <Seedling growth={growth} size={70} />

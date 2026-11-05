@@ -12,7 +12,7 @@ import { useForecast } from '@/store/forecast';
 import { setLang, t, tn } from '@/i18n';
 
 const DAY = 24 * 3600 * 1000;
-const UPDATE_EVERY = 6 * 3600 * 1000;
+const UPDATE_EVERY = 3600 * 1000;
 
 /** Background housekeeping: day rollover, update checks, the yearly climate refresh, and notifications. */
 export function useLifecycle() {
@@ -100,7 +100,8 @@ export async function scheduleNotifications() {
 async function housekeeping() {
   const st = useApp.getState();
   if (!st.profile) return;
-  // Every few hours (on opening the app): new app release and newer level data on GitHub.
+  // At most hourly, on opening the app or coming back to it: a new app release (which pops up on
+  // Android) and newer level data on GitHub.
   const u = st.settings.updates;
   if (u.enabled && (!u.lastCheck || Date.now() - new Date(u.lastCheck).getTime() > UPDATE_EVERY)) {
     await runUpdateCheck();
