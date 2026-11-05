@@ -1,5 +1,5 @@
 import { addDaysKey, daysBetween, type DayKey } from './dates';
-import { buildPlan, peakFlowersPerRideDay, peakStepsPerDay, type Plan } from './plan';
+import { buildPlan, peakFlowersPerRideDay, peakStepsPerDay, type DayWeights, type Plan } from './plan';
 import { DEFAULT_RATES, flowerDays } from './rates';
 import type { LevelState, ReqFn } from './types';
 
@@ -25,6 +25,10 @@ export interface GoalCheckInput {
   bikes?: boolean;
   /** Flowers an hour on foot: sets how many a day can hold without a bike. */
   walkFlowersPerHour?: number;
+  /** Walking days per month, and the forecast's own weights (see weatherPlan.ts). */
+  walkRates?: number[];
+  walkDays?: DayWeights;
+  rideDays?: DayWeights;
 }
 
 export type GoalProblem = 'levelTooLow' | 'past' | 'noRideDays' | 'tooManySteps' | 'tooManyFlowers';
@@ -50,7 +54,13 @@ export function checkGoal(input: GoalCheckInput): GoalCheck {
   if (input.goalLevel <= input.start.level) return { ok: false, problem: 'levelTooLow', plan: null, ...base };
   if (daysBetween(input.startKey, input.goalKey) < 0) return { ok: false, problem: 'past', plan: null, ...base };
   // Riding needs fair weather; walking plants flowers on any day.
-  const plan = buildPlan({ ...input, seasonRates: flowerDays(input.seasonRates, bikes) });
+  const plan = buildPlan({
+    ...input,
+    seasonRates: bikes ? input.seasonRates : (input.walkRates ?? flowerDays(input.seasonRates, false)),
+    walkRates: input.walkRates,
+    walkDays: input.walkDays,
+    flowerDays: bikes ? input.rideDays : input.walkDays,
+  });
   if (plan.status === 'reached') return { ok: true, problem: null, plan, ...base };
   if (plan.status === 'noTime') return { ok: false, problem: 'past', plan, ...base };
   if (plan.status === 'noRideDays') return { ok: false, problem: 'noRideDays', plan, ...base, stepsPerDay: plan.avgStepsPerDay, flowersPerRideDay: Infinity };

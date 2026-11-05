@@ -20,6 +20,7 @@ import { questOf, type Quest } from './quest';
 import { MAX_STEPS_PER_DAY } from './goalCheck';
 import { timeCost, type TimeCost } from './timecost';
 import type { DayEntry, LevelState, LevelTable, Overrides, Profile, ReqFn, Requirement, ResolvedRates } from './types';
+import type { DayVerdict, ForecastWeights } from './weatherPlan';
 
 /** Above this the Home screen gives an honest heads-up. The same limit blocks such goals at setup. */
 export const IMPOSSIBLE_STEPS_PER_DAY = MAX_STEPS_PER_DAY;
@@ -32,6 +33,10 @@ export interface DashboardInput {
   /** 12 values, January first, 0..1 */
   seasonRates: number[];
   today: DayKey;
+  /** Walking days per month (heat, downpours), 0..1; missing: every day is a walking day. */
+  walkRates?: number[];
+  /** The forecast's own weights for the next two weeks. */
+  forecast?: ForecastWeights | null;
 }
 
 export interface RingData {
@@ -58,6 +63,8 @@ export interface Dashboard {
   quest: (Quest & { task: string; toGo: number | null }) | null;
   /** At the top level: progress toward the user's own steps-and-flowers goal, when one is set. */
   custom: CustomProgress | null;
+  /** What the forecast says about today, and how many of the next 7 days are good (null without a forecast). */
+  weather: { today: { walk: DayVerdict; ride: DayVerdict } | null; walkGood: number; rideGood: number; days: number } | null;
   goal: { level: number; date: DayKey; levelsToGo: number; daysLeft: number };
   plan: Plan;
   baseline: Plan;
@@ -98,9 +105,11 @@ const ring = (done: number, need: number): RingData => ({
   fraction: need > 0 ? Math.min(1, Math.max(0, done / need)) : 1,
 });
 
-export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today }: DashboardInput): Dashboard {
-  // Riding needs fair weather; walking plants flowers on any day.
-  const seasonRates = flowerDays(weather, profile.rates.bikes !== false);
+export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today, walkRates, forecast }: DashboardInput): Dashboard {
+  // Riding needs fair weather; without a bike, flowers come from walking, on the walking days.
+  const bikes = profile.rates.bikes !== false;
+  const seasonRates = bikes ? weather : (walkRates ?? flowerDays(weather, false));
+  const days = { walkRates, walkDays: forecast?.walk, flowerDays: bikes ? forecast?.ride : forecast?.walk };
   const req = makeReq(table, overrides);
   const replay = replayLog(profile, entries, req, table.maxLevel);
   const current = replay.state;
@@ -110,7 +119,8 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
   const goalLevel = Math.min(table.maxLevel, profile.goalLevel);
 
   const planStart = loggedToday ? addDaysKey(today, 1) : today;
-  const plan = buildPlan({ start: current, startKey: planStart, goalKey: profile.goalDate, goalLevel, seasonRates, req });
+  const plan = buildPlan({ start: current, startKey: planStart, goalKey: profile.goalDate, goalLevel, seasonRates, req, ...days });
+  // The yardstick for ahead/behind: the plan from setup, with the usual weather (not this fortnight's).
   const baseline = buildPlan({
     start: initialState(profile),
     startKey: addDaysKey(profile.startDate, 1),
@@ -118,6 +128,7 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     goalLevel,
     seasonRates,
     req,
+    walkRates,
   });
   const stand = standing(baseline, current, req, today, loggedToday);
 
@@ -125,7 +136,7 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
   let todayGoal = { steps: day0.steps, flowersIfRiding: day0.flowersIfRiding };
   if (loggedToday) {
     const prior = replayLog(profile, entries.filter((e) => e.date !== today), req, table.maxLevel).state;
-    const p0 = buildPlan({ start: prior, startKey: today, goalKey: profile.goalDate, goalLevel, seasonRates, req });
+    const p0 = buildPlan({ start: prior, startKey: today, goalKey: profile.goalDate, goalLevel, seasonRates, req, ...days });
     const d = plannedForDay(p0, 0);
     todayGoal = { steps: d.steps, flowersIfRiding: d.flowersIfRiding };
   }
@@ -160,6 +171,12 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
       flowers: ring(next ? Math.min(current.flowers, next.flowers) : 0, next?.flowers ?? 0),
     },
     custom: phase === 'maxed' && profile.customGoal ? customProgress(profile.customGoal, entries, today, loggedToday) : null,
+    weather: (() => {
+      if (!forecast) return null;
+      const week = Array.from({ length: 7 }, (_, i) => forecast.why[addDaysKey(today, i)]).filter(Boolean);
+      if (!week.length) return null;
+      return { today: forecast.why[today] ?? null, walkGood: week.filter((d) => d.walk === 'good').length, rideGood: week.filter((d) => d.ride === 'good').length, days: week.length };
+    })(),
     quest: (() => {
       const q = next ? questOf(next.task) : null;
       return q && next ? { ...q, task: next.task, toGo: replay.taskToGo } : null;

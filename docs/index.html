@@ -109,7 +109,7 @@
           <span class="mdi mdi-android" aria-hidden="true"></span>
           Download for Android
         </a>
-        <a class="btn quiet" href="app/">
+        <a class="btn quiet web-app-link" href="app/">
           <span class="mdi mdi-web" aria-hidden="true"></span>
           Web App
         </a>
@@ -170,10 +170,10 @@
     </section>
 
     <section id="web">
-      <h2>Web App for iPhone and Computers</h2>
+      <h2>Web App for Phones and Computers</h2>
       <ol class="steps">
-        <li><span>Open <a href="app/">the web app</a>. On iPhone, use <strong>Safari</strong>.</span></li>
-        <li><span>Add it to the home screen. On iPhone, tap Share <span class="share mdi mdi-export-variant" aria-label="Share"></span> and then <strong>Add to Home Screen</strong>. On a computer, choose <strong>Install</strong> (Chrome, Edge) or <strong>Add to Dock</strong> (Safari).</span></li>
+        <li><span>Open <a href="app/" class="web-app-link">the web app</a> in <strong>Chrome</strong> on Android or <strong>Safari</strong> on iPhone. A link opened inside another app (a message, an email) shows a built-in browser with no Add to Home Screen, so open it in Chrome or Safari first.</span></li>
+        <li><span>Add it to the home screen. On iPhone, tap Share <span class="share mdi mdi-export-variant" aria-label="Share"></span> and then <strong>Add to Home Screen</strong>. On Android, tap the menu <span class="share mdi mdi-dots-vertical" aria-label="Menu"></span> and then <strong>Add to Home screen</strong> or <strong>Install app</strong>. On a computer, choose <strong>Install</strong> (Chrome, Edge) or <strong>Add to Dock</strong> (Safari).</span></li>
         <li><span>Open it from the new icon. It runs full screen with its own icon, and only from there, so your log stays in one place.</span></li>
       </ol>
       <p class="fine" style="margin-top: 14px">The web app has everything except evening reminders, which only the Android app can send.</p>
@@ -331,7 +331,7 @@
     }
     document.getElementById('hero-icon').innerHTML =
       '<defs><clipPath id="tile"><rect width="128" height="128" rx="30"/></clipPath></defs>' +
-      '<g clip-path="url(#tile)"><rect width="128" height="128" fill="#86C760"/>' + small + shade + flower(64, 61.4, 35.8, '#E8614D', 0) + '</g>';
+      '<g clip-path="url(#tile)"><rect width="128" height="128" fill="#58D75E"/>' + small + shade + flower(64, 61.4, 35.8, '#E8614D', 0) + '</g>';
   })();
 
   // The four grades, easiest first.
@@ -354,6 +354,15 @@
       document.getElementById('release-line').textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB · Free. No ads. No account. No tracking.';
     })
     .catch(function () {});
+
+  // On Android, the web app opens in Chrome itself: other apps' built-in browsers can't add it to
+  // the home screen. Without Chrome, the browser just opens it where it is.
+  (function () {
+    if (!/Android/.test(navigator.userAgent)) return;
+    var url = new URL('app/', window.location.href).href;
+    var intent = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
+    document.querySelectorAll('.web-app-link').forEach(function (a) { a.href = intent; });
+  })();
 
   // The scroll rail: drag the darker part (or tap the line to jump there).
   (function () {

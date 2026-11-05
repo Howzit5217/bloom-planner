@@ -143,6 +143,18 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
             : t("Today's target: {steps} steps · {flowers} flowers", { steps: fmt(roundNice(tg.steps)), flowers: fmt(roundNice(tg.flowersIfRiding)) })
           : t("Today's target: {steps} steps", { steps: fmt(roundNice(tg.steps)) })
         : null;
+  // The forecast cut today down: say why, so a smaller target makes sense.
+  const wt = dash.weather?.today;
+  const rideBad = dash.rates.bikes && wt && wt.ride !== 'good';
+  const weatherLine: { icon: IconName; text: string } | null = !wt
+    ? null
+    : wt.walk === 'hot'
+      ? { icon: 'thermometer-high', text: t('Too hot for a long walk today, so the plan asks for less.') }
+      : wt.walk !== 'good'
+        ? { icon: 'weather-pouring', text: t('Rough weather today, so the plan asks for less walking.') }
+        : rideBad
+          ? { icon: wt.ride === 'hot' ? 'thermometer-high' : 'weather-rainy', text: t('Not a riding day: the flowers move to better days.') }
+          : null;
   const shownQuest = questOf(dash.req((existing?.leveledUp ? (existing.newLevel ?? baseLevel + 1) : baseLevel) + 1)?.task);
   const questBox = existing?.gameTaskToGo != null && shownQuest && shownQuest.kind !== 'seedling' ? <Logged icon={QUEST_ICON[shownQuest.kind]} value={existing.gameTaskToGo} label={questToGoLabel(shownQuest.kind)} color={c.leafDeep} /> : null;
 
@@ -196,6 +208,14 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
               <T v="small" soft>
                 {targetLine}
               </T>
+            ) : null}
+            {isToday && weatherLine ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Icon name={weatherLine.icon} size={18} color={c.leafDeep} />
+                <T v="small" soft style={{ flex: 1 }}>
+                  {weatherLine.text}
+                </T>
+              </View>
             ) : null}
             {leftMode && forReq ? (
               <>

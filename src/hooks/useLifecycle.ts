@@ -5,11 +5,14 @@ import { msUntilMidnight, todayKey } from '@/engine/dates';
 import { planNotifications } from '@/engine/notifyPlan';
 import { fetchClimate, fetchForecast } from '@/services/climateApi';
 import { applySchedule, cancelAll } from '@/services/notifications';
+import { clearDownloadedUpdates } from '@/services/installUpdate';
 import { checkForAppUpdate, fetchLatestLevelData } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
+import { useForecast } from '@/store/forecast';
 import { setLang, t, tn } from '@/i18n';
 
 const DAY = 24 * 3600 * 1000;
+const UPDATE_EVERY = 6 * 3600 * 1000;
 
 /** Background housekeeping: day rollover, update checks, the yearly climate refresh, and notifications. */
 export function useLifecycle() {
@@ -35,6 +38,8 @@ export function useLifecycle() {
       }
     });
     void housekeeping();
+    // A downloaded update has done its job once the app starts again.
+    clearDownloadedUpdates();
     return () => {
       clearTimeout(timer);
       sub.remove();
@@ -95,17 +100,21 @@ export async function scheduleNotifications() {
 async function housekeeping() {
   const st = useApp.getState();
   if (!st.profile) return;
-  // Once a day: new app release and newer level data on GitHub.
+  // Every few hours (on opening the app): new app release and newer level data on GitHub.
   const u = st.settings.updates;
-  if (u.enabled && (!u.lastCheck || Date.now() - new Date(u.lastCheck).getTime() > DAY)) {
+  if (u.enabled && (!u.lastCheck || Date.now() - new Date(u.lastCheck).getTime() > UPDATE_EVERY)) {
     await runUpdateCheck();
   }
-  // Once a year, quietly on wifi: refresh the climate baseline.
+  // The next 16 days' weather for the plan (every few hours).
   const loc = st.location;
-  if (loc && Date.now() - new Date(loc.resolvedAt).getTime() > 365 * DAY) {
+  void useForecast.getState().refresh(loc);
+  // Once a year, quietly on wifi: refresh the climate baseline. An older history (without the
+  // feels-like highs the heat limits need) is fetched again once, on any connection.
+  const old = !!st.climate && st.climate.v !== 2;
+  if (loc && (old || Date.now() - new Date(loc.resolvedAt).getTime() > 365 * DAY)) {
     try {
       const net = await Network.getNetworkStateAsync();
-      if (net.type === Network.NetworkStateType.WIFI && net.isInternetReachable !== false) {
+      if ((old || net.type === Network.NetworkStateType.WIFI) && net.isConnected !== false && net.isInternetReachable !== false) {
         const climate = await fetchClimate(loc.latitude, loc.longitude, loc.timezone);
         const manual = st.seasonRates.some((r) => r.source === 'manual');
         await useApp.getState().setLocationAndClimate({ ...loc, resolvedAt: new Date().toISOString(), climateYears: climate.years }, climate);

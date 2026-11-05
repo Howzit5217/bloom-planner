@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Linking, Platform, View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { fmt, fmtHours } from '@/engine/format';
 import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, StreakCard, TimeCard } from '@/features/home/Cards';
 import { CustomGoalCard, NewGoalCard, showsCustomGoal, showsNewGoal } from '@/features/home/NewGoal';
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
+import { downloadAndInstall } from '@/services/installUpdate';
 import { requestPermission } from '@/services/notifications';
 import { isNewerThanThisBuild } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
@@ -24,6 +25,7 @@ export default function Home() {
   const saveEntry = useApp((s) => s.saveEntry);
   const refreshToday = useApp((s) => s.refreshToday);
   const [levelUpRequest, setLevelUpRequest] = useState(0);
+  const [updating, setUpdating] = useState(false);
   if (!dash) return null;
 
   const dismissed = settings.dismissed;
@@ -45,8 +47,15 @@ export default function Home() {
           title={t('Version {version} Is Ready', { version: latest!.version })}
           text={latest!.notes ? (latest!.notes.split('\n').find((l) => l.trim())?.replace(/^[#*\-\s]+/, '') ?? t('A new version is available.')) : t('A new version is available.')}
           action={{
-            label: Platform.OS === 'android' && latest!.apkUrl ? t('Download the update') : t('See what’s new'),
-            onPress: () => (Platform.OS === 'android' && latest!.apkUrl ? Linking.openURL(latest!.apkUrl) : WebBrowser.openBrowserAsync(latest!.url)),
+            // Android: downloads in the app and opens the installer, so it's one tap on Install.
+            label: Platform.OS === 'android' && latest!.apkUrl ? (updating ? t('Downloading the update…') : t('Update now')) : t('See what’s new'),
+            onPress: async () => {
+              if (Platform.OS !== 'android' || !latest!.apkUrl) return void WebBrowser.openBrowserAsync(latest!.url);
+              if (updating) return;
+              setUpdating(true);
+              await downloadAndInstall(latest!.apkUrl);
+              setUpdating(false);
+            },
           }}
           onDismiss={() => updateSettings({ updates: { ...settings.updates, dismissedVersion: latest!.version } })}
         />

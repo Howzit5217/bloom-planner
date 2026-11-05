@@ -1,6 +1,7 @@
 import { subDays, subYears } from 'date-fns';
 import { buildHistograms, type ClimateCache, type ClimateDay } from '@/engine/climate';
 import { toKey } from '@/engine/dates';
+import type { ForecastWeatherDay } from '@/engine/weatherPlan';
 
 /**
  * Open-Meteo: free, no key, no account. Coordinates go to Open-Meteo and nowhere else.
@@ -77,6 +78,7 @@ function parseDaily(json: any): ClimateDay[] {
       temperature_2m_min: d.temperature_2m_min?.[i] ?? null,
       daylight_duration: d.daylight_duration?.[i] ?? null,
       wind_speed_10m_max: d.wind_speed_10m_max?.[i] ?? null,
+      apparent_temperature_max: d.apparent_temperature_max?.[i] ?? null,
     };
   }
   return days;
@@ -93,7 +95,7 @@ export async function fetchClimate(latitude: number, longitude: number, timezone
     const url =
       `https://archive-api.open-meteo.com/v1/archive?latitude=${latitude.toFixed(4)}&longitude=${longitude.toFixed(4)}` +
       `&start_date=${start}&end_date=${end}` +
-      `&daily=precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,daylight_duration,wind_speed_10m_max` +
+      `&daily=precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,daylight_duration,wind_speed_10m_max,apparent_temperature_max` +
       `&timezone=${encodeURIComponent(timezone || 'auto')}`;
     const cache = buildHistograms(parseDaily(await getJson(url, timeoutMs)), years);
     if (cache.sampleDays < 300) throw new ClimateError('Too little data');
@@ -147,4 +149,32 @@ export async function fetchCurrentWeather(latitude: number, longitude: number): 
   const cur = json?.current;
   if (!cur || typeof cur.weather_code !== 'number') throw new ClimateError('No current weather');
   return { code: cur.weather_code, cloudCover: typeof cur.cloud_cover === 'number' ? cur.cloud_cover : null };
+}
+
+/**
+ * The next 16 days, for planning around the weather: feels-like high (humidity and wind in it),
+ * rain and its chance, snow, wind and gusts, humidity, daylight and the weather code.
+ */
+export async function fetchPlanForecast(latitude: number, longitude: number, timezone: string): Promise<ForecastWeatherDay[]> {
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}` +
+    `&daily=apparent_temperature_max,temperature_2m_max,precipitation_sum,precipitation_probability_max,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,relative_humidity_2m_mean,daylight_duration,weather_code` +
+    `&timezone=${encodeURIComponent(timezone || 'auto')}&forecast_days=16`;
+  const json = await getJson(url, 12000);
+  const d = json?.daily;
+  if (!d || !Array.isArray(d.time)) throw new ClimateError('No forecast');
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return d.time.map((date: string, i: number) => ({
+    date,
+    feelsMax: num(d.apparent_temperature_max?.[i]),
+    tmax: num(d.temperature_2m_max?.[i]),
+    precip: num(d.precipitation_sum?.[i]),
+    precipChance: num(d.precipitation_probability_max?.[i]),
+    snow: num(d.snowfall_sum?.[i]),
+    wind: num(d.wind_speed_10m_max?.[i]),
+    gusts: num(d.wind_gusts_10m_max?.[i]),
+    humidity: num(d.relative_humidity_2m_mean?.[i]),
+    daylight: num(d.daylight_duration?.[i]),
+    code: num(d.weather_code?.[i]),
+  }));
 }

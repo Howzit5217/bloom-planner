@@ -7,7 +7,8 @@ import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
 import { T } from './T';
 
-const TICK = 12;
+/** Room per number: wide enough that a drag moves calmly, a number at a time. */
+const TICK = 22;
 const H = 74;
 
 interface Props {
@@ -18,8 +19,8 @@ interface Props {
 }
 
 /**
- * A ruler of levels you drag sideways: a flick runs through dozens of levels, and it settles on
- * one with a tick. Follows the value when it changes elsewhere (the ± buttons or typing).
+ * A ruler of numbers you drag sideways: it moves calmly under the finger, a short flick coasts
+ * only a little, and it settles on one with a tick. Follows the value when it changes elsewhere (the ± buttons or typing).
  */
 export function LevelRuler({ value, min, max, onChange }: Props) {
   const { c } = useTheme();
@@ -78,7 +79,7 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
     () => Math.round(x.value / TICK),
     (cur, prev) => {
       if (prev === null || cur === prev) return;
-      bob.set(withSequence(withTiming(1.35, { duration: 50 }), withSpring(1, { damping: 8, stiffness: 260 })));
+      bob.set(withSequence(withTiming(1.15, { duration: 50 }), withSpring(1, { damping: 12, stiffness: 260 })));
       scheduleOnRN(emit, min + cur);
       scheduleOnRN(tick);
     },
@@ -100,7 +101,7 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
           scrollEventThrottle={16}
           showsHorizontalScrollIndicator={false}
           snapToInterval={TICK}
-          decelerationRate="normal"
+          decelerationRate="fast"
           overScrollMode="never"
           contentOffset={{ x: startX, y: 0 }}
           contentContainerStyle={{ paddingHorizontal: pad }}
@@ -112,8 +113,9 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
             return (
               <View key={lv} style={{ width: TICK, height: H, alignItems: 'center', paddingTop: 12 }}>
                 <View style={{ width: major ? 3 : 2, height: major ? 24 : mid ? 17 : 11, borderRadius: 2, backgroundColor: major ? c.leafDeep : c.inkSoft, opacity: major ? 0.9 : 0.35 }} />
-                {major ? (
-                  <T style={{ position: 'absolute', top: 40, left: (TICK - 56) / 2, width: 56, textAlign: 'center', fontFamily: font.headingBold, fontSize: 14, lineHeight: 20, color: c.inkSoft }}>
+                {/* A number every five: with the wider spacing, every ten would leave the ruler bare. */}
+                {major || mid ? (
+                  <T style={{ position: 'absolute', top: 40, left: (TICK - 56) / 2, width: 56, textAlign: 'center', fontFamily: font.headingBold, fontSize: major ? 14 : 12, lineHeight: 20, color: c.inkSoft, opacity: major ? 1 : 0.75 }}>
                     {lv}
                   </T>
                 ) : null}

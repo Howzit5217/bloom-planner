@@ -1,5 +1,5 @@
 import bundled from '../../data/bloom-levels.json';
-import { buildHistograms, cellIndex, climateSummary, deriveMonths, explainMonth, isRideable, PRESETS, seasonRatesFromClimate, type ClimateDay } from '../climate';
+import { buildHistograms, cellIndex, climateSummary, deriveMonths, explainMonth, isRideable, PRESETS, seasonRatesFromClimate, walkRatesFromClimate, type ClimateDay } from '../climate';
 import { entriesToCsv } from '../csv';
 import { fmt, fmtHours, roundNice } from '../format';
 import { makeReq, parseLevelTable } from '../levels';
@@ -57,7 +57,23 @@ describe('climate', () => {
         expect(m.days).toBe(inMonth.length);
       }
     }
-    expect(JSON.stringify(cache).length).toBeLessThan(12 * 1200);
+    // The feels-like bucket (v2) makes it a little bigger; still small enough to keep on the phone.
+    expect(JSON.stringify(cache).length).toBeLessThan(12 * 2400);
+  });
+
+  it('applies heat limits on the feels-like high, for riding and walking', () => {
+    const hot = (date: string, feels: number) => day(date, { temperature_2m_max: feels - 3, apparent_temperature_max: feels });
+    const days = [hot('2020-07-01', 25), hot('2020-07-02', 30.2), hot('2020-07-03', 33), hot('2020-07-04', 38)];
+    const cache = buildHistograms(days, 1);
+    // Riding up to 30 feels-like: 25 only (30.2 rounds up past 30). Up to 35: three of four.
+    expect(deriveMonths(cache, 'normal', 30)[6].rideable).toBe(1);
+    expect(deriveMonths(cache, 'normal', 35)[6].rideable).toBe(3);
+    // Without a limit: the old 35°C rule on the actual high (35 is fine, 38 - 3 = 35 too).
+    expect(deriveMonths(cache, 'normal')[6].rideable).toBe(4);
+    // Walking up to 32 feels-like: two good days of four; the others give 0.4 of a day.
+    expect(walkRatesFromClimate(cache, 32, 0.4)[6]).toBeCloseTo(0.5 + 0.5 * 0.4);
+    // An old (v1) history has no feels-like bucket: heat can't count, downpours still do.
+    expect(walkRatesFromClimate({ ...cache, v: undefined, months: cache.months.map(() => ({})) }, 32, 0.4)[6]).toBe(1);
   });
 
   it('clamps to 5%-95% and explains why', () => {

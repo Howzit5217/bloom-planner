@@ -9,6 +9,7 @@ import { checkGoal } from '@/engine/goalCheck';
 import { fmt, fmtDate } from '@/engine/format';
 import { DEFAULT_RATES, RATE_KEYS, type RateKey } from '@/engine/rates';
 import type { ThresholdPreset } from '@/engine/types';
+import { toF } from '@/engine/weatherPlan';
 import { DifficultyPill } from '@/features/shared/Difficulty';
 import { CustomGoalForm } from '@/features/home/NewGoal';
 import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
@@ -266,15 +267,41 @@ export default function Settings() {
       </Section>
 
       <Section title={t('Where You Play')} icon="map-marker-radius">
+        {/* The place: its weather history and forecast shape the plan, for walking as well as riding. */}
+        <T v="bodyBold">{st.location ? st.location.label || `${st.location.latitude.toFixed(2)}, ${st.location.longitude.toFixed(2)}` : t('Not set')}</T>
+        <T v="caption" soft>
+          {st.location ? `${t('Weather history from {years} years, looked up {date}.', { years: st.location.climateYears, date: fmtDate(toKey(new Date(st.location.resolvedAt))) })} ` : t('Add where you play to plan around its weather.')}
+          {bikes ? ` ${st.seasonRates.some((r) => r.source === 'manual') ? t('Months set by hand.') : st.seasonRates.every((r) => r.source === 'default') ? t('Every day counts as rideable.') : t('Months from the climate record.')}` : ''}
+        </T>
+        <LinkRow label={st.location ? t('Change place') : t('Find your place')} onPress={() => router.push('/location')} />
+        {bikes && st.location && st.climate ? <LinkRow label={t('Climate details')} onPress={() => router.push('/climate')} /> : null}
+        {/* Heat: judged on the feels-like high, so humidity and wind count too. */}
+        <View style={{ gap: 8 }}>
+          <T v="smallBold">{t('Too hot to walk above')}</T>
+          <Stepper label={t('Too hot to walk above')} value={st.settings.heat.walk ?? 35} min={20} max={46} onChange={(v) => void st.setHeat({ ...st.settings.heat, walk: v })} size={52} />
+          <T v="caption" soft center>
+            {t('Feels like {c}°C ({f}°F)', { c: st.settings.heat.walk ?? 35, f: toF(st.settings.heat.walk ?? 35) })}
+          </T>
+        </View>
+        {bikes ? (
+          <View style={{ gap: 8 }}>
+            <T v="smallBold">{t('Too hot to ride above')}</T>
+            <Stepper label={t('Too hot to ride above')} value={st.settings.heat.bike ?? 35} min={20} max={46} onChange={(v) => void st.setHeat({ ...st.settings.heat, bike: v })} size={52} />
+            <T v="caption" soft center>
+              {t('Feels like {c}°C ({f}°F)', { c: st.settings.heat.bike ?? 35, f: toF(st.settings.heat.bike ?? 35) })}
+            </T>
+          </View>
+        ) : null}
+        <T v="caption" soft>
+          {t('Feels-like temperature, so humidity and wind count too. Days hotter than this, and rain, snow or storms in the forecast, get less of the plan; the good days get more.')}
+        </T>
+        {dash.weather ? (
+          <T v="smallBold">
+            {bikes ? t('Next 7 days: {walk} good for walking, {ride} for riding.', { walk: dash.weather.walkGood, ride: dash.weather.rideGood }) : t('Next 7 days: {walk} good for walking.', { walk: dash.weather.walkGood })}
+          </T>
+        ) : null}
         {bikes ? (
           <>
-            <T v="bodyBold">{st.location ? st.location.label || `${st.location.latitude.toFixed(2)}, ${st.location.longitude.toFixed(2)}` : t('Not set')}</T>
-            <T v="caption" soft>
-              {st.location ? `${t('Weather history from {years} years, looked up {date}.', { years: st.location.climateYears, date: fmtDate(toKey(new Date(st.location.resolvedAt))) })} ` : ''}
-              {st.seasonRates.some((r) => r.source === 'manual') ? t('Months set by hand.') : st.seasonRates.every((r) => r.source === 'default') ? t('Every day counts as rideable.') : t('Months from the climate record.')}
-            </T>
-            <LinkRow label={st.location ? t('Change place') : t('Find your place')} onPress={() => router.push('/location')} />
-            {st.location && st.climate ? <LinkRow label={t('Climate details')} onPress={() => router.push('/climate')} /> : null}
             <LinkRow label={t('Edit months by hand')} onPress={() => router.push('/seasons')} />
             <View style={{ gap: 6 }}>
               <T v="smallBold">{t('How Tough Are You?')}</T>
@@ -297,11 +324,7 @@ export default function Settings() {
               </T>
             </View>
           </>
-        ) : (
-          <T v="small" soft>
-            {t('Weather only matters for riding, so walking-only plans leave it out.')}
-          </T>
-        )}
+        ) : null}
       </Section>
 
       <Section title={t('Your Corrections')} icon="pencil-circle">
@@ -432,7 +455,7 @@ export default function Settings() {
         <Section title={t('Updates')} icon="update">
           <Toggle
             label={t('Check GitHub for Updates')}
-            hint={t('Once a day: new app versions and corrected level data. Nothing about you is sent.')}
+            hint={t('Every few hours: new app versions and corrected level data. Nothing about you is sent.')}
             value={st.settings.updates.enabled}
             onChange={(b) =>
               void st.updateSettings({

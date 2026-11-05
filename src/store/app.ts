@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import bundledJson from '@/data/bloom-levels.json';
-import { seasonRatesFromClimate, type ClimateCache } from '@/engine/climate';
+import { PRESETS, seasonRatesFromClimate, walkRatesFromClimate, type ClimateCache } from '@/engine/climate';
+import { DEFAULT_HEAT, forecastWeights, walkFallback, type HeatLimits } from '@/engine/weatherPlan';
+import { useForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
 import { makeReq, overridesKey, parseLevelTable } from '@/engine/levels';
 import { replayLog } from '@/engine/progress';
@@ -47,6 +49,8 @@ export interface Settings {
   updates: { enabled: boolean; lastCheck: string | null; latest: AppUpdateInfo | null; dismissedVersion: string | null };
   /** Beta builds only: take new test builds (GitHub pre-releases) as well as releases. */
   dev: { betaUpdates: boolean };
+  /** Too hot to walk far, or to ride, above these feels-like highs (°C). */
+  heat: HeatLimits;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -69,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dismissed: {},
   updates: { enabled: true, lastCheck: null, latest: null, dismissedVersion: null },
   dev: { betaUpdates: true },
+  heat: DEFAULT_HEAT,
 };
 
 export const ALL_DAYS_RIDEABLE: SeasonRate[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const }));
@@ -116,6 +121,7 @@ interface AppState {
   setSeasonRates: (rates: SeasonRate[]) => Promise<void>;
   setLocationAndClimate: (location: PlayLocation | null, climate: ClimateCache | null) => Promise<void>;
   setPreset: (preset: ThresholdPreset) => Promise<void>;
+  setHeat: (heat: HeatLimits) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   setRemoteTable: (json: unknown) => Promise<boolean>;
   dismissCelebration: () => void;
@@ -177,6 +183,7 @@ export const useApp = create<AppState>((set, get) => ({
           notifications: { ...DEFAULT_SETTINGS.notifications, ...(settings?.notifications ?? {}) },
           updates: { ...DEFAULT_SETTINGS.updates, ...(settings?.updates ?? {}) },
           dev: { ...DEFAULT_SETTINGS.dev, ...(settings?.dev ?? {}) },
+          heat: { ...DEFAULT_SETTINGS.heat, ...(settings?.heat ?? {}) },
           dismissed: settings?.dismissed ?? {},
         },
         table: pickTable(remote),
@@ -253,14 +260,20 @@ export const useApp = create<AppState>((set, get) => ({
     if (climate) await db.kvSet('climate', climate);
     else await db.kvDelete('climate');
     set({ location, climate });
-    if (climate) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset));
+    if (climate) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, get().settings.heat.bike));
+  },
+
+  setHeat: async (heat) => {
+    await get().updateSettings({ heat });
+    const climate = get().climate;
+    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, heat.bike));
   },
 
   setPreset: async (preset) => {
     await get().updateSettings({ preset });
     const climate = get().climate;
     // Changing the preset re-derives from the stored histograms; manual edits are replaced only when they came from climate.
-    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, preset));
+    if (climate && get().seasonRates.every((r) => r.source === 'climate')) await get().setSeasonRates(seasonRatesFromClimate(climate, preset, get().settings.heat.bike));
   },
 
   updateSettings: async (patch) => {
@@ -305,15 +318,24 @@ export function useDashboard(): Dashboard | null {
   const seasonRates = useApp((s) => s.seasonRates);
   const table = useApp((s) => s.table);
   const today = useApp((s) => s.today);
+  const climate = useApp((s) => s.climate);
+  const heat = useApp((s) => s.settings.heat);
+  const preset = useApp((s) => s.settings.preset);
+  const forecast = useForecast((s) => s.days);
   const oKey = overridesKey(overrides);
   const sKey = seasonRates.map((r) => r.rideable.toFixed(4)).join(',');
   const pKey = profile ? JSON.stringify(profile) : '';
+  const wKey = `${heat.walk}|${heat.bike}|${preset}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
   return useMemo(
-    () =>
-      profile
-        ? computeDashboard({ table, overrides, profile, entries, seasonRates: seasonRates.map((r) => r.rideable), today })
-        : null,
+    () => {
+      if (!profile) return null;
+      const indoor = profile.rates.treadmillAvailable;
+      // The weather's say: walking days from the history, the next fortnight from the forecast.
+      const walkRates = climate ? walkRatesFromClimate(climate, heat.walk, walkFallback(indoor)) : undefined;
+      const weights = forecast?.length ? forecastWeights(forecast, PRESETS[preset], heat, indoor, today) : null;
+      return computeDashboard({ table, overrides, profile, entries, seasonRates: seasonRates.map((r) => r.rideable), today, walkRates, forecast: weights });
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pKey, entriesRev, oKey, sKey, table.version, today],
+    [pKey, entriesRev, oKey, sKey, table.version, today, wKey],
   );
 }

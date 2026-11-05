@@ -12,6 +12,7 @@ import { HomeScreenOnly } from '@/features/shared/HomeScreenOnly';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useLifecycle } from '@/hooks/useLifecycle';
+import { useWebAutoUpdate } from '@/hooks/useWebAutoUpdate';
 import { configureNotifications } from '@/services/notifications';
 import { useApp } from '@/store/app';
 import { ThemeProvider, useTheme } from '@/theme/theme';
@@ -52,6 +53,8 @@ function Root() {
   useT();
   const profile = useApp((s) => s.profile);
   const loadError = useApp((s) => s.loadError);
+  // The web app reloads into a newer version when it comes back to the screen.
+  useWebAutoUpdate();
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(c.canvas).catch(() => {});
   }, [c.canvas]);

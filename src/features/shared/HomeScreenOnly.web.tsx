@@ -35,6 +35,12 @@ function onIos(): boolean {
 
 const onAndroid = () => /Android/.test(navigator.userAgent);
 
+/** This page in Chrome itself (other apps' built-in browsers have no Add to Home Screen); the browser stays put if Chrome isn't there. */
+const inChrome = () => {
+  const here = window.location.href;
+  return `intent://${here.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(here)};end`;
+};
+
 /**
  * The web version runs only from the home screen, where it opens full screen with its own icon
  * and keeps one log. In a browser tab it shows how to add it instead. While developing
@@ -79,12 +85,14 @@ function AddToHomeScreen() {
   const steps: Array<{ icon: IconName; text: string }> =
     mode === 'ios'
       ? [
+          { icon: 'apple-safari', text: t('Open this page in Safari') },
           { icon: 'export-variant', text: t('Tap Share') },
           { icon: 'plus-box-outline', text: t('Tap Add to Home Screen') },
           { icon: 'flower', text: t('Open it from the new icon') },
         ]
       : mode === 'menu'
         ? [
+            ...(onAndroid() ? [{ icon: 'google-chrome' as IconName, text: t('Open this page in Chrome') }] : []),
             { icon: 'dots-vertical', text: t("Open the browser's menu") },
             { icon: 'plus-box-outline', text: onAndroid() ? t('Tap Add to Home Screen or Install') : t('Choose Install or Add to Dock') },
             { icon: 'flower', text: t('Open it from the new icon') },
@@ -123,6 +131,7 @@ function AddToHomeScreen() {
       ) : null}
 
       {mode === 'prompt' ? <PillButton label={t('Install')} icon="download" onPress={() => void install()} /> : null}
+      {mode === 'menu' && onAndroid() ? <PillButton label={t('Open in Chrome')} icon="google-chrome" onPress={() => void Linking.openURL(inChrome())} /> : null}
       {mode === 'added' ? (
         <View style={{ alignItems: 'center' }}>
           <Icon name="check-circle" size={44} color={c.leafDeep} />

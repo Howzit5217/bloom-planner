@@ -10,6 +10,8 @@ export interface ClimateDay {
   temperature_2m_min?: number | null;
   daylight_duration: number | null; // s
   wind_speed_10m_max: number | null; // km/h
+  /** Feels-like high (heat with humidity, wind chill): what the heat limits are judged on. */
+  apparent_temperature_max?: number | null; // °C
 }
 
 export interface Thresholds {
@@ -56,6 +58,11 @@ export function isRideable(d: ClimateDay, th: Thresholds = PRESETS.normal): bool
 //   wind     0: <=50  1: >50
 //   daylight 0: <8h   1: [8h,9.5h)  2: [9.5h,11h)  3: >=11h
 const NB = { p: 4, s: 4, t: 5, w: 2, d: 4 } as const;
+// v2 adds the feels-like high in whole degrees, so a heat limit of any whole degree is exact:
+//   h = ceil(feels-like) clamped to 10..50, stored as h - 10 (0..40). "Too hot above X" is h + 10 > X.
+const H_MIN = 10;
+const H_MAX = 50;
+const NH = H_MAX - H_MIN + 1;
 
 export interface Cell {
   p: number;
@@ -63,23 +70,37 @@ export interface Cell {
   t: number;
   w: number;
   d: number;
+  /** v2: the feels-like high bucket (0 = 10°C or below ... 40 = 50°C or above). */
+  h?: number;
 }
 
 export function binDay(day: ClimateDay): Cell | null {
   const { precipitation_sum: p, snowfall_sum: s, temperature_2m_max: t, wind_speed_10m_max: w, daylight_duration: d } = day;
   if (p == null || s == null || t == null || w == null || d == null) return null;
+  const feels = day.apparent_temperature_max ?? t;
   return {
     p: p <= 0 ? 0 : p <= 5 ? 1 : p <= 15 ? 2 : 3,
     s: s <= 0 ? 0 : s <= 1 ? 1 : s <= 3 ? 2 : 3,
     t: t < -5 ? 0 : t < 2 ? 1 : t < 5 ? 2 : t <= 35 ? 3 : 4,
     w: w <= 50 ? 0 : 1,
     d: d < 28800 ? 0 : d < 34200 ? 1 : d < 39600 ? 2 : 3,
+    h: Math.min(H_MAX, Math.max(H_MIN, Math.ceil(feels))) - H_MIN,
   };
 }
 
-export const cellIndex = (c: Cell) => (((c.p * NB.s + c.s) * NB.t + c.t) * NB.w + c.w) * NB.d + c.d;
+/** The feels-like high a v2 cell stands for, in °C (its upper bound). */
+export const cellFeels = (c: Cell) => (c.h == null ? null : c.h + H_MIN);
 
-export function cellFromIndex(i: number): Cell {
+const coarseIndex = (c: Cell) => (((c.p * NB.s + c.s) * NB.t + c.t) * NB.w + c.w) * NB.d + c.d;
+/** A cell's key: v2 cells (with h) carry the feels-like bucket too. */
+export const cellIndex = (c: Cell) => (c.h == null ? coarseIndex(c) : coarseIndex(c) * NH + c.h);
+
+export function cellFromIndex(i: number, v2 = false): Cell {
+  let h: number | undefined;
+  if (v2) {
+    h = i % NH;
+    i = Math.floor(i / NH);
+  }
   const d = i % NB.d;
   i = Math.floor(i / NB.d);
   const w = i % NB.w;
@@ -88,7 +109,7 @@ export function cellFromIndex(i: number): Cell {
   i = Math.floor(i / NB.t);
   const s = i % NB.s;
   const p = Math.floor(i / NB.s);
-  return { p, s, t, w, d };
+  return h == null ? { p, s, t, w, d } : { p, s, t, w, d, h };
 }
 
 /** Sparse joint histogram for one month: cellIndex -> day count. */
@@ -99,6 +120,8 @@ export interface ClimateCache {
   months: MonthHistogram[];
   sampleDays: number;
   years: number;
+  /** 2: cells carry the feels-like high (heat limits apply). Older caches are re-fetched when online. */
+  v?: 2;
 }
 
 export function buildHistograms(days: ClimateDay[], years: number): ClimateCache {
@@ -113,13 +136,16 @@ export function buildHistograms(days: ClimateDay[], years: number): ClimateCache
     months[m][key] = (months[m][key] ?? 0) + 1;
     sampleDays++;
   }
-  return { months, sampleDays, years };
+  return { months, sampleDays, years, v: 2 };
 }
 
 export type Reason = 'snow' | 'rain' | 'cold' | 'heat' | 'wind' | 'dark';
 
-/** Which thresholds of a preset block a binned day. Exact on the bin edges by construction. */
-function blocked(c: Cell, preset: ThresholdPreset): Reason[] {
+/**
+ * Which thresholds of a preset block a binned day. Exact on the bin edges by construction. With a
+ * biking heat limit (°C, feels-like) and a v2 cell, heat is judged on that; otherwise on 35°C.
+ */
+function blocked(c: Cell, preset: ThresholdPreset, bikeMax?: number | null): Reason[] {
   const r: Reason[] = [];
   const pMax = preset === 'fair' ? 0 : preset === 'normal' ? 1 : 2;
   const sMax = preset === 'fair' ? 0 : preset === 'normal' ? 1 : 2;
@@ -128,7 +154,7 @@ function blocked(c: Cell, preset: ThresholdPreset): Reason[] {
   if (c.s > sMax) r.push('snow');
   if (c.p > pMax) r.push('rain');
   if (c.t < tMin) r.push('cold');
-  if (c.t > 3) r.push('heat');
+  if (bikeMax != null && c.h != null ? c.h + H_MIN > bikeMax : c.t > 3) r.push('heat');
   if (c.w > 0) r.push('wind');
   if (c.d < dMin) r.push('dark');
   return r;
@@ -147,13 +173,14 @@ export interface MonthClimate {
   blockedShare: Record<Reason, number>;
 }
 
-export function deriveMonths(cache: ClimateCache, preset: ThresholdPreset): MonthClimate[] {
+export function deriveMonths(cache: ClimateCache, preset: ThresholdPreset, bikeMax?: number | null): MonthClimate[] {
+  const v2 = cache.v === 2;
   return cache.months.map((hist, i) => {
     let total = 0;
     let ok = 0;
     const counts: Record<Reason, number> = { snow: 0, rain: 0, cold: 0, heat: 0, wind: 0, dark: 0 };
     for (const [k, n] of Object.entries(hist)) {
-      const reasons = blocked(cellFromIndex(Number(k)), preset);
+      const reasons = blocked(cellFromIndex(Number(k), v2), preset, bikeMax);
       total += n;
       if (reasons.length === 0) ok += n;
       for (const r of reasons) counts[r] += n;
@@ -164,8 +191,30 @@ export function deriveMonths(cache: ClimateCache, preset: ThresholdPreset): Mont
   });
 }
 
-export function seasonRatesFromClimate(cache: ClimateCache, preset: ThresholdPreset): SeasonRate[] {
-  return deriveMonths(cache, preset).map((m) => ({ month: m.month, rideable: m.rate, source: 'climate', sampleDays: m.days }));
+export function seasonRatesFromClimate(cache: ClimateCache, preset: ThresholdPreset, bikeMax?: number | null): SeasonRate[] {
+  return deriveMonths(cache, preset, bikeMax).map((m) => ({ month: m.month, rideable: m.rate, source: 'climate', sampleDays: m.days }));
+}
+
+/**
+ * How much of a normal walking day each month allows, from the history: a day too hot to walk (feels
+ * like more than `walkMax`) or with a downpour or heavy snow still gives `fallback` of one (indoors,
+ * errands, a short walk). Without a v2 history, only downpours and snow count.
+ */
+export function walkRatesFromClimate(cache: ClimateCache, walkMax: number | null, fallback: number): number[] {
+  const v2 = cache.v === 2;
+  return cache.months.map((hist) => {
+    let total = 0;
+    let good = 0;
+    for (const [k, n] of Object.entries(hist)) {
+      const c = cellFromIndex(Number(k), v2);
+      total += n;
+      const severe = c.p >= 3 || c.s >= 3;
+      const hot = walkMax != null && c.h != null && c.h + H_MIN > walkMax;
+      if (!severe && !hot) good += n;
+    }
+    const share = total > 0 ? good / total : 1;
+    return share + (1 - share) * fallback;
+  });
 }
 
 const DAYS_IN_MONTH = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];

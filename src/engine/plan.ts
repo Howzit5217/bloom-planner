@@ -1,4 +1,4 @@
-import { addDaysKey, daysBetween, fromKey, type DayKey } from './dates';
+import { addDaysKey, daysBetween, fromKey, toKey, type DayKey } from './dates';
 import type { LevelState, ReqFn } from './types';
 
 /**
@@ -9,6 +9,9 @@ import type { LevelState, ReqFn } from './types';
  * Time is continuous: t is measured in days from the first plan day (t=0 is that day's start).
  * Each rideable-weighted day contributes seasonRate[month] "ride days", so a 31-day month at 0.26
  * contributes 8.06 (fractional on purpose, so projections don't lurch at month boundaries).
+ * Days the forecast covers use their own weight instead of the month's (a hot or stormy day counts
+ * for less). Steps work the same way on a walking calendar: 1 on a good walking day, less on a day
+ * too hot or wet to walk far, so the good days carry more of the plan.
  *
  * Levelling rules honoured here:
  *   - Flowers never carry over. Each level needs its full quota planted while at that level.
@@ -50,21 +53,26 @@ export function remainingWork(start: LevelState, goalLevel: number, req: ReqFn):
   return { steps, flowers, levels };
 }
 
-/** Prefix sums of daily ride weights starting at `startKey`. */
+/** Per-day weights for days the forecast covers, by yyyy-MM-dd (0..1). */
+export type DayWeights = Record<DayKey, number>;
+
+/** Prefix sums of daily weights (riding or walking) starting at `startKey`. */
 export class RideCalendar {
   readonly startKey: DayKey;
   private readonly rates: number[];
   private readonly prefix: number[];
 
-  constructor(startKey: DayKey, seasonRates: number[], days: number) {
+  constructor(startKey: DayKey, seasonRates: number[], days: number, overrides?: DayWeights) {
     this.startKey = startKey;
     const n = Math.max(1, Math.ceil(days));
     this.rates = new Array(n);
     this.prefix = new Array(n + 1);
     this.prefix[0] = 0;
     const d = fromKey(startKey);
+    const has = !!overrides && Object.keys(overrides).length > 0;
     for (let i = 0; i < n; i++) {
-      const r = Math.min(1, Math.max(0, seasonRates[d.getMonth()] ?? 1));
+      const o = has ? overrides![toKey(d)] : undefined;
+      const r = Math.min(1, Math.max(0, o ?? seasonRates[d.getMonth()] ?? 1));
       this.rates[i] = r;
       this.prefix[i + 1] = this.prefix[i] + r;
       d.setDate(d.getDate() + 1);
@@ -163,7 +171,10 @@ export interface Plan {
   scale: number;
   segments: PlanSegment[];
   endT: number;
+  /** Flower days (riding, or walking without a bike). */
   calendar: RideCalendar;
+  /** Walking days, for steps. */
+  walk: RideCalendar;
 }
 
 interface SimResult {
@@ -171,7 +182,7 @@ interface SimResult {
   endT: number;
 }
 
-function simulate(start: LevelState, goalLevel: number, req: ReqFn, cal: RideCalendar, sCap: number, fCap: number): SimResult {
+function simulate(start: LevelState, goalLevel: number, req: ReqFn, cal: RideCalendar, walk: RideCalendar, sCap: number, fCap: number): SimResult {
   const segments: PlanSegment[] = [];
   let t = 0;
   let bank = start.steps;
@@ -181,7 +192,7 @@ function simulate(start: LevelState, goalLevel: number, req: ReqFn, cal: RideCal
     if (!r) break;
     const needS = Math.max(0, r.steps - bank);
     const needF = Math.max(0, r.flowers - fl);
-    const stepsTime = needS > 0 ? (sCap > 0 ? needS / sCap : Infinity) : 0;
+    const stepsTime = needS > 0 ? (sCap > 0 ? walk.Winv(walk.W(t) + needS / sCap) - t : Infinity) : 0;
     const flowersTime = needF > 0 ? (fCap > 0 ? cal.Winv(cal.W(t) + needF / fCap) - t : Infinity) : 0;
     const D = Math.max(stepsTime, flowersTime);
     const next = req(L + 1);
@@ -189,10 +200,12 @@ function simulate(start: LevelState, goalLevel: number, req: ReqFn, cal: RideCal
     // Lifetime levels whose surplus carries: walk at full pace, the bank grows.
     // Otherwise surplus would be lost, so ease off to finish steps exactly at the level-up.
     const fullPace = r.stepsMode === 'lifetime' && carry;
-    const stepRate = D > 0 ? (fullPace ? sCap : needS / D) : 0;
+    // Steps per good walking day.
+    const walkW = walk.W(t + D) - walk.W(t);
+    const stepRate = D > 0 ? (fullPace ? sCap : walkW > 0 ? needS / walkW : 0) : 0;
     const rideW = cal.W(t + D) - cal.W(t);
     const flowerRate = rideW > 0 ? needF / rideW : 0;
-    const surplus = Math.max(0, bank + stepRate * D - r.steps);
+    const surplus = Math.max(0, bank + stepRate * walkW - r.steps);
     const binding: PlanSegment['binding'] =
       D === 0 ? 'none' : Math.abs(stepsTime - flowersTime) < 1e-9 ? 'both' : stepsTime > flowersTime ? 'steps' : 'flowers';
     segments.push({
@@ -222,17 +235,27 @@ export interface PlanInput {
   startKey: DayKey;
   goalKey: DayKey;
   goalLevel: number;
+  /** Flower days per month (0..1). */
   seasonRates: number[];
   req: ReqFn;
+  /** Walking days per month (0..1); missing means every day is a full walking day. */
+  walkRates?: number[];
+  /** The forecast's own weights for the days it covers. */
+  flowerDays?: DayWeights;
+  walkDays?: DayWeights;
 }
 
+const EVERY_DAY = new Array(12).fill(1);
+
 /** §7.3 + §7.5: required paces and the projected path to the goal. */
-export function buildPlan({ start, startKey, goalKey, goalLevel, seasonRates, req }: PlanInput): Plan {
+export function buildPlan({ start, startKey, goalKey, goalLevel, seasonRates, req, walkRates, flowerDays, walkDays }: PlanInput): Plan {
   const calendarDays = daysBetween(startKey, goalKey) + 1;
   const remaining = remainingWork(start, goalLevel, req);
   const horizon = Math.max(1, calendarDays) + 3660;
-  const cal = new RideCalendar(startKey, seasonRates, horizon);
+  const cal = new RideCalendar(startKey, seasonRates, horizon, flowerDays);
+  const walk = new RideCalendar(startKey, walkRates ?? EVERY_DAY, horizon, walkDays);
   const ride = calendarDays > 0 ? cal.W(calendarDays) : 0;
+  const walkable = calendarDays > 0 ? walk.W(calendarDays) : 0;
   const base: Omit<Plan, 'status' | 'segments' | 'endT' | 'scale' | 'stepsCap' | 'flowersCap' | 'avgStepsPerDay' | 'avgFlowersPerRideDay'> = {
     startKey,
     goalKey,
@@ -242,6 +265,7 @@ export function buildPlan({ start, startKey, goalKey, goalLevel, seasonRates, re
     rideableDays: ride,
     remaining,
     calendar: cal,
+    walk,
   };
 
   if (start.level >= goalLevel) {
@@ -250,14 +274,14 @@ export function buildPlan({ start, startKey, goalKey, goalLevel, seasonRates, re
   if (calendarDays <= 0) {
     return { ...base, status: 'noTime', segments: [], endT: 0, scale: 1, stepsCap: 0, flowersCap: 0, avgStepsPerDay: Infinity, avgFlowersPerRideDay: Infinity };
   }
-  const s0 = remaining.steps / calendarDays;
+  const s0 = walkable > 0 ? remaining.steps / walkable : remaining.steps / calendarDays;
   const f0 = ride > 0 ? remaining.flowers / ride : remaining.flowers > 0 ? Infinity : 0;
   if (!Number.isFinite(f0)) {
     return { ...base, status: 'noRideDays', segments: [], endT: 0, scale: 1, stepsCap: s0, flowersCap: Infinity, avgStepsPerDay: s0, avgFlowersPerRideDay: Infinity };
   }
 
   const N = calendarDays;
-  const run = (k: number) => simulate(start, goalLevel, req, cal, k * s0, k * f0);
+  const run = (k: number) => simulate(start, goalLevel, req, cal, walk, k * s0, k * f0);
   let lo = 1;
   let best = run(1);
   if (best.endT > N * (1 + 1e-9) + 1e-9) {
@@ -301,10 +325,9 @@ export function planStateAt(plan: Plan, t: number): LevelState {
   if (t <= 0) return { ...plan.start };
   for (const s of segs) {
     if (t >= s.startT && t < s.endT) {
-      const dt = t - s.startT;
       return {
         level: s.level - 1,
-        steps: s.startSteps + s.stepRate * dt,
+        steps: s.startSteps + s.stepRate * (plan.walk.W(t) - plan.walk.W(s.startT)),
         flowers: s.startFlowers + s.flowerRate * (plan.calendar.W(t) - plan.calendar.W(s.startT)),
       };
     }
@@ -322,7 +345,7 @@ export function plannedForDay(plan: Plan, i: number): { steps: number; flowersIf
     const a = Math.max(i, s.startT);
     const b = Math.min(i + 1, s.endT);
     if (b <= a) continue;
-    steps += s.stepRate * (b - a);
+    steps += s.stepRate * (plan.walk.W(b) - plan.walk.W(a));
     flowersIfRiding += s.flowerRate * (b - a);
     expectedFlowers += s.flowerRate * (plan.calendar.W(b) - plan.calendar.W(a));
   }

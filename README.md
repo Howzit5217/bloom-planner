@@ -29,8 +29,11 @@ grades every goal with a flower: white for an easy plan, then yellow, red, and b
 2. Download `BloomPlanner-vX.Y.Z.apk` and open it.
 3. If Android asks, allow your browser to install apps ("Install unknown apps"), then tap **Install**.
 
-**Updates:** the app checks this repository once a day (Settings → Updates). When a new version is
-published it shows a "Version X is ready" card on Home; tap it, download, and install over the top.
+**Updates:** the app checks this repository every few hours (Settings → Updates). When a new version
+is published it shows a "Version X is ready" card on Home: tap **Update now**, the app downloads it and
+opens Android's installer, and **Install** finishes it (the first time, Android asks to allow Bloom
+Planner to install apps). Android never lets an app from outside the Play Store update without that
+one tap.
 Your log is kept. Corrected level data (`src/data/bloom-levels.json`) is picked up automatically,
 without reinstalling.
 
@@ -39,7 +42,9 @@ without reinstalling.
 The same app runs on the web, with nothing to download. It runs only from the home screen (or as
 an installed app on a computer); in a browser tab it shows how to add it:
 
-1. Open **https://howzit5217.github.io/bloom-planner/app/** (on iPhone, in Safari).
+1. Open **https://howzit5217.github.io/bloom-planner/app/** in **Chrome** on Android or **Safari** on
+   iPhone. A link opened inside another app (a message, an email) shows that app's built-in browser,
+   which has no Add to Home Screen; on Android the download page's Web App button opens Chrome itself.
 2. iPhone: tap **Share**, then **Add to Home Screen**. Computer: **Install** (Chrome, Edge) or
    **Add to Dock** (Safari).
 3. Open it from the new icon: full screen, its own icon, no browser bars.
@@ -64,6 +69,11 @@ The planner follows the game's actual levelling rules:
   your town: a day counts if there's little rain or snow, it's not too cold or hot, it's not too windy,
   and there's enough daylight. Pick *Fair weather*, *Normal* or *All weather* in Settings, or set
   each month by hand.
+- **Heat and the forecast.** Set the feels-like temperature (humidity and wind included) that's too hot
+  to walk far, and to ride. The next 16 days come from the Open-Meteo forecast: a day too hot, a
+  downpour, snow or a storm counts for less (some walking still happens; more with indoor walking),
+  and a day too wet, windy, cold or hot to ride gets no flowers. Further out, each month's share of
+  such days comes from the weather history. The good days carry the rest of the plan.
 - **Ahead/behind** compares where you are with where the original plan put you, in days of the plan's
   own schedule.
 

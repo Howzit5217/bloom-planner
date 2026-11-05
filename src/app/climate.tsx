@@ -26,6 +26,7 @@ export default function Climate() {
   const location = useApp((s) => s.location);
   const climate = useApp((s) => s.climate);
   const preset = useApp((s) => s.settings.preset);
+  const bikeMax = useApp((s) => s.settings.heat.bike);
   const seasons = useApp((s) => s.seasonRates);
   const setLocationAndClimate = useApp((s) => s.setLocationAndClimate);
   const setSeasonRates = useApp((s) => s.setSeasonRates);
@@ -39,7 +40,7 @@ export default function Climate() {
       </SubScreen>
     );
   }
-  const months = deriveMonths(climate, preset);
+  const months = deriveMonths(climate, preset, bikeMax);
   const manual = seasons.some((r) => r.source === 'manual');
   return (
     <SubScreen title={t('Climate')}>
