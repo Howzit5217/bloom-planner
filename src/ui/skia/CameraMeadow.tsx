@@ -6,7 +6,7 @@ import type { SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, color, drawBlade, drawHaze, drawSky, drawWeather } from './Meadow';
+import { bladeColorOf, color, drawBlade, drawHaze, drawSky, drawSunlight, drawWeather, shineOf } from './Meadow';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
 import { rng } from './shapes';
@@ -76,19 +76,24 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, hz + rest), [Skia.Color(look.groundFar), Skia.Color(look.groundMid), Skia.Color(look.groundNear)], [0, 0.4, 1], TileMode.Clamp));
     canvas.drawRect(Skia.XYWHRect(0, hz, f.picW, depth), paint);
     paint.setShader(null);
+    // Lit from the sun (or moon) where it shows in the sky above the screen.
+    const light = look.sun ?? look.moon;
+    const lightX = light ? f.pad + light.x * f.W : f.picW / 2;
+    drawSunlight(canvas, f.picW, hz, depth, lightX, look);
 
     // Size grows with how far below the horizon a thing sits; so does the room between things,
     // though the far field is kept a little fuller than true perspective would leave it.
     const near = (y0: number) => y0 / rest;
     const many = (y0: number, perPoint: number, most: number) => Math.min(most, perPoint * Math.pow(rest / y0, 1.2));
 
-    // Soft lighter patches, flatter toward the horizon.
+    // Soft lighter patches, flatter toward the horizon, catching the light on its side of the field.
     for (let i = 0; i < 14; i++) {
       const y0 = 8 + Math.pow(rand(), 1.3) * (depth - 8);
       const pr = f.W * (0.16 + rand() * 0.26) * near(y0);
       const ph = pr * 2 * Math.min(0.5, 0.06 + (y0 / f.F) * 0.45);
-      color(paint, '#FFFFFF', (0.05 + rand() * 0.06) * (1 - look.night * 0.7));
-      canvas.drawOval(Skia.XYWHRect(rand() * f.picW - pr, hz + y0 - ph / 2, pr * 2, ph), paint);
+      const shine = shineOf(look, rand, f.picW, lightX);
+      color(paint, shine.color, shine.alpha);
+      canvas.drawOval(Skia.XYWHRect(shine.x - pr, hz + y0 - ph / 2, pr * 2, ph), paint);
     }
 
     const blade = Skia.Paint();

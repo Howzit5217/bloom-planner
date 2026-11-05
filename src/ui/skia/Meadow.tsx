@@ -102,6 +102,51 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
   }
 }
 
+/**
+ * The field lit from the sky: a broad glow across the grass on the sun's side, strongest toward the
+ * horizon where its light rakes across (warmer and wider the lower the sun), the far side a touch in
+ * shade, and a bright glint on the horizon under it. By night the moon gives a faint, cool sheen the
+ * same way; under cloud, with neither showing, the light stays flat. `lightX` is where the sun (or
+ * moon) is across the picture.
+ */
+export function drawSunlight(canvas: SkCanvas, w: number, hz: number, groundH: number, lightX: number, look: SkyLook) {
+  const sun = look.sun;
+  const moon = !sun && look.moon ? look.moon : null;
+  if (!sun && !moon) return;
+  const tint = sun ? sun.color : '#CFDBFF';
+  const low = sun ? 1 - sun.height : 0.6;
+  const strength = sun ? 0.55 + 0.3 * low : 0.14;
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  paint.setBlendMode(BlendMode.Screen);
+  // The glow: an ellipse spread along the horizon below the light, fading down the field.
+  const reach = w * (0.75 + 0.5 * low);
+  const flat = Skia.Matrix().translate(lightX, hz).scale(1, 0.6 + 0.3 * (1 - low)).translate(-lightX, -hz);
+  paint.setShader(Skia.Shader.MakeRadialGradient(vec(lightX, hz), reach, [Skia.Color(tint), Skia.Color(`${tint}00`)], [0, 1], TileMode.Clamp, flat));
+  paint.setAlphaf(strength);
+  canvas.drawRect(Skia.XYWHRect(0, hz, w, groundH), paint);
+  // The glint where the light meets the horizon.
+  const glint = Skia.Matrix().translate(lightX, hz).scale(1, 0.12).translate(-lightX, -hz);
+  paint.setShader(Skia.Shader.MakeRadialGradient(vec(lightX, hz), w * 0.32, [Skia.Color('#FFFFFF'), Skia.Color(tint), Skia.Color(`${tint}00`)], [0, 0.35, 1], TileMode.Clamp, glint));
+  paint.setAlphaf(sun ? 0.5 + 0.3 * low : 0.12);
+  canvas.drawRect(Skia.XYWHRect(0, hz - 10, w, Math.min(groundH, 60) + 10), paint);
+  // The side away from the light, a little in shade.
+  const shade = Skia.Paint();
+  shade.setAntiAlias(true);
+  const away = lightX < w / 2 ? w : 0;
+  shade.setShader(Skia.Shader.MakeLinearGradient(vec(lightX, 0), vec(away, 0), [Skia.Color('#0B2A1200'), Skia.Color('#0B2A12')], [0.25, 1], TileMode.Clamp));
+  shade.setAlphaf(sun ? 0.12 + 0.12 * low : 0.06);
+  canvas.drawRect(Skia.XYWHRect(0, hz, w, groundH), shade);
+}
+
+/** Where the soft lighter patches go and what colour: gathered toward the light, in its colour. */
+export function shineOf(look: SkyLook, rand: () => number, w: number, lightX: number) {
+  const lit = look.sun ?? null;
+  const x = lit ? lightX + (rand() - 0.5) * w * 1.1 : rand() * w;
+  const near = lit ? 1 - Math.min(1, Math.abs(x - lightX) / w) : 0.5;
+  return { x, color: lit ? mix('#FFFFFF', lit.color, 0.6) : '#FFFFFF', alpha: (0.06 + rand() * 0.07) * (0.6 + 0.9 * near) * (1 - look.night * 0.7) };
+}
+
 /** The grass blades' colour, darker at night. */
 export const bladeColorOf = (c: Palette, look: SkyLook) => mix(mix(c.grassBlade, look.groundNear, 0.35), '#1B2B44', look.night * 0.45);
 
@@ -181,13 +226,17 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
     );
     canvas.drawRect(Skia.XYWHRect(0, hz, w, groundH), paint);
     paint.setShader(null);
-    // Soft lighter patches, flatter toward the horizon.
+    // Lit from the sun (or moon) where it is in the sky above.
+    const lightX = (look.sun ?? look.moon)?.x != null ? (look.sun ?? look.moon)!.x * w : w / 2;
+    drawSunlight(canvas, w, hz, groundH, lightX, look);
+    // Soft lighter patches, flatter toward the horizon, catching the light.
     for (let i = 0; i < 6; i++) {
       const t = rand();
       const py = hz + t * groundH;
       const pr = w * (0.18 + rand() * 0.3) * (0.5 + t);
-      color(paint, '#FFFFFF', (0.05 + rand() * 0.06) * (1 - look.night * 0.7));
-      canvas.drawOval(Skia.XYWHRect(rand() * w - pr, py - pr * 0.12 * (0.4 + t), pr * 2, pr * 0.24 * (0.4 + t)), paint);
+      const shine = shineOf(look, rand, w, lightX);
+      color(paint, shine.color, shine.alpha);
+      canvas.drawOval(Skia.XYWHRect(shine.x - pr, py - pr * 0.12 * (0.4 + t), pr * 2, pr * 0.24 * (0.4 + t)), paint);
     }
     // Grass blades, smaller in the distance.
     const blade = Skia.Paint();
