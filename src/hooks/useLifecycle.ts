@@ -13,6 +13,8 @@ import { setLang, t, tn } from '@/i18n';
 
 const DAY = 24 * 3600 * 1000;
 const UPDATE_EVERY = 3600 * 1000;
+/** How often an open app asks whether an update check is due (it runs at most every UPDATE_EVERY). */
+const POLL_EVERY = 5 * 60 * 1000;
 
 /** Background housekeeping: day rollover, update checks, the yearly climate refresh, and notifications. */
 export function useLifecycle() {
@@ -40,8 +42,14 @@ export function useLifecycle() {
     void housekeeping();
     // A downloaded update has done its job once the app starts again.
     clearDownloadedUpdates();
+    // Left open on the screen, the app still looks for a new version every hour, so its popup
+    // comes up then and not only the next time the app is opened.
+    const poll = setInterval(() => {
+      if (AppState.currentState === 'active') void checkAppUpdateIfDue();
+    }, POLL_EVERY);
     return () => {
       clearTimeout(timer);
+      clearInterval(poll);
       sub.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,15 +105,23 @@ export async function scheduleNotifications() {
   }
 }
 
-async function housekeeping() {
+/**
+ * At most hourly (on opening the app, coming back to it, or while it stays open): a new app
+ * release (which pops up on Android) and newer level data on GitHub.
+ */
+async function checkAppUpdateIfDue() {
   const st = useApp.getState();
   if (!st.profile) return;
-  // At most hourly, on opening the app or coming back to it: a new app release (which pops up on
-  // Android) and newer level data on GitHub.
   const u = st.settings.updates;
   if (u.enabled && (!u.lastCheck || Date.now() - new Date(u.lastCheck).getTime() > UPDATE_EVERY)) {
     await runUpdateCheck();
   }
+}
+
+async function housekeeping() {
+  const st = useApp.getState();
+  if (!st.profile) return;
+  await checkAppUpdateIfDue();
   // The next 16 days' weather for the plan (every few hours).
   const loc = st.location;
   void useForecast.getState().refresh(loc);
