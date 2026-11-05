@@ -537,25 +537,37 @@ export function Wizard() {
     }
   })();
 
-  // The room a page leaves below its content (the welcome fills the screen, so it has its own).
-  const [boxH, setBoxH] = useState(0);
-  const [bodyH, setBodyH] = useState({ step: -1, h: 0 });
-  const room = step !== 0 && bodyH.step === step && boxH > 0 ? boxH - BODY_TOP - bodyH.h - 10 : -1;
-  // Each page's flowers take the room it leaves them, and fade aside whenever the page grows into
-  // it or the keyboard opens, so they never sit over a card or a field.
-  const sprigMax = step === 8 ? 130 : 300;
-  const sprigMin = step === 8 ? 100 : 140;
-  const [sprigRoom, setSprigRoom] = useState({ step: -1, h: 0 });
-  // While the keyboard is up the flowers step aside, and come back just as they were.
+  // The keyboard: while it's up the page above shrinks to fit, but the flowers stay just where they
+  // were on the screen, and the keyboard covers them (no jumping above it, no fading away).
   const [keyboardUp, setKeyboardUp] = useState(false);
+  const [keyboardH, setKeyboardH] = useState(0);
   useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardUp(true));
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardUp(false));
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+      setKeyboardUp(true);
+      setKeyboardH(e.endCoordinates?.height ?? 0);
+    });
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      setKeyboardUp(false);
+      setKeyboardH(0);
+    });
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
+  // The page's area and the whole screen as they are with the keyboard down: a sudden shrink of more
+  // than a keyboard's worth is the keyboard (on some phones the window shrinks before it says so).
+  const [restBox, setRestBox] = useState({ y: 0, h: 0 });
+  const [rootH, setRootH] = useState(0);
+  const atRest = (prev: number, h: number) => prev === 0 || (!keyboardUp && h > prev - 120);
+  // The room a page leaves below its content (the welcome fills the screen, so it has its own).
+  const [bodyH, setBodyH] = useState({ step: -1, h: 0 });
+  const room = step !== 0 && bodyH.step === step && restBox.h > 0 ? restBox.h - BODY_TOP - bodyH.h - 10 : -1;
+  // Each page's flowers take the room it leaves them, and fade aside whenever the page grows into
+  // it, so they never sit over a card or a field.
+  const sprigMax = step === 8 ? 130 : 300;
+  const sprigMin = step === 8 ? 100 : 140;
+  const [sprigRoom, setSprigRoom] = useState({ step: -1, h: 0 });
   const roomFor = Math.min(sprigMax, Math.floor(room));
   // The first room a page offers sets its flowers' height at once.
   if (!keyboardUp && roomFor >= sprigMin && sprigRoom.step !== step) setSprigRoom({ step, h: roomFor });
@@ -567,8 +579,15 @@ export function Wizard() {
     return () => clearTimeout(id);
   }, [keyboardUp, roomFor, sprigMin, sprigRoom, step]);
   const sprigH = step === 0 ? 130 : sprigRoom.step === step ? sprigRoom.h : 0;
-  const sprigsFit = step === 0 || (!keyboardUp && sprigH >= sprigMin && room >= sprigH - 6);
+  const sprigsFit = step === 0 || (sprigH >= sprigMin && room >= sprigH - 6);
   const sprigFade = useAnimatedStyle(() => ({ opacity: withTiming(sprigsFit ? 1 : 0, { duration: 220 }) }));
+  // Where the flowers stand on the screen: along the bottom of the page's area at rest. With the
+  // keyboard up, whatever would show above its top edge is clipped, so they never peek out over
+  // the buttons the keyboard has pushed up; the rest is under the keyboard.
+  const bandBottom = restBox.y + restBox.h;
+  const bandTop = bandBottom - sprigH;
+  const keyboardTop = keyboardUp && keyboardH > 0 && rootH > 0 ? rootH - keyboardH : -Infinity;
+  const clipTop = Math.min(bandBottom, Math.max(bandTop, keyboardTop));
 
   // Without a bike there's no place page (its months are riding days); the weather page comes next.
   const rail = useScrollRail();
@@ -586,38 +605,48 @@ export function Wizard() {
           : { label: t('Next'), onPress: () => go(step === 5 && !bikes ? 7 : step + 1) };
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.canvas }}>
-      <View style={{ height: insets.top + 18 }} />
-      <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
-        {sprigH >= sprigMin || step === 0 ? (
-          <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0, bottom: 0 }, sprigFade]}>
+    <View style={{ flex: 1, backgroundColor: c.canvas }} onLayout={(e) => {
+      const h = e.nativeEvent.layout.height;
+      setRootH((prev) => (atRest(prev, h) ? h : prev));
+    }}>
+      {(sprigH >= sprigMin || step === 0) && restBox.h > 0 ? (
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0, top: clipTop, height: Math.max(0, bandBottom - clipTop), overflow: 'hidden' }, sprigFade]}>
+          <View style={{ position: 'absolute', left: 0, right: 0, top: bandTop - clipTop, height: sprigH }}>
             <FlowerSprigs key={`${step}-${sprigH}`} height={sprigH} sides={sidePage(step)} />
-          </Animated.View>
-        ) : null}
-        <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: 28, flexGrow: 1 }}>
-          <Animated.View key={step} entering={reduceMotion ? FadeIn.duration(160) : (dir > 0 ? FadeInRight : FadeInLeft).duration(300)} style={{ flex: 1 }}>
-            {step === 0 ? body : <View onLayout={(e) => setBodyH({ step, h: e.nativeEvent.layout.height })}>{body}</View>}
-          </Animated.View>
-        </Animated.ScrollView>
-        <EdgeFade edge="top" color={c.canvas} />
-        <EdgeFade edge="bottom" color={c.canvas} />
-        <ScrollRail rail={rail} scrollRef={scrollRef} />
-      </View>
-      <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 14, paddingTop: 8, gap: 14 }}>
-        {step > 0 || primary ? (
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            {step > 0 ? <BackTile label={t('Back')} onPress={back} /> : null}
-            {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 8 && !check?.ok)} /> : null}
           </View>
-        ) : null}
-        <FlowerSteps step={step} count={STEPS} />
-        {step === 0 ? (
-          <T v="caption" soft center>
-            {t('Unofficial fan-made planner. Not affiliated with Scopely, Nintendo or Pikmin Bloom.')}
-          </T>
-        ) : null}
-      </View>
-    </KeyboardAvoidingView>
+        </Animated.View>
+      ) : null}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <View style={{ height: insets.top + 18 }} />
+        <View style={{ flex: 1 }} onLayout={(e) => {
+          const { y, height } = e.nativeEvent.layout;
+          setRestBox((prev) => (atRest(prev.h, height) ? { y, h: height } : prev));
+        }}>
+          <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: 28, flexGrow: 1 }}>
+            <Animated.View key={step} entering={reduceMotion ? FadeIn.duration(160) : (dir > 0 ? FadeInRight : FadeInLeft).duration(300)} style={{ flex: 1 }}>
+              {step === 0 ? body : <View onLayout={(e) => setBodyH({ step, h: e.nativeEvent.layout.height })}>{body}</View>}
+            </Animated.View>
+          </Animated.ScrollView>
+          <EdgeFade edge="top" color={c.canvas} />
+          <EdgeFade edge="bottom" color={c.canvas} />
+          <ScrollRail rail={rail} scrollRef={scrollRef} />
+        </View>
+        <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 14, paddingTop: 8, gap: 14 }}>
+          {step > 0 || primary ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {step > 0 ? <BackTile label={t('Back')} onPress={back} /> : null}
+              {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 8 && !check?.ok)} /> : null}
+            </View>
+          ) : null}
+          <FlowerSteps step={step} count={STEPS} />
+          {step === 0 ? (
+            <T v="caption" soft center>
+              {t('Unofficial fan-made planner. Not affiliated with Scopely, Nintendo or Pikmin Bloom.')}
+            </T>
+          ) : null}
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
