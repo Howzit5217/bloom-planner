@@ -294,6 +294,7 @@ export const ko: Dict = {
   "Reading…": "읽는 중…",
   "Recalculate": "다시 계산",
   "Recalculating…": "다시 계산 중…",
+  "Refresh": "새로고침",
   "Reminder Time": "알림 시간",
   "Reminder at {time}": "{time}에 알림",
   "Reminders": "알림",

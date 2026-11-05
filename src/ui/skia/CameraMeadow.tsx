@@ -2,7 +2,7 @@ import { Canvas, createPicture, Group, Image, PaintStyle, Picture, Skia, StrokeC
 import { useEffect, useMemo, useState } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
 import { useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
-import type { SkyLook } from '@/engine/sky';
+import { lookKey, type SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
@@ -188,7 +188,10 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
   const bloom = useBloomFactor();
   // A fresh field every visit.
   const [seed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
-  const scene = useMemo(() => drawCameraScene(frame, look, c, seed, bloom), [frame, look, c, seed, bloom]);
+  // Drawn again only when the sky visibly changes (lookKey), not at every few minutes' tick.
+  const sky = lookKey(look);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scene = useMemo(() => drawCameraScene(frame, look, c, seed, bloom), [frame, sky, c, seed, bloom]);
   const image = useMemo(() => snapshot(scene.picture, frame), [scene, frame]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
   const clock = useSharedValue(0);

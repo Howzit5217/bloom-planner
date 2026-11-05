@@ -124,7 +124,6 @@ export function Wizard() {
   const [playerName, setPlayerName] = useState('');
   // How each day gets logged: follows how the progress was entered here, until chosen.
   const [logMode, setLogMode] = useState<LogMode | null>(null);
-  const logShown: LogMode = logMode ?? (remainingMode ? 'left' : 'daily');
   // The weather the plan works around, and the week's easy days.
   const [tempUnit, setTempUnit] = useState<TempUnit>('auto');
   const [limits, setLimits] = useState<TempLimits>(DEFAULT_LIMITS);
@@ -136,6 +135,8 @@ export function Wizard() {
   const needFlowers = next.flowers > 0;
   // The first levels come with the game's tutorial: nothing to walk or plant, so nothing to enter.
   const tutorial = next.steps === 0 && next.flowers === 0;
+  // A tutorial level has nothing to go, so a step count; otherwise as the progress was entered.
+  const logShown: LogMode = logMode ?? (!tutorial && remainingMode ? 'left' : 'daily');
   // Only up to level 100, and only once this level's steps are complete, is the lifetime total useful.
   const lifetimeRelevant = next.stepsMode === 'lifetime' && stepsVal != null && (remainingMode ? stepsVal === 0 : stepsVal >= next.steps);
   // A lifetime-step level can legitimately be "over" in so-far mode (a banked head start).

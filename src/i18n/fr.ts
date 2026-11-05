@@ -294,6 +294,7 @@ export const fr: Dict = {
   "Reading…": "Lecture…",
   "Recalculate": "Recalculer",
   "Recalculating…": "Recalcul…",
+  "Refresh": "Actualiser",
   "Reminder Time": "Heure du rappel",
   "Reminder at {time}": "Rappel à {time}",
   "Reminders": "Rappels",

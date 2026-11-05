@@ -128,6 +128,22 @@ export interface SkyLook {
   darkSky: boolean;
 }
 
+/**
+ * What of a sky look shows: its colours and weather as they are, the sun and moon to the nearest
+ * 2% of the sky, the night and stars to the nearest 5%. Two looks with the same key draw the same,
+ * so the meadow isn't drawn again every few minutes for a change nobody could see.
+ */
+export function lookKey(l: SkyLook): string {
+  const r = (n: number, step: number) => Math.round(n / step) * step;
+  return JSON.stringify({
+    ...l,
+    night: r(l.night, 0.05),
+    stars: r(l.stars, 0.05),
+    sun: l.sun && { ...l.sun, x: r(l.sun.x, 0.02), height: r(l.sun.height, 0.02) },
+    moon: l.moon && { x: r(l.moon.x, 0.02), height: r(l.moon.height, 0.02) },
+  });
+}
+
 const MIN = 60_000;
 
 /** Phase keyframes, in minutes from sunrise (R) and sunset (S). */

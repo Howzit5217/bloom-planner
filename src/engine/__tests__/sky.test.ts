@@ -1,4 +1,4 @@
-import { defaultSunTimes, skyLook, SKY_PALETTES, solarDay, sunTimes, weatherFromCode } from '../sky';
+import { defaultSunTimes, lookKey, skyLook, SKY_PALETTES, solarDay, sunTimes, weatherFromCode } from '../sky';
 
 const utc = (iso: string) => new Date(iso).getTime();
 const near = (ms: number | null, iso: string, minutes = 6) => {
@@ -78,5 +78,21 @@ describe('the sky', () => {
     expect(weatherFromCode(73)).toBe('snow');
     expect(weatherFromCode(95)).toBe('storm');
     expect(weatherFromCode(null)).toBe('clear');
+  });
+});
+
+describe('drawing the sky again', () => {
+  it('only when it visibly changes', () => {
+    const day = new Date(2026, 6, 1);
+    const sun = defaultSunTimes(day);
+    const at = (h: number, m: number) => skyLook(new Date(2026, 6, 1, h, m).getTime(), sun, 'clear');
+    // An hour of five-minute ticks at midday: the sun creeps along, drawn afresh only every
+    // twenty minutes or so instead of at every tick, and an hour on it has moved enough to see.
+    const keys = new Set(Array.from({ length: 12 }, (_, i) => lookKey(at(12, i * 5))));
+    expect(keys.size).toBeGreaterThan(1);
+    expect(keys.size).toBeLessThanOrEqual(4);
+    expect(lookKey(at(12, 0))).not.toBe(lookKey(at(13, 0)));
+    // Weather always counts.
+    expect(lookKey(at(12, 0))).not.toBe(lookKey(skyLook(new Date(2026, 6, 1, 12, 0).getTime(), sun, 'rain')));
   });
 });

@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -16,6 +17,7 @@ import { CameraMeadow } from './skia/CameraMeadow';
 import { Meadow } from './skia/Meadow';
 import { Seedling } from './skia/Seedling';
 import { TAB_BAR_SPACE } from './TabBar';
+import { useT } from '@/i18n';
 
 /** Tab switch: content cross-fades with an 8px vertical slide. */
 export function FocusFade({ children }: { children: ReactNode }) {
@@ -104,6 +106,7 @@ interface Props {
  * Android and the web, whose spinner can't be hidden, follow the finger by hand.
  */
 export function Screen({ children, backdrop = 'paper', onRefresh, header, bottomExtra }: Props) {
+  const { t } = useT();
   const look = useSkyLook();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -156,6 +159,8 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const byHand = !!onRefresh && Platform.OS !== 'ios';
   const pullY = useSharedValue(0);
   const pullFrom = useRef<number | null>(null);
+  // A light tick as the pull passes the line, so letting go there is felt to refresh.
+  const pastLine = useRef(false);
   // The finger's height: on the event in the app, on its first touch on the web.
   const touchY = (e: GestureResponderEvent) => {
     const n = e.nativeEvent as unknown as { pageY?: number; touches?: ArrayLike<{ pageY: number }> };
@@ -163,6 +168,7 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   };
   const onTouchStart = (e: GestureResponderEvent) => {
     pullFrom.current = byHand && !refreshing && rail.y.get() <= 0 ? touchY(e) : null;
+    pastLine.current = false;
   };
   const onTouchMove = (e: GestureResponderEvent) => {
     if (pullFrom.current == null) return;
@@ -175,6 +181,10 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
     const y = touchY(e);
     if (y == null) return;
     const pull = Math.max(0, (y - pullFrom.current) * 0.55);
+    if (pull >= PULL_FULL !== pastLine.current) {
+      pastLine.current = pull >= PULL_FULL;
+      if (pastLine.current) Haptics.selectionAsync().catch(() => {});
+    }
     pullY.set(Math.min(pull, PULL_FULL * 1.35));
     shown.set(Math.min(1, pull / 30));
     growth.set(Math.min(6.2, (pull / PULL_FULL) * 6.2));
@@ -214,6 +224,9 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
         onTouchMove={byHand ? onTouchMove : undefined}
         onTouchEnd={byHand ? onTouchEnd : undefined}
         onTouchCancel={byHand ? onTouchEnd : undefined}
+        // A screen reader can't pull: the page offers Refresh as an action instead.
+        accessibilityActions={onRefresh ? [{ name: 'refresh', label: t('Refresh') }] : undefined}
+        onAccessibilityAction={onRefresh ? (e) => void (e.nativeEvent.actionName === 'refresh' && !refreshing && run()) : undefined}
         // iOS: the bounce is the pull; its spinner is see-through, so only the seedling shows.
         refreshControl={pullGrows ? <RefreshControl refreshing={refreshing} onRefresh={run} tintColor="transparent" /> : undefined}
         contentContainerStyle={{ paddingTop: backdrop === 'paper' ? 14 : insets.top + 12, paddingBottom: TAB_BAR_SPACE + insets.bottom + 24, paddingHorizontal: 16, gap: 16 }}

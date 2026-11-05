@@ -294,6 +294,7 @@ export const ptBR: Dict = {
   "Reading…": "Lendo…",
   "Recalculate": "Recalcular",
   "Recalculating…": "Recalculando…",
+  "Refresh": "Atualizar",
   "Reminder Time": "Horário do lembrete",
   "Reminder at {time}": "Lembrete às {time}",
   "Reminders": "Lembretes",

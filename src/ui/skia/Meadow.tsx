@@ -1,7 +1,7 @@
 import { BlendMode, Canvas, createPicture, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkCanvas, type SkPaint } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { mix, type SkyLook } from '@/engine/sky';
+import { lookKey, mix, type SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
@@ -334,7 +334,10 @@ export function Meadow({ height, horizon, density = 1, seed: fixedSeed, width }:
   // A fresh field every visit unless a seed pins it.
   const [randomSeed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
   const seed = fixedSeed ?? randomSeed;
-  const picture = useMemo(() => drawScene(w, height, horizon, look, c, density * bloom, seed), [w, height, horizon, look, c, density, bloom, seed]);
+  // Drawn again only when the sky visibly changes (lookKey), not at every few minutes' tick.
+  const sky = lookKey(look);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const picture = useMemo(() => drawScene(w, height, horizon, look, c, density * bloom, seed), [w, height, horizon, sky, c, density, bloom, seed]);
   return (
     <View pointerEvents="none" style={{ width: w, height }}>
       <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: w, height }}>

@@ -294,6 +294,7 @@ export const ja: Dict = {
   "Reading…": "読み取り中…",
   "Recalculate": "再計算",
   "Recalculating…": "再計算中…",
+  "Refresh": "更新",
   "Reminder Time": "お知らせの時刻",
   "Reminder at {time}": "{time}にお知らせ",
   "Reminders": "お知らせ",

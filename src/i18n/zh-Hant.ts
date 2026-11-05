@@ -294,6 +294,7 @@ export const zhHant: Dict = {
   "Reading…": "讀取中…",
   "Recalculate": "重新計算",
   "Recalculating…": "重新計算中…",
+  "Refresh": "重新整理",
   "Reminder Time": "提醒時間",
   "Reminder at {time}": "在 {time} 提醒",
   "Reminders": "提醒",
