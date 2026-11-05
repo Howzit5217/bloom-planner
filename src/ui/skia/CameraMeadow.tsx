@@ -6,7 +6,7 @@ import type { SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, color, drawBlade, drawHaze, drawSky, drawSunlight, drawWeather, shineOf } from './Meadow';
+import { bladeColorOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
 import { rng } from './shapes';
@@ -61,7 +61,11 @@ function plant(f: CameraFrame, rand: () => number, colors: string[], many: (y0: 
 /** `bloom`: how full of flowers, for the player's level (useBloomFactor). */
 function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number, bloom: number): Scene {
   const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
-  const paintSprig = sprigPainter(c, look);
+  // Lit from the sun (or moon) where it shows in the sky above the screen.
+  const sky = look.sun ?? look.moon;
+  const lightX = sky ? f.pad + sky.x * f.W : f.picW / 2;
+  const light = fieldLight(look, f.picW, lightX);
+  const paintSprig = sprigPainter(c, look, light);
   let live: Scene['live'] = [];
   const picture = createPicture((canvas) => {
     const rand = rng(seed);
@@ -76,9 +80,6 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, hz + rest), [Skia.Color(look.groundFar), Skia.Color(look.groundMid), Skia.Color(look.groundNear)], [0, 0.4, 1], TileMode.Clamp));
     canvas.drawRect(Skia.XYWHRect(0, hz, f.picW, depth), paint);
     paint.setShader(null);
-    // Lit from the sun (or moon) where it shows in the sky above the screen.
-    const light = look.sun ?? look.moon;
-    const lightX = light ? f.pad + light.x * f.W : f.picW / 2;
     drawSunlight(canvas, f.picW, hz, depth, lightX, look);
 
     // Size grows with how far below the horizon a thing sits; so does the room between things,
@@ -110,6 +111,8 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     // Fewer flowers than grass, and the setup screens' big stemmed ones. The nearest ones (the last,
     // back to front) sway, so they're drawn live; everything behind them stays in this picture.
     const sprigs = plant(f, rand, colors, many, near, bloom);
+    // Every flower's shadow lies on the ground, the swaying ones' too.
+    drawShadows(canvas, light, sprigs);
     let cut = sprigs.length;
     while (cut > 0 && sprigs.length - cut < LIVE_MAX && sprigs[cut - 1].r >= LIVE_MIN_R) cut--;
     for (const sp of sprigs.slice(0, cut)) paintSprig(canvas, sp);

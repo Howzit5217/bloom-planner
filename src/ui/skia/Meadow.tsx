@@ -64,6 +64,14 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
   if (look.sun) {
     const sx = left + look.sun.x * viewW;
     const sy = skyY(look.sun.height);
+    // A broad, soft halo lighting the sky round the sun: bigger and warmer the lower it is.
+    const low = 1 - look.sun.height;
+    const halo = Skia.Paint();
+    halo.setAntiAlias(true);
+    halo.setBlendMode(BlendMode.Screen);
+    halo.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), viewW * (0.38 + 0.3 * low), [Skia.Color(look.sun.color), Skia.Color(`${look.sun.color}00`)], [0, 1], TileMode.Clamp));
+    halo.setAlphaf(0.32 + 0.25 * low);
+    canvas.drawRect(Skia.XYWHRect(0, 0, fullW, hz + 1), halo);
     color(glow, look.sun.color, 0.55);
     canvas.drawCircle(sx, sy, 30, glow);
     color(paint, look.sun.color);
@@ -137,6 +145,45 @@ export function drawSunlight(canvas: SkCanvas, w: number, hz: number, groundH: n
   shade.setShader(Skia.Shader.MakeLinearGradient(vec(lightX, 0), vec(away, 0), [Skia.Color('#0B2A1200'), Skia.Color('#0B2A12')], [0.25, 1], TileMode.Clamp));
   shade.setAlphaf(sun ? 0.12 + 0.12 * low : 0.06);
   canvas.drawRect(Skia.XYWHRect(0, hz, w, groundH), shade);
+}
+
+/**
+ * How the sun (or moon) lights the field, for the flowers and their shadows: its colour, how low it
+ * is, and how lit a spot across the picture is (1 facing it, -1 away; 0 with neither showing).
+ */
+export function fieldLight(look: SkyLook, w: number, lightX: number) {
+  const sun = look.sun;
+  const moon = !sun && look.moon ? look.moon : null;
+  const on = sun ? 1 : moon ? 0.35 : 0;
+  return {
+    on,
+    tint: sun ? sun.color : '#CFDBFF',
+    low: sun ? 1 - sun.height : 0.6,
+    lightX,
+    lit: (x: number) => (on ? on * (1 - 2 * Math.min(1, Math.abs(x - lightX) / (w * 0.6))) : 0),
+  };
+}
+export type FieldLight = ReturnType<typeof fieldLight>;
+
+/**
+ * Soft shadows on the grass under the flowers, cast away from the light: across the field from it
+ * and toward the viewer (the light is ahead, in the sky), longer the lower it is. `flowers` are the
+ * stems' bases and head sizes, back to front.
+ */
+export function drawShadows(canvas: SkCanvas, light: FieldLight, flowers: Array<{ x: number; y: number; r: number }>) {
+  if (!light.on) return;
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  paint.setColor(Skia.Color('#0B2A12'));
+  paint.setMaskFilter(Skia.MaskFilter.MakeBlur(0, 2, true));
+  const reach = 0.6 + 1.8 * light.low;
+  for (const f of flowers) {
+    if (f.r < 3) continue;
+    const away = f.x >= light.lightX ? 1 : -1;
+    const len = f.r * reach;
+    paint.setAlphaf(0.16 * light.on);
+    canvas.drawOval(Skia.XYWHRect(f.x + away * len * 0.5 - len * 0.7, f.y + f.r * 0.15 * light.low, len * 1.4, Math.max(1.5, f.r * 0.42)), paint);
+  }
 }
 
 /** Where the soft lighter patches go and what colour: gathered toward the light, in its colour. */
@@ -260,7 +307,9 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
       return fieldSprig(rand() * w, hz + 6 + t * (groundH - 6), (6 + rand() * 6) * (0.5 + 0.7 * t), colors[Math.floor(rand() * colors.length)], rand);
     });
     sprigs.sort((a, b) => a.y - b.y);
-    const paintSprig = sprigPainter(c, look);
+    const light = fieldLight(look, w, lightX);
+    drawShadows(canvas, light, sprigs);
+    const paintSprig = sprigPainter(c, look, light);
     for (const sp of sprigs) paintSprig(canvas, sp);
     // Haze where the ground meets the sky (and a thicker one in fog). A field drawn on its own (its
     // horizon at the top edge) meets a separately drawn sky there, so its haze is fuller.
