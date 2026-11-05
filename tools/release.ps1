@@ -7,11 +7,15 @@ param(
     # pre-releases, so it reaches the developer's own devices; the download page and everyone else read "latest".
     [switch]$Beta,
     # Install the finished APK on every device adb lists (your own phone or emulator), after publishing.
-    [switch]$Install
+    [switch]$Install,
+    # Carry on with a release whose "Version X" commit is already pushed (GitHub failed to start or finish the
+    # build): -Version X -NotesFile ... -Resume builds what is on main now and publishes it as X.
+    [switch]$Resume
 )
 # Publishes Bloom Planner for Android in one command:
 #   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Version 1.1.0 -NotesFile C:\path\notes.txt
 #   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Beta [-Install]
+#   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Version 1.1.0 -NotesFile C:\path\notes.txt -Resume
 # Steps: bump app.json (and package.json) and push; build on GitHub Actions (release.yml, with the variant);
 # sign the APK here with the release key (unless the repository has the signing secrets, then CI signs and
 # publishes it); create the GitHub release. Needs `gh` signed in, and the key and its properties file in
@@ -46,7 +50,11 @@ try {
     $current = $Matches[1]
     if ($app -notmatch '"beta":\s*(\d+)') { throw 'No extra.beta in app.json' }
     $betaNumber = [int]$Matches[1]
-    if ($Beta) {
+    if ($Resume) {
+        if ($Beta) { throw 'Resume is for releases: give -Version (the one app.json already has).' }
+        if ($current -ne $Version) { throw "app.json is at $current, not $Version, so there is nothing to resume." }
+        $shown = $Version; $tag = "v$Version"
+    } elseif ($Beta) {
         $betaNumber++
         $app = $app -replace '"beta":\s*\d+', ('"beta": ' + $betaNumber)
         $shown = "${current}:b$betaNumber"; $tag = "v$current-b$betaNumber"
@@ -62,15 +70,23 @@ try {
         $shown = $Version; $tag = "v$Version"
         $message = "Version $Version"
     }
-    [System.IO.File]::WriteAllText($appPath, $app, $noBom)
-    Run git @('add', 'app.json', 'package.json')
-    Run git @('commit', '-m', $message)
+    if (-not $Resume) {
+        [System.IO.File]::WriteAllText($appPath, $app, $noBom)
+        Run git @('add', 'app.json', 'package.json')
+        Run git @('commit', '-m', $message)
+    }
     Run git @('push', 'origin', 'main')
     $sha = (git rev-parse HEAD).Trim()
 
     # 2. The build on GitHub Actions.
     $variant = if ($Beta) { 'beta' } else { 'release' }
-    Run gh @('workflow', 'run', 'release.yml', '-R', $repo, '--ref', 'main', '-f', "variant=$variant")
+    # GitHub sometimes answers a moment of trouble with HTTP 500: try a few times.
+    $started = $false
+    for ($try = 1; $try -le 4 -and -not $started; $try++) {
+        & gh workflow run release.yml -R $repo --ref main -f "variant=$variant"
+        if ($LASTEXITCODE -eq 0) { $started = $true } elseif ($try -lt 4) { Start-Sleep -Seconds (15 * $try) }
+    }
+    if (-not $started) { throw 'GitHub would not start the build (tried 4 times). Run again with -Resume.' }
     $runId = $null
     for ($i = 0; $i -lt 30 -and -not $runId; $i++) {
         Start-Sleep -Seconds 4
