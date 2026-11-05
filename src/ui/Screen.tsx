@@ -1,7 +1,7 @@
 import { useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Platform, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform, RefreshControl, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
 import Animated, { useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSkyLook } from '@/store/sky';
@@ -34,6 +34,8 @@ export function FocusFade({ children }: { children: ReactNode }) {
 const PULL_FULL = 110;
 /** Scrolling this many times the horizon's climb tilts the camera all the way down, so the scene moves slower than the cards. */
 const TILT_SCROLL = 1.8;
+/** A pulled page settles back up without overshooting past the top. */
+const SETTLE = { damping: 22, stiffness: 200, mass: 1, overshootClamping: true } as const;
 /** The camera follows the scroll with a little weight, settling without overshoot. */
 const CAMERA = { damping: 30, stiffness: 190, mass: 1, overshootClamping: true } as const;
 /** Where the paper pages' sheet starts, below the safe area: the meadow strip shows above it. */
@@ -97,12 +99,11 @@ interface Props {
 
 /**
  * Scrollable page with the backdrop, safe areas, tab-bar clearance and an optional pull-to-refresh.
- * The refresh uses the platform's own RefreshControl. A seedling sprouts above the content:
- * on iOS it grows with the pull itself; on Android (which doesn't report the pull distance)
- * it sprouts while the refresh runs, beside a leaf-green spinner.
+ * The refresh shows only a seedling sprouting above the content, growing with the pull: never the
+ * platform's spinner circle. On iOS the page's own bounce gives the pull (its spinner hidden);
+ * Android and the web, whose spinner can't be hidden, follow the finger by hand.
  */
 export function Screen({ children, backdrop = 'paper', onRefresh, header, bottomExtra }: Props) {
-  const { c } = useTheme();
   const look = useSkyLook();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -150,6 +151,46 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const scrolled = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, rail.y.value / 36)) }));
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const pullGrows = !!onRefresh && Platform.OS === 'ios';
+  // By hand (Android, the web): at the top, a drag down eases the page down as the seedling grows;
+  // let go past the line and it refreshes, short of it and everything springs back.
+  const byHand = !!onRefresh && Platform.OS !== 'ios';
+  const pullY = useSharedValue(0);
+  const pullFrom = useRef<number | null>(null);
+  // The finger's height: on the event in the app, on its first touch on the web.
+  const touchY = (e: GestureResponderEvent) => {
+    const n = e.nativeEvent as unknown as { pageY?: number; touches?: ArrayLike<{ pageY: number }> };
+    return n.pageY ?? n.touches?.[0]?.pageY ?? null;
+  };
+  const onTouchStart = (e: GestureResponderEvent) => {
+    pullFrom.current = byHand && !refreshing && rail.y.get() <= 0 ? touchY(e) : null;
+  };
+  const onTouchMove = (e: GestureResponderEvent) => {
+    if (pullFrom.current == null) return;
+    // The page scrolled instead (a drag up first): no pull this time.
+    if (rail.y.get() > 1) {
+      pullFrom.current = null;
+      pullY.set(withSpring(0, SETTLE));
+      return;
+    }
+    const y = touchY(e);
+    if (y == null) return;
+    const pull = Math.max(0, (y - pullFrom.current) * 0.55);
+    pullY.set(Math.min(pull, PULL_FULL * 1.35));
+    shown.set(Math.min(1, pull / 30));
+    growth.set(Math.min(6.2, (pull / PULL_FULL) * 6.2));
+  };
+  const onTouchEnd = () => {
+    if (pullFrom.current == null) return;
+    pullFrom.current = null;
+    const pulled = pullY.get();
+    pullY.set(withSpring(0, SETTLE));
+    if (pulled >= PULL_FULL) void run();
+    else {
+      shown.set(withTiming(0, { duration: 200 }));
+      growth.set(withTiming(0, { duration: 200 }));
+    }
+  };
+  const pulledDown = useAnimatedStyle(() => ({ transform: [{ translateY: pullY.value }] }));
   const onScroll = useAnimatedScrollHandler((e) => {
     rail.track(e);
     if (pullGrows && !refreshing) {
@@ -167,18 +208,14 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={run}
-              tintColor="transparent"
-              colors={[c.leaf, c.petalRed, c.petalYellow]}
-              progressBackgroundColor={c.card}
-              progressViewOffset={backdrop === 'paper' ? 8 : insets.top + 40}
-            />
-          ) : undefined
-        }
+        style={byHand ? pulledDown : undefined}
+        overScrollMode={byHand ? 'never' : undefined}
+        onTouchStart={byHand ? onTouchStart : undefined}
+        onTouchMove={byHand ? onTouchMove : undefined}
+        onTouchEnd={byHand ? onTouchEnd : undefined}
+        onTouchCancel={byHand ? onTouchEnd : undefined}
+        // iOS: the bounce is the pull; its spinner is see-through, so only the seedling shows.
+        refreshControl={pullGrows ? <RefreshControl refreshing={refreshing} onRefresh={run} tintColor="transparent" /> : undefined}
         contentContainerStyle={{ paddingTop: backdrop === 'paper' ? 14 : insets.top + 12, paddingBottom: TAB_BAR_SPACE + insets.bottom + 24, paddingHorizontal: 16, gap: 16 }}
       >
         {header}
