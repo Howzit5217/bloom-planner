@@ -9,6 +9,7 @@ import { PETALS } from '@/theme/tokens';
 import { T } from '../T';
 import { GameNumber } from './GameNumber';
 import { flowerPath, petalPath, rng } from './shapes';
+import { t as tr } from '@/i18n';
 
 const DURATION = 2500;
 const PETAL_COUNT = 48;
@@ -119,7 +120,7 @@ export function Celebration({ level, title, subtitle, onDone }: Props) {
 
   return (
     <Animated.View style={[{ position: 'absolute', top: 0, left: 0, width, height, zIndex: 1000 }, overlay]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${subtitle}. Tap to continue.`} onPress={onDone} style={{ flex: 1 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${subtitle}. ${tr('Tap to continue.')}`} onPress={onDone} style={{ flex: 1 }}>
         <View style={{ position: 'absolute', top: 0, left: 0, width, height, backgroundColor: c.dark ? 'rgba(20,18,12,0.86)' : 'rgba(251,247,236,0.9)' }} />
         <Canvas style={{ position: 'absolute', top: 0, left: 0, width, height }}>
           <Circle cx={cx} cy={cy} r={glowR}>

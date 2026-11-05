@@ -2,7 +2,9 @@ import { Pressable, View } from 'react-native';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
+import { IconChip } from './IconChip';
 import { T } from './T';
+import { t } from '@/i18n';
 
 interface Props {
   icon: IconName;
@@ -19,8 +21,8 @@ export function Banner({ icon, title, text, tone = 'info', onDismiss, action }: 
   const fg = tone === 'alert' ? c.alert : tone === 'nectar' ? (c.dark ? c.nectar : '#9A5B00') : c.leafDeep;
   return (
     <View accessibilityRole="summary" style={{ flexDirection: 'row', gap: 12, backgroundColor: bg, borderRadius: radius.card, padding: 14, alignItems: 'flex-start' }}>
-      <Icon name={icon} size={22} color={fg} />
-      <View style={{ flex: 1, gap: 2 }}>
+      <IconChip name={icon} size="sm" bg={c.card} fg={fg} />
+      <View style={{ flex: 1, gap: 2, paddingTop: title ? 0 : 7 }}>
         {title ? (
           <T v="bodyBold" color={fg}>
             {title}
@@ -36,7 +38,7 @@ export function Banner({ icon, title, text, tone = 'info', onDismiss, action }: 
         ) : null}
       </View>
       {onDismiss ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={onDismiss} hitSlop={10} style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginTop: -4, marginRight: -4 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss')} onPress={onDismiss} hitSlop={10} style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginTop: -4, marginRight: -4 }}>
           <Icon name="close" size={18} color={c.inkSoft} />
         </Pressable>
       ) : null}

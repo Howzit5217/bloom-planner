@@ -45,6 +45,9 @@ export interface Palette {
   teal: string;
   scrim: string;
   divider: string;
+  /** Quiet grey tiles, like the intro's back button. */
+  tile: string;
+  tilePressed: string;
 }
 
 export const light: Palette = {
@@ -86,6 +89,8 @@ export const light: Palette = {
   teal: '#22A88E',
   scrim: 'rgba(36,31,24,0.45)',
   divider: 'rgba(58,50,38,0.08)',
+  tile: '#E7E2D9',
+  tilePressed: '#DAD4C9',
 };
 
 export const dark: Palette = {
@@ -128,6 +133,8 @@ export const dark: Palette = {
   teal: '#3DB79D',
   scrim: 'rgba(0,0,0,0.55)',
   divider: 'rgba(242,234,218,0.08)',
+  tile: '#3A342C',
+  tilePressed: '#474037',
 };
 
 export const PETALS = (p: Palette) => [p.petalRed, p.petalYellow, p.petalBlue, p.petalWhite, p.petalPurple];

@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { fromKey } from '@/engine/dates';
 import type { PlannedNotification } from '@/engine/notifyPlan';
+import { t } from '@/i18n';
 
 const CHANNEL = 'daily';
 
@@ -14,8 +15,8 @@ export function configureNotifications() {
 async function ensureChannel() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(CHANNEL, {
-    name: 'Daily check-in',
-    description: 'One friendly reminder a day at most.',
+    name: t('Daily check-in'),
+    description: t('One friendly reminder a day at most.'),
     importance: Notifications.AndroidImportance.DEFAULT,
   });
 }

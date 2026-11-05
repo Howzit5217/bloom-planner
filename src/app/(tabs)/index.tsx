@@ -7,14 +7,16 @@ import { HomeHeader, MilestoneCard, PaceCard, RingsCard, StreakCard, TimeCard } 
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
+import { isNewerThanThisBuild } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
 import { Banner } from '@/ui/Banner';
+import { fmtClock } from '@/ui/TimeWheel';
 import { Screen } from '@/ui/Screen';
-import { Walker } from '@/ui/skia/Walker';
 import { StaggerIn } from '@/ui/StaggerIn';
-import { TAB_BAR_SPACE } from '@/ui/TabBar';
+import { useT } from '@/i18n';
 
 export default function Home() {
+  const { t } = useT();
   const dash = useDashboard();
   const settings = useApp((s) => s.settings);
   const updateSettings = useApp((s) => s.updateSettings);
@@ -26,7 +28,7 @@ export default function Home() {
   const dismissed = settings.dismissed;
   const dismiss = (k: string) => updateSettings({ dismissed: { ...dismissed, [k]: true } });
   const latest = settings.updates.latest;
-  const showUpdate = latest && latest.version !== settings.updates.dismissedVersion;
+  const showUpdate = latest && latest.version !== settings.updates.dismissedVersion && isNewerThanThisBuild(latest.version);
   const obs = dash.observed;
   const drift = [obs.bikeDrift, obs.walkDrift].some((d) => d != null && Math.abs(d) > 0.2);
   const observedKey = `observed-${Math.floor(obs.loggedDays / 7)}`;
@@ -37,12 +39,12 @@ export default function Home() {
       key: 'update',
       node: (
         <Banner
-          icon="gift-outline"
+          icon="gift"
           tone="nectar"
-          title={`Version ${latest!.version} is ready`}
-          text={latest!.notes ? latest!.notes.split('\n').find((l) => l.trim())?.replace(/^[#*\-\s]+/, '') ?? 'A new version is available.' : 'A new version is available.'}
+          title={t('Version {version} Is Ready', { version: latest!.version })}
+          text={latest!.notes ? (latest!.notes.split('\n').find((l) => l.trim())?.replace(/^[#*\-\s]+/, '') ?? t('A new version is available.')) : t('A new version is available.')}
           action={{
-            label: Platform.OS === 'android' && latest!.apkUrl ? 'Download the update' : 'See what’s new',
+            label: Platform.OS === 'android' && latest!.apkUrl ? t('Download the update') : t('See what’s new'),
             onPress: () => (Platform.OS === 'android' && latest!.apkUrl ? Linking.openURL(latest!.apkUrl) : WebBrowser.openBrowserAsync(latest!.url)),
           }}
           onDismiss={() => updateSettings({ updates: { ...settings.updates, dismissedVersion: latest!.version } })}
@@ -54,11 +56,11 @@ export default function Home() {
       key: 'impossible',
       node: (
         <Banner
-          icon="alert-circle-outline"
+          icon="alert-circle"
           tone="alert"
-          title="An honest heads-up"
-          text={`This needs ${fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000)} steps a day at its busiest. That's about ${fmtHours(dash.impossible.walkHours)} of walking. A later date would be kinder.`}
-          action={{ label: 'Change the goal', onPress: () => router.push('/settings') }}
+          title={t('An Honest Heads-Up')}
+          text={t("This needs {steps} steps a day at its busiest. That's about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })}
+          action={{ label: t('Change the goal'), onPress: () => router.push('/settings') }}
         />
       ),
     });
@@ -69,9 +71,9 @@ export default function Home() {
         <Banner
           icon="party-popper"
           tone="nectar"
-          text={`Looks like you've hit both targets for Level ${dash.current.level + 1}. Did you level up?`}
+          text={t("Looks like you've hit both targets for Level {level}. Did you level up?", { level: dash.current.level + 1 })}
           action={{
-            label: 'Yes, I levelled up',
+            label: t('Yes, levelled up'),
             onPress: () => {
               if (dash.todayEntry) void saveEntry({ ...dash.todayEntry, leveledUp: true, newLevel: dash.current.level + 1 });
               else setLevelUpRequest((n) => n + 1);
@@ -80,15 +82,16 @@ export default function Home() {
         />
       ),
     });
-  if (dash.replay.days.length >= 1 && !settings.notifications.askedAt)
+  // Reminders are the phone app's: a web page can't send them.
+  if (Platform.OS !== 'web' && dash.replay.days.length >= 1 && !settings.notifications.askedAt)
     banners.push({
       key: 'notify',
       node: (
         <Banner
-          icon="bell-ring-outline"
-          text="Want a gentle nudge each evening? One reminder a day at most, never a guilt trip."
+          icon="bell-ring"
+          text={t('Want a gentle nudge each evening? One reminder a day at most, never a guilt trip.')}
           action={{
-            label: 'Yes, remind me at 8:30pm',
+            label: t('Yes, at {time}', { time: fmtClock(settings.notifications.hour, settings.notifications.minute) }),
             onPress: async () => {
               const ok = await requestPermission();
               await updateSettings({ notifications: { ...settings.notifications, enabled: ok, askedAt: new Date().toISOString() } });
@@ -99,15 +102,15 @@ export default function Home() {
       ),
     });
   if (dash.rates.estimated.length > 0 && obs.loggedDays < 7 && !dismissed['rates-week'])
-    banners.push({ key: 'rates', node: <Banner icon="speedometer-slow" text="Log a few days and I'll work out your real rates." onDismiss={() => dismiss('rates-week')} /> });
+    banners.push({ key: 'rates', node: <Banner icon="speedometer-slow" text={t('Log a few days to work out your real rates.')} onDismiss={() => dismiss('rates-week')} /> });
   if (obs.ready && (dash.rates.estimated.length > 0 || drift) && !dismissed[observedKey])
     banners.push({
       key: 'observed',
       node: (
         <Banner
-          icon="chart-line"
-          text={`A week of logs in: you average ${fmt(obs.medianSteps)} steps and ${fmt(obs.medianFlowers)} flowers a day.${obs.bikeFlowersPerHour ? ` Biking, you plant about ${fmt(obs.bikeFlowersPerHour)} an hour.` : ''}`}
-          action={{ label: 'Compare with my rates', onPress: () => router.push('/settings') }}
+          icon="chart-box"
+          text={`${t('A week of logs in: you average {steps} steps and {flowers} flowers a day.', { steps: fmt(obs.medianSteps), flowers: fmt(obs.medianFlowers) })}${obs.bikeFlowersPerHour ? ` ${t('Biking, you plant about {n} an hour.', { n: fmt(obs.bikeFlowersPerHour) })}` : ''}`}
+          action={{ label: t('Compare with your rates'), onPress: () => router.push('/settings') }}
           onDismiss={() => dismiss(observedKey)}
         />
       ),
@@ -132,7 +135,6 @@ export default function Home() {
         if (settings.updates.enabled) await runUpdateCheck().catch(() => {});
         await scheduleNotifications().catch(() => {});
       }}
-      bottomExtra={<Walker bottom={TAB_BAR_SPACE + 4} />}
     >
       {cards.map((card, i) => (
         <StaggerIn key={(card as { key: string }).key ?? i} index={i}>

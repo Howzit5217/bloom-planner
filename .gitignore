@@ -46,3 +46,6 @@ yarn-error.*
 *.keystore
 signing.properties
 coverage/
+
+# Skia for web: copied from canvaskit-wasm when the web version is built (8 MB, never committed)
+public/canvaskit.wasm

@@ -11,13 +11,16 @@ import {
   type ProjectedLevel,
 } from './plan';
 import { initialState, replayLog, type ReplayResult } from './progress';
-import { observedRates, resolveRates, type ObservedRates } from './rates';
+import { flowerDays, observedRates, resolveRates, type ObservedRates } from './rates';
 import { standing, type Standing } from './standing';
 import { recentDays, streak } from './streak';
+import { planDifficulty, type PlanDifficulty } from './difficulty';
+import { MAX_STEPS_PER_DAY } from './goalCheck';
 import { timeCost, type TimeCost } from './timecost';
 import type { DayEntry, LevelState, LevelTable, Overrides, Profile, ReqFn, Requirement, ResolvedRates } from './types';
 
-export const IMPOSSIBLE_STEPS_PER_DAY = 50000;
+/** Above this the Home screen gives an honest heads-up. The same limit blocks such goals at setup. */
+export const IMPOSSIBLE_STEPS_PER_DAY = MAX_STEPS_PER_DAY;
 
 export interface DashboardInput {
   table: LevelTable;
@@ -78,6 +81,8 @@ export interface Dashboard {
   projected: ProjectedLevel[];
   nextMilestone: ProjectedLevel | null;
   impossible: { stepsPerDay: number; walkHours: number } | null;
+  /** How hard the rest of the plan is, at its busiest (only while there's a plan to follow). */
+  difficulty: PlanDifficulty | null;
 }
 
 const ring = (done: number, need: number): RingData => ({
@@ -87,7 +92,9 @@ const ring = (done: number, need: number): RingData => ({
   fraction: need > 0 ? Math.min(1, Math.max(0, done / need)) : 1,
 });
 
-export function computeDashboard({ table, overrides, profile, entries, seasonRates, today }: DashboardInput): Dashboard {
+export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today }: DashboardInput): Dashboard {
+  // Riding needs fair weather; walking plants flowers on any day.
+  const seasonRates = flowerDays(weather, profile.rates.bikes !== false);
   const req = makeReq(table, overrides);
   const replay = replayLog(profile, entries, req, table.maxLevel);
   const current = replay.state;
@@ -118,8 +125,7 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
   }
   const seg = segmentAt(plan, 0);
   const rates = resolveRates(profile.rates);
-  const rideShare = plan.calendarDays > 0 ? plan.rideableDays / plan.calendarDays : 1;
-  const time = timeCost(day0.steps, day0.flowersIfRiding, rideShare, rates);
+  const time = timeCost(day0.steps, day0.flowersIfRiding, rates);
 
   const projected = projectedLevels(plan);
   const peakSteps = peakStepsPerDay(plan);
@@ -176,5 +182,6 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     projected,
     nextMilestone: projected[0] ?? null,
     impossible,
+    difficulty: phase === 'active' && plan.status === 'ok' ? planDifficulty(peakSteps, peakFlowersPerRideDay(plan), rates) : null,
   };
 }

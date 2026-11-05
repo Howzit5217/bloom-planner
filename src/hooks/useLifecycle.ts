@@ -7,6 +7,7 @@ import { fetchClimate, fetchForecast } from '@/services/climateApi';
 import { applySchedule, cancelAll } from '@/services/notifications';
 import { checkForAppUpdate, fetchLatestLevelData } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
+import { setLang, t, tn } from '@/i18n';
 
 const DAY = 24 * 3600 * 1000;
 
@@ -72,7 +73,8 @@ export async function scheduleNotifications() {
       forecast = [];
     }
   }
-  const plan = planNotifications({ prefs, dash, seasonRates: st.seasonRates.map((r) => r.rideable), forecast, preset: st.settings.preset, now: new Date() });
+  setLang(st.settings.language);
+  const plan = planNotifications({ prefs, dash, seasonRates: st.seasonRates.map((r) => r.rideable), forecast, preset: st.settings.preset, now: new Date(), text: { t, tn } });
   await applySchedule(plan).catch(() => {});
   // Record caps (behind once a week, nudges twice a week, milestone once per level).
   const behind = plan.find((p) => p.kind === 'behind');

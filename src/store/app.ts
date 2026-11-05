@@ -8,6 +8,7 @@ import { replayLog } from '@/engine/progress';
 import { computeDashboard, type Dashboard } from '@/engine/summary';
 import type { DayEntry, LevelOverride, LevelTable, Overrides, PlayLocation, Profile, Rates, SeasonRate, ThresholdPreset } from '@/engine/types';
 import * as db from '@/storage/db';
+import type { LangPref } from '@/i18n';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 
@@ -34,6 +35,8 @@ export interface AppUpdateInfo {
 
 export interface Settings {
   theme: ThemePref;
+  /** 'system' follows the phone's language. */
+  language: LangPref;
   preset: ThresholdPreset;
   notifications: NotificationPrefs;
   dismissed: Record<string, boolean>;
@@ -42,6 +45,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
+  language: 'system',
   preset: 'normal',
   notifications: {
     enabled: false,

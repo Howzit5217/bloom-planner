@@ -1,36 +1,52 @@
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useMemo, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import Animated, { FadeIn, FadeInLeft, FadeInRight, FadeInUp, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_MANUAL_RATES, type ClimateCache } from '@/engine/climate';
 import { addDaysKey, daysBetween, fromKey, todayKey, type DayKey } from '@/engine/dates';
 import { fmt, fmtDate, roundNice } from '@/engine/format';
 import { makeReq } from '@/engine/levels';
 import { progressFromInput } from '@/engine/onboarding';
-import { buildPlan } from '@/engine/plan';
+import { planDifficulty, type PlanDifficulty } from '@/engine/difficulty';
+import { checkGoal } from '@/engine/goalCheck';
 import { DEFAULT_RATES, type RateKey } from '@/engine/rates';
 import type { PlayLocation, Profile, SeasonRate } from '@/engine/types';
+import { DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
+import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
 import { MonthBars } from '@/features/shared/MonthBars';
 import { PlaceFinder, type ClimateResult } from '@/features/shared/PlaceFinder';
 import { SeasonSliders } from '@/features/shared/SeasonSliders';
-import { BUNDLED_TABLE, useApp } from '@/store/app';
+import { useApp } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { DateField } from '@/ui/DateField';
+import { EdgeFade } from '@/ui/EdgeFade';
+import { ScrollRail, useScrollRail } from '@/ui/ScrollRail';
 import { Icon, type IconName } from '@/ui/Icon';
+import { IconChip } from '@/ui/IconChip';
 import { NumberField } from '@/ui/NumberField';
 import { PillButton } from '@/ui/PillButton';
 import { BloomFlower } from '@/ui/skia/BloomFlower';
 import { PetalBurst } from '@/ui/skia/PetalBurst';
 import { Ring } from '@/ui/skia/Ring';
-import { Seedling } from '@/ui/skia/Seedling';
+import { FlowerSprigs } from '@/ui/skia/FlowerSprigs';
+import { FlowerSteps } from '@/ui/skia/FlowerSteps';
+import { Segmented } from '@/ui/Segmented';
 import { Stepper } from '@/ui/Stepper';
-import { T } from '@/ui/T';
 import { Toggle } from '@/ui/Toggle';
+import { T } from '@/ui/T';
+import { tk, useT } from '@/i18n';
+import { taskText } from '@/i18n/level-text';
+import { useAppWidth } from '@/ui/layout';
 
 const STEPS = 8;
-const REQ = makeReq(BUNDLED_TABLE, {});
+// Flowers on every page: a row of sprigs on the first and last, and on the rest a few leaning in
+// from both sides of the screen low down, a different mix every visit.
+const sidePage = (step: number) => step >= 1 && step <= 6;
+/** Space above each page's content, inside the scroller. */
+const BODY_TOP = 12;
 
 function Title({ children, sub }: { children: string; sub?: string }) {
   return (
@@ -52,23 +68,29 @@ interface RateDraft {
   unknown: boolean;
 }
 
-const RATE_QUESTIONS: Array<{ key: RateKey; label: string; why: string; suffix: string }> = [
-  { key: 'walkStepsPerHour', label: 'Steps per hour walking', why: 'Sets how long your step target takes.', suffix: 'steps/h' },
-  { key: 'bikeFlowersPerHour', label: 'Flowers per hour biking', why: 'Biking plants far faster than walking.', suffix: 'flowers/h' },
-  { key: 'bikeStepsPerHour', label: 'Steps per hour biking', why: 'Biking may credit fewer steps. Check your own.', suffix: 'steps/h' },
-  { key: 'walkFlowersPerHour', label: 'Flowers per hour walking', why: "For days you don't take the bike.", suffix: 'flowers/h' },
+type RateQuestion = { key: RateKey; label: string; why: string; suffix: string };
+
+// Walking first (it earns every step and plants flowers too), then the bike (flowers only).
+const WALK_RATES: RateQuestion[] = [
+  { key: 'walkStepsPerHour', label: tk('Steps per hour walking'), why: tk('Sets how long your step target takes.'), suffix: tk('steps/h') },
+  { key: 'walkFlowersPerHour', label: tk('Flowers per hour walking'), why: tk('Flowers you plant on foot.'), suffix: tk('flowers/h') },
 ];
+const BIKE_RATES: RateQuestion[] = [{ key: 'bikeFlowersPerHour', label: tk('Flowers per hour biking'), why: tk('Flowers you plant on a ride.'), suffix: tk('flowers/h') }];
 
 export function Wizard() {
-  const { c } = useTheme();
+  const { c, reduceMotion } = useTheme();
+  const { t, tn } = useT();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const width = useAppWidth();
   const complete = useApp((s) => s.completeOnboarding);
   const preset = useApp((s) => s.settings.preset);
-  const req = REQ;
+  // The newest level table the app has (it grows when the game adds levels).
+  const table = useApp((s) => s.table);
+  const req = useMemo(() => makeReq(table, {}), [table]);
   const today = todayKey();
 
   const [step, setStep] = useState(0);
+  const [dir, setDir] = useState(1);
   const [level, setLevel] = useState(1);
   const [remainingMode, setRemainingMode] = useState(true);
   const [stepsVal, setStepsVal] = useState<number | null>(null);
@@ -82,10 +104,11 @@ export function Wizard() {
   const [rates, setRates] = useState<Record<RateKey, RateDraft>>(() => ({
     walkStepsPerHour: { value: DEFAULT_RATES.walkStepsPerHour, unknown: false },
     bikeFlowersPerHour: { value: DEFAULT_RATES.bikeFlowersPerHour, unknown: false },
-    bikeStepsPerHour: { value: DEFAULT_RATES.bikeStepsPerHour, unknown: false },
     walkFlowersPerHour: { value: DEFAULT_RATES.walkFlowersPerHour, unknown: false },
   }));
   const [treadmill, setTreadmill] = useState<boolean | null>(null);
+  // Biking is on unless you say you only walk; then flowers come from walking, on any day.
+  const [bikes, setBikes] = useState(true);
   const [placeMode, setPlaceMode] = useState<'find' | 'manual'>('find');
   const [manualRates, setManualRates] = useState<number[]>([...DEFAULT_MANUAL_RATES]);
   const [climatePick, setClimatePick] = useState<ClimateResult | null>(null);
@@ -96,37 +119,96 @@ export function Wizard() {
   // A blank field means nothing entered yet: show the ring empty, not full.
   const progress = progressFromInput({ level, remainingMode, steps: stepsVal ?? (remainingMode ? next.steps : 0), flowers: flowersVal ?? (remainingMode ? next.flowers : 0), lifetimeSteps: lifetime }, req);
   const needFlowers = next.flowers > 0;
+  // The first levels come with the game's tutorial: nothing to walk or plant, so nothing to enter.
+  const tutorial = next.steps === 0 && next.flowers === 0;
+  // Only up to level 100, and only once this level's steps are complete, is the lifetime total useful.
+  const lifetimeRelevant = next.stepsMode === 'lifetime' && stepsVal != null && (remainingMode ? stepsVal === 0 : stepsVal >= next.steps);
   // A lifetime-step level can legitimately be "over" in so-far mode (a banked head start).
   const stepsOverOk = next.stepsMode === 'lifetime' && !remainingMode;
-  const stepsErr = stepsVal != null && stepsVal > next.steps && !stepsOverOk ? `That's more than this level needs (${fmt(next.steps)}).` : null;
-  const flowersErr = flowersVal != null && flowersVal > next.flowers ? `That's more than this level needs (${fmt(next.flowers)}).` : null;
+  const stepsErr = stepsVal != null && stepsVal > next.steps && !stepsOverOk ? t("That's more than this level needs ({n}).", { n: fmt(next.steps) }) : null;
+  const flowersErr = flowersVal != null && flowersVal > next.flowers ? t("That's more than this level needs ({n}).", { n: fmt(next.flowers) }) : null;
 
   const goalDays = goalDate ? daysBetween(today, goalDate) : 0;
-  const goalErr = goalLevel <= level ? 'The goal has to be above your current level.' : goalDate && goalDays <= 0 ? 'Pick a date in the future.' : null;
-  const preview =
-    !goalDate || goalLevel <= level || goalDays <= 0
-      ? null
-      : buildPlan({ start: { level, steps: progress.stepsIntoLevel, flowers: progress.flowersIntoLevel }, startKey: addDaysKey(today, 1), goalKey: goalDate, goalLevel, seasonRates: new Array(12).fill(1), req });
+  // Is the goal reasonable? Before the weather is known, every day counts as a riding day; the
+  // last page checks again with the real months and biking rate.
+  const goalBase = {
+    start: { level, steps: progress.stepsIntoLevel, flowers: progress.flowersIntoLevel },
+    startKey: addDaysKey(today, 1),
+    goalLevel,
+    seasonRates: seasons ? seasons.rates.map((r) => r.rideable) : new Array(12).fill(1),
+    req,
+    bikeFlowersPerHour: rates.bikeFlowersPerHour.unknown ? DEFAULT_RATES.bikeFlowersPerHour : (rates.bikeFlowersPerHour.value ?? DEFAULT_RATES.bikeFlowersPerHour),
+    bikes,
+    walkFlowersPerHour: rates.walkFlowersPerHour.unknown ? DEFAULT_RATES.walkFlowersPerHour : (rates.walkFlowersPerHour.value ?? DEFAULT_RATES.walkFlowersPerHour),
+  };
+  const check = goalDate ? checkGoal({ ...goalBase, goalKey: goalDate }) : null;
+  const preview = check?.ok ? check.plan : null;
+  // How hard the plan is, at your walking and biking rates (typical ones until you've said).
+  const walkRate = rates.walkStepsPerHour.unknown ? DEFAULT_RATES.walkStepsPerHour : (rates.walkStepsPerHour.value ?? DEFAULT_RATES.walkStepsPerHour);
+  const difficulty: PlanDifficulty | null =
+    check?.ok && preview?.status === 'ok' ? planDifficulty(check.stepsPerDay, check.flowersPerRideDay, { walkStepsPerHour: walkRate, bikeFlowersPerHour: goalBase.bikeFlowersPerHour, walkFlowersPerHour: goalBase.walkFlowersPerHour, treadmillAvailable: false, bikes }) : null;
+  const earliest = useEarliestDate(check && !check.ok ? goalBase : null);
 
-  const go = (n: number) => setStep(Math.max(0, Math.min(STEPS - 1, n)));
+  const go = (n: number) => {
+    const to = Math.max(0, Math.min(STEPS - 1, n));
+    setDir(to >= step ? 1 : -1);
+    setStep(to);
+  };
+  const pickLevel = (v: number) => {
+    if (v === level) return;
+    setLevel(v);
+    if (goalLevel <= v) setGoalLevel(v + 1);
+    // Progress numbers belong to one level: start them fresh when it changes.
+    setStepsVal(null);
+    setFlowersVal(null);
+    setLifetime(null);
+  };
+
+  const rateOk = (q: RateQuestion) => rates[q.key].unknown || (rates[q.key].value ?? 0) > 0;
+  const rateFields = (qs: RateQuestion[]) =>
+    qs.map((q) => {
+      const r = rates[q.key];
+      return (
+        <View key={q.key} style={{ gap: 8 }}>
+          {r.unknown ? (
+            <View>
+              <T v="label" soft style={{ marginBottom: 6 }}>
+                {t(q.label)}
+              </T>
+              <Card variant="deep" style={{ paddingVertical: 14 }}>
+                <T v="small">{t('A typical {n} for now. Your logs will show your real rate.', { n: fmt(DEFAULT_RATES[q.key]) })}</T>
+              </Card>
+            </View>
+          ) : (
+            <NumberField label={t(q.label)} value={r.value} onChange={(v) => setRates((s) => ({ ...s, [q.key]: { ...s[q.key], value: v } }))} suffix={t(q.suffix)} hint={t(q.why)} size="md" />
+          )}
+          <Chip
+            label={t('Not sure yet')}
+            icon={r.unknown ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+            on={r.unknown}
+            onPress={() => setRates((s) => ({ ...s, [q.key]: { value: s[q.key].value ?? DEFAULT_RATES[q.key], unknown: !s[q.key].unknown } }))}
+          />
+        </View>
+      );
+    });
 
   const canNext = (() => {
     switch (step) {
       case 2:
-        return stepsVal != null && (!needFlowers || flowersVal != null) && !stepsErr && !flowersErr;
+        return tutorial || (stepsVal != null && (!needFlowers || flowersVal != null) && !stepsErr && !flowersErr);
       case 3:
-        return !!goalDate && !goalErr;
+        return !!check?.ok;
       case 4:
-        return RATE_QUESTIONS.every((q) => rates[q.key].unknown || (rates[q.key].value ?? 0) > 0);
+        return WALK_RATES.every(rateOk) && treadmill != null;
       case 5:
-        return treadmill != null;
+        return !bikes || BIKE_RATES.every(rateOk);
       default:
         return true;
     }
   })();
 
   const finish = async () => {
-    if (!goalDate || saving) return;
+    if (!goalDate || saving || !check?.ok) return;
     setSaving(true);
     const profile: Profile = {
       currentLevel: level,
@@ -141,9 +223,9 @@ export function Wizard() {
       rates: {
         walkStepsPerHour: rates.walkStepsPerHour.unknown ? null : rates.walkStepsPerHour.value,
         bikeFlowersPerHour: rates.bikeFlowersPerHour.unknown ? null : rates.bikeFlowersPerHour.value,
-        bikeStepsPerHour: rates.bikeStepsPerHour.unknown ? null : rates.bikeStepsPerHour.value,
         walkFlowersPerHour: rates.walkFlowersPerHour.unknown ? null : rates.walkFlowersPerHour.value,
         treadmillAvailable: !!treadmill,
+        bikes,
       },
       createdAt: new Date().toISOString(),
       startDate: today,
@@ -156,38 +238,41 @@ export function Wizard() {
     switch (step) {
       case 0:
         return (
-          <View style={{ alignItems: 'center', paddingTop: 24, gap: 14 }}>
-            <BloomFlower size={Math.min(240, width * 0.6)} />
-            <T v="display" center color={c.leafDeep}>
-              Bloom Planner
-            </T>
-            <T v="body" center style={{ maxWidth: 340 }}>
-              Tell me your level and your goal. Every day I'll tell you whether you're on pace, and exactly what it'll take.
-            </T>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 24, gap: 14 }}>
+            <BloomFlower size={Math.min(260, width * 0.64)} />
+            <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(900).duration(480)}>
+              <T v="display" center color={c.leafDeep}>
+                {t('Bloom Planner')}
+              </T>
+            </Animated.View>
+            <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(1080).duration(480)}>
+              <T v="body" center style={{ maxWidth: 340 }}>
+                {t("Enter your level and your goal. Every day you'll see whether you're on pace, and exactly what it'll take.")}
+              </T>
+            </Animated.View>
           </View>
         );
       case 1:
         return (
           <View>
-            <Title sub="The level on your profile right now.">Where are you now?</Title>
-            <Stepper label="Current level" value={level} min={1} max={BUNDLED_TABLE.maxLevel - 1} onChange={(v) => {
-              setLevel(v);
-              if (goalLevel <= v) setGoalLevel(v + 1);
-            }} />
-            <Card style={{ marginTop: 22 }}>
+            <Title sub={t('The level on your profile right now.')}>{t('Where Are You Now?')}</Title>
+            <Stepper label={t('Current level')} value={level} min={1} max={table.maxLevel - 1} onChange={pickLevel} />
+            <Card style={{ marginTop: 18 }}>
               <T v="bodyBold">
                 {next.steps === 0 && next.flowers === 0
-                  ? `Level ${level + 1} comes with the tutorial.`
-                  : `Level ${level} needs ${fmt(next.steps)} steps${next.flowers > 0 ? ` and ${fmt(next.flowers)} flowers` : ''} to reach ${level + 1}.`}
+                  ? t('Level {level} comes with the tutorial.', { level: level + 1 })
+                  : next.flowers > 0
+                    ? t('Level {level} needs {steps} steps and {flowers} flowers to reach {next}.', { level, steps: fmt(next.steps), flowers: fmt(next.flowers), next: level + 1 })
+                    : t('Level {level} needs {steps} steps to reach {next}.', { level, steps: fmt(next.steps), next: level + 1 })}
               </T>
               {next.task && next.task !== 'Tutorial' ? (
                 <T v="small" soft style={{ marginTop: 4 }}>
-                  Also: {next.task}.
+                  {t('Also: {task}.', { task: taskText(next.task) })}
                 </T>
               ) : null}
               <T v="caption" soft style={{ marginTop: 8 }}>
-                {next.source === 'game' ? 'Checked in the game. ' : next.source === 'estimated' ? "Nobody has published this level yet, so it's an estimate. " : 'From the Pikmin wiki. '}
-                {next.stepsMode === 'perLevel' ? 'From level 101 on, extra steps do not carry over to the next level.' : 'Up to level 100 the game counts lifetime steps, so extra steps carry over.'}
+                {next.source === 'game' ? t('Checked in the game.') : next.source === 'estimated' ? t("Nobody has published this level yet, so it's an estimate.") : t('From the Pikmin wiki.')}{' '}
+                {next.stepsMode === 'perLevel' ? t('From level 101 on, extra steps do not carry over to the next level.') : t('Up to level 100 the game counts lifetime steps, so extra steps carry over.')}
               </T>
             </Card>
           </View>
@@ -195,50 +280,77 @@ export function Wizard() {
       case 2:
         return (
           <View style={{ gap: 16 }}>
-            <Title sub={`Toward level ${level + 1}.`}>How far into this level?</Title>
-            <Toggle label="I'd rather enter what's remaining" hint="Your profile shows this under 'Next steps to level up'." value={remainingMode} onChange={(v) => {
-              setRemainingMode(v);
-              setStepsVal(null);
-              setFlowersVal(null);
-            }} />
-            <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-              <NumberField style={{ flex: 1 }} label={remainingMode ? 'Steps to go' : 'Steps so far this level'} value={stepsVal} onChange={setStepsVal} error={stepsErr} />
-              <Ring size={84} thickness={10} fraction={next.steps > 0 ? progress.stepsIntoLevel / next.steps : 1} colors={[c.leaf, c.teal]} accessibilityLabel={`Steps ${Math.round((progress.stepsIntoLevel / Math.max(1, next.steps)) * 100)} percent done`}>
-                <T v="smallBold">{Math.round(Math.min(1, progress.stepsIntoLevel / Math.max(1, next.steps)) * 100)}%</T>
-              </Ring>
-            </View>
-            {needFlowers ? (
-              <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-                <NumberField style={{ flex: 1 }} label={remainingMode ? 'Flowers to go' : 'Flowers planted this level'} value={flowersVal} onChange={setFlowersVal} error={flowersErr} />
-                <Ring size={84} thickness={10} fraction={progress.flowersIntoLevel / next.flowers} colors={[c.petalRed, c.petalYellow]} accessibilityLabel={`Flowers ${Math.round((progress.flowersIntoLevel / next.flowers) * 100)} percent done`}>
-                  <T v="smallBold">{Math.round((progress.flowersIntoLevel / next.flowers) * 100)}%</T>
-                </Ring>
-              </View>
-            ) : (
-              <T v="small" soft>
-                No flowers needed for this level.
-              </T>
-            )}
-            {next.stepsMode === 'lifetime' ? (
-              <NumberField
-                label="Total recorded steps (optional)"
-                value={lifetime}
-                onChange={setLifetime}
-                hint="Below 100 the game counts lifetime steps. If it shows 0 steps to go, this tells me your head start."
-                size="md"
-              />
+            <Title sub={t('Toward level {level}.', { level: level + 1 })}>{t('How Far Into This Level?')}</Title>
+            {tutorial ? (
+              <Card variant="panel" style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+                <IconChip name="school" bg="rgba(255,255,255,0.18)" fg={c.onPanel} />
+                <T v="bodyBold" color={c.onPanel} style={{ flex: 1 }}>
+                  {t("Level {level} comes with the tutorial, so there's nothing to enter here.", { level: level + 1 })}
+                </T>
+              </Card>
             ) : null}
+            {tutorial ? null : (
+              <>
+                <View style={{ gap: 6 }}>
+                  <Segmented<'left' | 'done'>
+                    label={t('How to enter it')}
+                    value={remainingMode ? 'left' : 'done'}
+                    onChange={(k) => {
+                      if ((k === 'left') === remainingMode) return;
+                      setRemainingMode(k === 'left');
+                      setStepsVal(null);
+                      setFlowersVal(null);
+                      setLifetime(null);
+                    }}
+                    options={[
+                      { key: 'left', label: t("What's left") },
+                      { key: 'done', label: t('Done so far') },
+                    ]}
+                  />
+                  <T v="caption" soft center>
+                    {remainingMode ? t("Your profile's level-up screen shows what's still to go.") : t('What you have already walked and planted toward this level.')}
+                  </T>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+                  <NumberField style={{ flex: 1 }} label={remainingMode ? t('Steps to go') : t('Steps so far this level')} value={stepsVal} onChange={setStepsVal} error={stepsErr} />
+                  <Ring size={84} thickness={10} fraction={next.steps > 0 ? progress.stepsIntoLevel / next.steps : 1} colors={[c.leaf, c.teal]} accessibilityLabel={t('Steps {pct} percent done', { pct: Math.round((progress.stepsIntoLevel / Math.max(1, next.steps)) * 100) })}>
+                    <T v="smallBold">{Math.round(Math.min(1, progress.stepsIntoLevel / Math.max(1, next.steps)) * 100)}%</T>
+                  </Ring>
+                </View>
+                {needFlowers ? (
+                  <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+                    <NumberField style={{ flex: 1 }} label={remainingMode ? t('Flowers to go') : t('Flowers planted this level')} value={flowersVal} onChange={setFlowersVal} error={flowersErr} />
+                    <Ring size={84} thickness={10} fraction={progress.flowersIntoLevel / next.flowers} colors={[c.petalRed, c.petalYellow]} accessibilityLabel={t('Flowers {pct} percent done', { pct: Math.round((progress.flowersIntoLevel / next.flowers) * 100) })}>
+                      <T v="smallBold">{Math.round((progress.flowersIntoLevel / next.flowers) * 100)}%</T>
+                    </Ring>
+                  </View>
+                ) : (
+                  <T v="small" soft>
+                    {t('No flowers needed for this level.')}
+                  </T>
+                )}
+                {lifetimeRelevant ? (
+                  <NumberField
+                    label={t('Total recorded steps (optional)')}
+                    value={lifetime}
+                    onChange={setLifetime}
+                    hint={t('Your steps for this level are already done. Up to level 100 the game counts lifetime steps, so your total shows how far ahead you are.')}
+                    size="md"
+                  />
+                ) : null}
+              </>
+            )}
             <Pressable accessibilityRole="button" onPress={() => setShowToday((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
               <Icon name={showToday ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
               <T v="bodyBold" color={c.leafDeep}>
-                Already been out today?
+                {t('Already been out today?')}
               </T>
             </Pressable>
             {showToday ? (
               <Card variant="deep" style={{ gap: 12 }}>
-                <T v="small">The numbers above already include today. Tell me today's totals so far, so tonight's log doesn't count them twice.</T>
-                <NumberField label="Steps so far today" value={todaySteps} onChange={setTodaySteps} size="md" />
-                <NumberField label="Flowers so far today" value={todayFlowers} onChange={setTodayFlowers} size="md" />
+                <T v="small">{t("The numbers above already include today. Enter today's totals so far, so tonight's log doesn't count them twice.")}</T>
+                <NumberField label={t('Steps so far today')} value={todaySteps} onChange={setTodaySteps} size="md" />
+                <NumberField label={t('Flowers so far today')} value={todayFlowers} onChange={setTodayFlowers} size="md" />
               </Card>
             ) : null}
           </View>
@@ -246,23 +358,31 @@ export function Wizard() {
       case 3:
         return (
           <View style={{ gap: 18 }}>
-            <Title>What's the goal?</Title>
+            <Title>{t("What's the Goal?")}</Title>
             <View>
               <T v="label" soft center style={{ marginBottom: 8 }}>
-                Target level
+                {t('Target level')}
               </T>
-              <Stepper label="Target level" value={goalLevel} min={level + 1} max={BUNDLED_TABLE.maxLevel} onChange={setGoalLevel} />
+              <Stepper label={t('Target level')} value={goalLevel} min={level + 1} max={table.maxLevel} onChange={setGoalLevel} />
             </View>
-            <DateField label="Target date" value={goalDate} onChange={setGoalDate} minimumDate={fromKey(addDaysKey(today, 1))} error={goalErr && goalDate ? goalErr : null} />
-            {goalDate && !goalErr ? (
+            <DateField label={t('Target date')} value={goalDate} onChange={setGoalDate} minimumDate={fromKey(addDaysKey(today, 1))} />
+            {check && !check.ok ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} /> : null}
+            {check?.ok ? (
               <Card variant="panel">
                 <T v="h3" color={c.onPanel}>
-                  That's {goalLevel - level} level{goalLevel - level === 1 ? '' : 's'} in {goalDays} day{goalDays === 1 ? '' : 's'}.
+                  {t("That's {levels} in {days}.", { levels: tn(goalLevel - level, '{n} level', '{n} levels'), days: tn(goalDays, '{n} day', '{n} days', { n: fmt(goalDays) }) })}
                 </T>
                 {preview && preview.status === 'ok' ? (
                   <T v="small" color={c.onPanelSoft} style={{ marginTop: 4 }}>
-                    Roughly {fmt(roundNice(preview.avgStepsPerDay))} steps a day{preview.remaining.flowers > 0 ? ` and ${fmt(roundNice(preview.avgFlowersPerRideDay))} flowers per riding day` : ''}, before weather. I'll refine it once I know your seasons.
+                    {preview.remaining.flowers > 0
+                      ? t('Roughly {steps} steps a day and {flowers} flowers per riding day, before weather. Your seasons will fine-tune it.', { steps: fmt(roundNice(preview.avgStepsPerDay)), flowers: fmt(roundNice(preview.avgFlowersPerRideDay)) })
+                      : t('Roughly {steps} steps a day, before weather. Your seasons will fine-tune it.', { steps: fmt(roundNice(preview.avgStepsPerDay)) })}
                   </T>
+                ) : null}
+                {difficulty ? (
+                  <View style={{ marginTop: 12 }}>
+                    <DifficultyPill d={difficulty} onPanel />
+                  </View>
                 ) : null}
               </Card>
             ) : null}
@@ -271,46 +391,49 @@ export function Wizard() {
       case 4:
         return (
           <View style={{ gap: 18 }}>
-            <Title sub="This is where the time maths comes from. Rough guesses are fine.">How fast do you move?</Title>
-            {RATE_QUESTIONS.map((q) => {
-              const r = rates[q.key];
-              return (
-                <View key={q.key} style={{ gap: 8 }}>
-                  {r.unknown ? (
-                    <View>
-                      <T v="label" soft style={{ marginBottom: 6 }}>
-                        {q.label}
-                      </T>
-                      <Card variant="deep" style={{ paddingVertical: 14 }}>
-                        <T v="small">I'll use {fmt(DEFAULT_RATES[q.key])} for now and learn your real rate from your logs.</T>
-                      </Card>
-                    </View>
-                  ) : (
-                    <NumberField label={q.label} value={r.value} onChange={(v) => setRates((s) => ({ ...s, [q.key]: { ...s[q.key], value: v } }))} suffix={q.suffix} hint={q.why} size="md" />
-                  )}
-                  <Chip
-                    label="I don't know yet"
-                    icon={r.unknown ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
-                    on={r.unknown}
-                    onPress={() => setRates((s) => ({ ...s, [q.key]: { value: s[q.key].value ?? DEFAULT_RATES[q.key], unknown: !s[q.key].unknown } }))}
-                  />
-                </View>
-              );
-            })}
+            <Title sub={t('Walking earns every step, and plants flowers too. Rough guesses are fine.')}>{t('How Do You Walk?')}</Title>
+            {rateFields(WALK_RATES)}
+            <View style={{ gap: 12, marginTop: 4 }}>
+              <T v="h3">{t('Can You Get Steps Indoors?')}</T>
+              <T v="small" soft style={{ marginTop: -8 }}>
+                {t('Like a treadmill, or walking at work.')}
+              </T>
+              <Choice icon="walk" title={t('Yes, Indoors Too')} text={t('Steps count anywhere, so the plan includes walking inside as well as out.')} on={treadmill === true} onPress={() => setTreadmill(true)} />
+              <Choice icon="pine-tree" title={t('No, Only Outside')} text={t('All your walking counts as time outdoors, with a plain warning if a day gets too long.')} on={treadmill === false} onPress={() => setTreadmill(false)} />
+            </View>
           </View>
         );
       case 5:
         return (
-          <View style={{ gap: 14 }}>
-            <Title sub="Can you get steps indoors, like a treadmill or walking at work?">Do you have indoor options?</Title>
-            <Choice icon="walk" title="Yes, I can" text="I'll split each day's steps into the ones you get outside while planting, and the rest you can walk indoors." on={treadmill === true} onPress={() => setTreadmill(true)} />
-            <Choice icon="pine-tree" title="No, steps come from outside" text="All your steps happen out of doors, so I'll count that time as outdoor time and tell you plainly if a day gets too long." on={treadmill === false} onPress={() => setTreadmill(false)} />
+          <View style={{ gap: 18 }}>
+            <Title sub={t('A ride plants flowers far faster than walking, but earns no steps.')}>{t('And on the Bike?')}</Title>
+            <Toggle label={t('Biking for Flowers')} hint={t('Turn off to plan flowers from walking only. Walking plants them on any day, rain or shine.')} value={bikes} onChange={setBikes} />
+            {bikes ? (
+              <Animated.View key="bike" entering={FadeIn.duration(220)} style={{ gap: 18 }}>
+                {rateFields(BIKE_RATES)}
+                <Card variant="deep" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                  <IconChip name="bike" bg={c.card} />
+                  <T v="small" style={{ flex: 1 }}>
+                    {t("Steps come from your phone's step counter, so a bike ride adds none. Your steps are planned from walking only.")}
+                  </T>
+                </Card>
+              </Animated.View>
+            ) : (
+              <Animated.View key="walk" entering={FadeIn.duration(220)}>
+                <Card variant="deep" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                  <IconChip name="walk" bg={c.card} />
+                  <T v="small" style={{ flex: 1 }}>
+                    {t('Walking it is. Flowers are planned at your walking pace, and the weather step is skipped, since it only matters for riding.')}
+                  </T>
+                </Card>
+              </Animated.View>
+            )}
           </View>
         );
       case 6:
         return (
           <View style={{ gap: 14 }}>
-            <Title sub="Planting needs you outside. Where do you usually walk and ride?">Where do you play?</Title>
+            <Title sub={t('Planting needs you outside. Where do you usually walk and ride?')}>{t('Where Do You Play?')}</Title>
             {placeMode === 'find' && !seasons ? (
               <PlaceFinder
                 preset={preset}
@@ -326,11 +449,11 @@ export function Wizard() {
               />
             ) : placeMode === 'manual' ? (
               <View style={{ gap: 14 }}>
-                <T v="bodyBold">Days you'd realistically ride, by month</T>
+                <T v="bodyBold">{t("Days you'd realistically ride, by month")}</T>
                 <MonthBars rates={manualRates} width={width - 48} height={90} />
                 <SeasonSliders values={manualRates} onChange={setManualRates} />
                 <PillButton
-                  label="Use these"
+                  label={t('Use these')}
                   icon="check"
                   onPress={() => {
                     setSeasons({
@@ -342,62 +465,108 @@ export function Wizard() {
                   }}
                 />
                 <PillButton
-                  label="Skip: treat every day as rideable"
+                  label={t('Skip: treat every day as rideable')}
                   variant="ghost"
                   onPress={() => {
                     setSeasons(null);
                     go(7);
                   }}
                 />
-                <PillButton label="Look up a place instead" variant="ghost" onPress={() => setPlaceMode('find')} />
+                <PillButton label={t('Look up a place instead')} variant="ghost" onPress={() => setPlaceMode('find')} />
               </View>
             ) : null}
             <T v="small" soft>
-              This stops the app promising you a January you can't ride.
+              {t("This stops the app promising you a January you can't ride.")}
             </T>
           </View>
         );
       default:
-        return <Done level={level} goalLevel={goalLevel} goalDate={goalDate} />;
+        return (
+          <View style={{ gap: 18 }}>
+            <Done level={level} goalLevel={goalLevel} goalDate={goalDate} blocked={!!check && !check.ok} difficulty={difficulty} />
+            {check && !check.ok ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} /> : null}
+          </View>
+        );
     }
   })();
 
+  // The room a page leaves below its content (the welcome fills the screen, so it has its own).
+  const [boxH, setBoxH] = useState(0);
+  const [bodyH, setBodyH] = useState({ step: -1, h: 0 });
+  const room = step !== 0 && bodyH.step === step && boxH > 0 ? boxH - BODY_TOP - bodyH.h - 10 : -1;
+  // Each page's flowers take the room it leaves them, and fade aside whenever the page grows into
+  // it or the keyboard opens, so they never sit over a card or a field.
+  const sprigMax = step === 7 ? 130 : 300;
+  const sprigMin = step === 7 ? 100 : 140;
+  const [sprigRoom, setSprigRoom] = useState({ step: -1, h: 0 });
+  // While the keyboard is up the flowers step aside, and come back just as they were.
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardUp(true));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardUp(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const roomFor = Math.min(sprigMax, Math.floor(room));
+  // The first room a page offers sets its flowers' height at once.
+  if (!keyboardUp && roomFor >= sprigMin && sprigRoom.step !== step) setSprigRoom({ step, h: roomFor });
+  useEffect(() => {
+    // After that, follow the page only once it settles (not through every frame of the keyboard),
+    // and only when they no longer fit or there's much more room. Too little room just hides them.
+    if (keyboardUp || roomFor < sprigMin || sprigRoom.step !== step || (roomFor >= sprigRoom.h - 6 && roomFor <= sprigRoom.h + 40)) return;
+    const id = setTimeout(() => setSprigRoom({ step, h: roomFor }), 450);
+    return () => clearTimeout(id);
+  }, [keyboardUp, roomFor, sprigMin, sprigRoom, step]);
+  const sprigH = step === 0 ? 130 : sprigRoom.step === step ? sprigRoom.h : 0;
+  const sprigsFit = step === 0 || (!keyboardUp && sprigH >= sprigMin && room >= sprigH - 6);
+  const sprigFade = useAnimatedStyle(() => ({ opacity: withTiming(sprigsFit ? 1 : 0, { duration: 220 }) }));
+
+  // Without a bike there's no weather page: it only matters for riding.
+  const rail = useScrollRail();
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const onScroll = useAnimatedScrollHandler((e) => rail.track(e));
+  const back = () => (step === 6 && placeMode === 'manual' && !seasons ? setPlaceMode('find') : go(step === 7 && !bikes ? 5 : step - 1));
+
   const primary =
     step === 0
-      ? { label: "Let's get set up", onPress: () => go(1) }
+      ? { label: t('Time to get growing'), onPress: () => go(1) }
       : step === 6
         ? null
         : step === 7
-          ? { label: saving ? 'Planting…' : 'Take me home', onPress: finish }
-          : { label: 'Next', onPress: () => go(step + 1) };
+          ? { label: saving ? t('Planting…') : t('Start blooming'), onPress: finish }
+          : { label: t('Next'), onPress: () => go(step === 5 && !bikes ? 7 : step + 1) };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.canvas }}>
-      <View style={{ paddingTop: insets.top + 6, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 56 }}>
-        {step > 0 && step < 7 ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (step === 6 && placeMode === 'manual' && !seasons ? setPlaceMode('find') : go(step - 1))} hitSlop={10} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, minWidth: 44 }}>
-            <Icon name="chevron-left" size={26} color={c.leafDeep} />
-            <T v="bodyBold" color={c.leafDeep}>
-              Back
-            </T>
-          </Pressable>
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
-        {step > 0 && step < 7 ? <Seedling stage={step} size={64} /> : <View style={{ width: 64, height: 64 }} />}
-        <View style={{ width: 70 }} />
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.canvas }}>
+      <View style={{ height: insets.top + 18 }} />
+      <View style={{ flex: 1 }} onLayout={(e) => setBoxH(e.nativeEvent.layout.height)}>
+        {sprigH >= sprigMin || step === 0 ? (
+          <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0, bottom: 0 }, sprigFade]}>
+            <FlowerSprigs key={`${step}-${sprigH}`} height={sprigH} sides={sidePage(step)} />
+          </Animated.View>
+        ) : null}
+        <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: 28, flexGrow: 1 }}>
+          <Animated.View key={step} entering={reduceMotion ? FadeIn.duration(160) : (dir > 0 ? FadeInRight : FadeInLeft).duration(300)} style={{ flex: 1 }}>
+            {step === 0 ? body : <View onLayout={(e) => setBodyH({ step, h: e.nativeEvent.layout.height })}>{body}</View>}
+          </Animated.View>
+        </Animated.ScrollView>
+        <EdgeFade edge="top" color={c.canvas} />
+        <EdgeFade edge="bottom" color={c.canvas} />
+        <ScrollRail rail={rail} scrollRef={scrollRef} />
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, flexGrow: 1 }}>
-        <Animated.View key={step} entering={FadeIn.duration(260)} style={{ flex: 1 }}>
-          {body}
-        </Animated.View>
-      </ScrollView>
       <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 14, paddingTop: 8, gap: 14 }}>
-        {primary ? <PillButton label={primary.label} onPress={primary.onPress} disabled={!canNext || saving} /> : null}
-        <Dots step={step} />
+        {step > 0 || primary ? (
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {step > 0 ? <BackTile label={t('Back')} onPress={back} /> : null}
+            {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 7 && !check?.ok)} /> : null}
+          </View>
+        ) : null}
+        <FlowerSteps step={step} count={STEPS} />
         {step === 0 ? (
           <T v="caption" soft center>
-            Unofficial fan-made planner. Not affiliated with Scopely, Nintendo or Pikmin Bloom.
+            {t('Unofficial fan-made planner. Not affiliated with Scopely, Nintendo or Pikmin Bloom.')}
           </T>
         ) : null}
       </View>
@@ -405,14 +574,22 @@ export function Wizard() {
   );
 }
 
-function Dots({ step }: { step: number }) {
+/** Back, as a quiet grey tile beside the main button. */
+function BackTile({ label, onPress }: { label: string; onPress: () => void }) {
   const { c } = useTheme();
   return (
-    <View accessible accessibilityLabel={`Step ${step + 1} of ${STEPS}`} style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-      {Array.from({ length: STEPS }, (_, i) => (
-        <View key={i} style={{ width: i === step ? 22 : 8, height: 8, borderRadius: 4, backgroundColor: i <= step ? c.leaf : c.leafPale }} />
-      ))}
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={4}
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      style={({ pressed }) => ({ width: 58, height: 58, borderRadius: 20, backgroundColor: pressed ? c.tilePressed : c.tile, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
+    >
+      <Icon name="chevron-left" size={32} color={c.inkSoft} />
+    </Pressable>
   );
 }
 
@@ -435,7 +612,12 @@ function Chip({ label, icon, on, onPress }: { label: string; icon: IconName; on:
 }
 
 function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: string; text: string; on: boolean; onPress: () => void }) {
-  const { c } = useTheme();
+  const { c, reduceMotion } = useTheme();
+  const pop = useSharedValue(1);
+  useEffect(() => {
+    if (on && !reduceMotion) pop.value = withSequence(withTiming(0.8, { duration: 70 }), withSpring(1, { damping: 7, stiffness: 220 }));
+  }, [on, reduceMotion, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   return (
     <Pressable
       accessibilityRole="radio"
@@ -453,9 +635,9 @@ function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: str
         boxShadow: on ? `0px 0px 0px 3px ${c.leaf}, 0px 6px 20px 0px ${c.shadow}` : `0px 6px 20px 0px ${c.shadow}`,
       })}
     >
-      <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: on ? c.leaf : c.canvasDeep, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={[{ width: 52, height: 52, borderRadius: 26, backgroundColor: on ? c.leaf : c.canvasDeep, alignItems: 'center', justifyContent: 'center' }, popStyle]}>
         <Icon name={icon} size={28} color={on ? '#FFFFFF' : c.leafDeep} />
-      </View>
+      </Animated.View>
       <View style={{ flex: 1, gap: 4 }}>
         <T v="h3">{title}</T>
         <T v="small" soft>
@@ -466,24 +648,35 @@ function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: str
   );
 }
 
-function Done({ level, goalLevel, goalDate }: { level: number; goalLevel: number; goalDate: DayKey | null }) {
-  const { width } = useWindowDimensions();
+function Done({ level, goalLevel, goalDate, blocked, difficulty }: { level: number; goalLevel: number; goalDate: DayKey | null; blocked: boolean; difficulty: PlanDifficulty | null }) {
+  const width = useAppWidth();
+  const { c } = useTheme();
+  const { t } = useT();
   return (
     <View style={{ alignItems: 'center', gap: 14, paddingTop: 24 }}>
       <View>
-        <BloomFlower size={200} delay={50} />
+        {/* Your plan's flower: white when it's easy, then yellow, red, and blue for the hardest. */}
+        <BloomFlower key={difficulty?.level ?? 'none'} size={200} delay={50} color={difficulty ? difficultyColor(c, difficulty.level) : undefined} />
         <PetalBurst trigger={1} width={200} height={200} originX={100} originY={110} />
       </View>
-      <T v="h1" center>
-        You're all set
-      </T>
-      <T v="h3" center soft>
-        Level {level} → {goalLevel}
-        {goalDate ? ` by ${fmtDate(goalDate)}` : ''}
-      </T>
-      <T v="body" center style={{ maxWidth: Math.min(360, width - 48) }}>
-        Log your steps and flowers each evening. I'll keep the maths honest, flowers and all.
-      </T>
+      <Animated.View entering={FadeInUp.delay(700).duration(420)} style={{ gap: 6 }}>
+        <T v="h1" center>
+          {blocked ? t('One Last Thing') : t("You're All Set")}
+        </T>
+        <T v="h3" center soft>
+          {goalDate ? t('Level {from} → {to} by {date}', { from: level, to: goalLevel, date: fmtDate(goalDate) }) : t('Level {from} → {to}', { from: level, to: goalLevel })}
+        </T>
+      </Animated.View>
+      {difficulty && !blocked ? (
+        <Animated.View entering={FadeInUp.delay(780).duration(420)}>
+          <DifficultyPill d={difficulty} />
+        </Animated.View>
+      ) : null}
+      <Animated.View entering={FadeInUp.delay(860).duration(420)}>
+        <T v="body" center style={{ maxWidth: Math.min(360, width - 48) }}>
+          {t('Log your steps and flowers each evening.')}
+        </T>
+      </Animated.View>
     </View>
   );
 }

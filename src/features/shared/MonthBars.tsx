@@ -2,9 +2,10 @@ import { Canvas, Group, LinearGradient, RoundedRect, vec } from '@shopify/react-
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { useDerivedValue, useSharedValue, withDelay, withSpring, type SharedValue } from 'react-native-reanimated';
-import { MONTHS, MONTHS_SHORT } from '@/engine/format';
+import { monthName, monthShort } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { T } from '@/ui/T';
+import { t } from '@/i18n';
 
 function Bar({ i, v, x, w, h, grow, colors }: { i: number; v: number; x: number; w: number; h: number; grow: SharedValue<number>; colors: [string, string] }) {
   const bh = useDerivedValue(() => Math.max(4, v * h * grow.value));
@@ -28,9 +29,9 @@ export function MonthBars({ rates, width, height = 120 }: { rates: number[]; wid
   }, [rates.join(','), grow]); // eslint-disable-line react-hooks/exhaustive-deps
   const gap = 6;
   const bw = (width - gap * 11) / 12;
-  const label = rates.map((r, i) => `${MONTHS[i]} ${Math.round(r * 100)}%`).join(', ');
+  const label = rates.map((r, i) => `${monthName(i)} ${Math.round(r * 100)}%`).join(', ');
   return (
-    <View accessible accessibilityRole="image" accessibilityLabel={`Rideable days by month: ${label}`}>
+    <View accessible accessibilityRole="image" accessibilityLabel={t('Rideable days by month: {months}', { months: label })}>
       <Canvas style={{ width, height }}>
         {rates.map((v, i) => (
           <Bar
@@ -46,10 +47,12 @@ export function MonthBars({ rates, width, height = 120 }: { rates: number[]; wid
         ))}
       </Canvas>
       <View style={{ flexDirection: 'row', marginTop: 6 }}>
-        {MONTHS_SHORT.map((m, i) => (
-          <T key={m} v="caption" soft center style={{ width: bw + (i < 11 ? gap : 0), textAlign: 'center', marginRight: 0, fontSize: 11 }}>
-            {m[0]}
-          </T>
+        {Array.from({ length: 12 }, (_, i) => monthShort(i)).map((m, i) => (
+          <View key={i} style={{ width: bw, marginRight: i < 11 ? gap : 0, alignItems: 'center' }}>
+            <T v="caption" soft numberOfLines={1} style={{ width: bw + gap + 2, textAlign: 'center', fontSize: 10.5, letterSpacing: -0.2 }}>
+              {m}
+            </T>
+          </View>
         ))}
       </View>
     </View>

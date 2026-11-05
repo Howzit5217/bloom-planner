@@ -116,7 +116,7 @@ export function buildHistograms(days: ClimateDay[], years: number): ClimateCache
   return { months, sampleDays, years };
 }
 
-type Reason = 'snow' | 'rain' | 'cold' | 'heat' | 'wind' | 'dark';
+export type Reason = 'snow' | 'rain' | 'cold' | 'heat' | 'wind' | 'dark';
 
 /** Which thresholds of a preset block a binned day. Exact on the bin edges by construction. */
 function blocked(c: Cell, preset: ThresholdPreset): Reason[] {

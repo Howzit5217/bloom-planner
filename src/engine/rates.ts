@@ -1,33 +1,51 @@
 import type { DayEntry, Rates, ResolvedRates } from './types';
 
+/**
+ * Typical rates, used until the user says otherwise. Steps come only from walking (the phone's
+ * step counter); a bike ride plants flowers but earns no steps.
+ */
 export const DEFAULT_RATES = {
   walkStepsPerHour: 6000,
   bikeFlowersPerHour: 20000,
-  bikeStepsPerHour: 6000,
   walkFlowersPerHour: 6000,
 } as const;
 
 export type RateKey = keyof typeof DEFAULT_RATES;
-export const RATE_KEYS: RateKey[] = ['walkStepsPerHour', 'bikeFlowersPerHour', 'bikeStepsPerHour', 'walkFlowersPerHour'];
+export const RATE_KEYS: RateKey[] = ['walkStepsPerHour', 'bikeFlowersPerHour', 'walkFlowersPerHour'];
 
 export function resolveRates(r: Rates): ResolvedRates {
+  const bikes = r.bikes !== false;
   const estimated: RateKey[] = [];
-  const pick = (k: RateKey) => {
+  const pick = (k: RateKey, used = true) => {
     const v = r[k];
     if (v == null || !(v > 0)) {
-      estimated.push(k);
+      if (used) estimated.push(k);
       return DEFAULT_RATES[k];
     }
     return v;
   };
   return {
     walkStepsPerHour: pick('walkStepsPerHour'),
-    bikeFlowersPerHour: pick('bikeFlowersPerHour'),
-    bikeStepsPerHour: pick('bikeStepsPerHour'),
+    // Without a bike the biking rate isn't used, so it's never one to nag about.
+    bikeFlowersPerHour: pick('bikeFlowersPerHour', bikes),
     walkFlowersPerHour: pick('walkFlowersPerHour'),
     treadmillAvailable: r.treadmillAvailable,
+    bikes,
     estimated,
   };
+}
+
+/**
+ * The share of each month's days that can plant the plan's flowers. Riding needs fair weather;
+ * walking plants flowers any day, so without a bike every day counts.
+ */
+export function flowerDays(seasonRates: number[], bikes: boolean): number[] {
+  return bikes ? seasonRates : seasonRates.map(() => 1);
+}
+
+/** How fast the plan's flowers get planted: on the bike, or on foot without one. */
+export function flowerRate(rates: Pick<ResolvedRates, 'bikes' | 'bikeFlowersPerHour' | 'walkFlowersPerHour'>): number {
+  return rates.bikes ? rates.bikeFlowersPerHour : rates.walkFlowersPerHour;
 }
 
 const median = (xs: number[]) => {

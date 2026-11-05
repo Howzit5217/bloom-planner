@@ -97,24 +97,26 @@ describe('onboarding progress', () => {
 });
 
 describe('time cost (§7.4)', () => {
-  const rates = resolveRates({ walkStepsPerHour: 6000, bikeFlowersPerHour: 20000, bikeStepsPerHour: 6000, walkFlowersPerHour: 6000, treadmillAvailable: true });
-  it('splits biking and walking', () => {
-    const c = timeCost(20000, 12600, 0.5, rates);
+  const rates = resolveRates({ walkStepsPerHour: 6000, bikeFlowersPerHour: 20000, walkFlowersPerHour: 6000, treadmillAvailable: true });
+  it('biking plants the flowers, walking earns every step', () => {
+    const c = timeCost(20000, 12600, rates);
     expect(c.bikeHours).toBeCloseTo(0.63);
-    expect(c.stepsFromBiking).toBeCloseTo(3780);
-    expect(c.walkHoursRideDay).toBeCloseTo((20000 - 3780) / 6000);
-    expect(c.avgWalkHoursPerDay).toBeCloseTo((20000 - 1890) / 6000);
+    // A ride earns no steps, so the walking is the same on a ride day as on any other.
+    expect(c.walkHours).toBeCloseTo(20000 / 6000);
+    expect(c.totalRideDay).toBeCloseTo(0.63 + 20000 / 6000);
     expect(c.walkWhere).toBe('indoor');
     expect(c.implausible).toBe(false);
   });
   it('flags more than 6 hours a day', () => {
-    expect(timeCost(61000, 0, 1, rates).implausible).toBe(true);
+    expect(timeCost(37000, 0, rates).implausible).toBe(true);
+    expect(timeCost(20000, 60000, rates).implausible).toBe(true);
+    expect(timeCost(20000, 20000, rates).implausible).toBe(false);
   });
 });
 
 describe('observed rates (§7.7)', () => {
   it('needs a week of logs and never invents per-hour rates without time logged', () => {
-    const rates = resolveRates({ walkStepsPerHour: null, bikeFlowersPerHour: null, bikeStepsPerHour: null, walkFlowersPerHour: null, treadmillAvailable: false });
+    const rates = resolveRates({ walkStepsPerHour: null, bikeFlowersPerHour: null, walkFlowersPerHour: null, treadmillAvailable: false });
     const few = observedRates([entry('2026-11-01', 20000, 10000)], rates);
     expect(few.ready).toBe(false);
     const week = Array.from({ length: 7 }, (_, i) => entry(`2026-11-0${i + 1}`, 20000 + i * 1000, 10000, i < 4 ? { minutesOut: 30, outMode: 'bike' } : {}));
@@ -123,7 +125,7 @@ describe('observed rates (§7.7)', () => {
     expect(o.medianSteps).toBe(23000);
     expect(o.bikeFlowersPerHour).toBe(20000);
     expect(o.walkFlowersPerHour).toBeNull();
-    expect(rates.estimated).toHaveLength(4);
+    expect(rates.estimated).toHaveLength(3);
   });
 });
 

@@ -6,7 +6,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
+import { MAX_APP_WIDTH } from '@/ui/layout';
+import { InstallHint } from '@/features/shared/InstallHint';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useLifecycle } from '@/hooks/useLifecycle';
@@ -16,6 +18,7 @@ import { ThemeProvider, useTheme } from '@/theme/theme';
 import { PillButton } from '@/ui/PillButton';
 import { Celebration } from '@/ui/skia/Celebration';
 import { T } from '@/ui/T';
+import { t, useT } from '@/i18n';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 configureNotifications();
@@ -45,16 +48,21 @@ export default function RootLayout() {
 
 function Root() {
   const { c, isDark } = useTheme();
+  const { width } = useWindowDimensions();
+  useT();
   const profile = useApp((s) => s.profile);
   const loadError = useApp((s) => s.loadError);
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(c.canvas).catch(() => {});
   }, [c.canvas]);
   if (loadError) return <LoadError message={loadError} />;
+  // On a tablet or a computer, the app keeps a phone's width, centred, on a slightly deeper cream.
+  const wide = width > MAX_APP_WIDTH;
   return (
-    <View style={{ flex: 1, backgroundColor: c.canvas }}>
+    <View style={{ flex: 1, backgroundColor: wide ? c.canvasDeep : c.canvas, alignItems: 'center' }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {profile ? <Housekeeping /> : null}
+      <View style={{ flex: 1, width: '100%', maxWidth: MAX_APP_WIDTH, backgroundColor: c.canvas, overflow: 'hidden', boxShadow: wide ? `0px 0px 40px 0px ${c.shadow}` : undefined }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas }, animation: 'fade' }}>
         <Stack.Protected guard={!profile}>
           <Stack.Screen name="onboarding" />
@@ -66,6 +74,8 @@ function Root() {
           <Stack.Screen name="seasons" options={{ animation: 'slide_from_right' }} />
         </Stack.Protected>
       </Stack>
+      <InstallHint />
+      </View>
       <CelebrationHost />
     </View>
   );
@@ -80,8 +90,8 @@ function CelebrationHost() {
   const cel = useApp((s) => s.celebration);
   const dismiss = useApp((s) => s.dismissCelebration);
   if (!cel) return null;
-  const title = cel.maxed ? 'The very top!' : cel.goal ? 'Goal reached!' : 'Level up!';
-  const subtitle = cel.maxed ? 'Level 130. Every flower planted, every step walked.' : cel.goal ? 'You did it. Take a bow.' : `On to Level ${cel.level + 1}.`;
+  const title = cel.maxed ? t('The Very Top!') : cel.goal ? t('Goal Reached!') : t('Level Up!');
+  const subtitle = cel.maxed ? t('Level {level}. Every flower planted, every step walked.', { level: cel.level }) : cel.goal ? t('You did it. Take a bow.') : t('On to Level {level}.', { level: cel.level + 1 });
   return <Celebration key={`${cel.level}`} level={cel.level} title={title} subtitle={subtitle} onDone={dismiss} />;
 }
 
@@ -91,12 +101,12 @@ function LoadError({ message }: { message: string }) {
   return (
     <View style={{ flex: 1, backgroundColor: c.canvas, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
       <T v="h2" center>
-        Something went wrong opening your log
+        {t('Something Went Wrong Opening Your Log')}
       </T>
       <T v="small" soft center>
         {message}
       </T>
-      <PillButton label="Try again" onPress={() => void hydrate()} />
+      <PillButton label={t('Try again')} onPress={() => void hydrate()} />
     </View>
   );
 }

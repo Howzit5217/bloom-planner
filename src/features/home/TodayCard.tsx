@@ -16,6 +16,7 @@ import { PetalBurst } from '@/ui/skia/PetalBurst';
 import { Stepper } from '@/ui/Stepper';
 import { T } from '@/ui/T';
 import { Toggle } from '@/ui/Toggle';
+import { useT } from '@/i18n';
 
 interface Props {
   dash: Dashboard;
@@ -26,6 +27,7 @@ interface Props {
 /** The primary interaction: steps today, flowers today, and did I level up. */
 export function TodayCard({ dash, levelUpRequest }: Props) {
   const { c } = useTheme();
+  const { t } = useT();
   const save = useApp((s) => s.saveEntry);
   const existing = dash.todayEntry;
   const [editing, setEditing] = useState(!existing);
@@ -44,7 +46,7 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
   const [burst, setBurst] = useState(0);
   const [size, setSize] = useState({ w: 0, h: 0, bx: 0, by: 0 });
 
-  // "Yes, I levelled up" from the Home prompt: open the editor with the toggle on.
+  // 'Yes, levelled up' from the Home prompt: open the editor with the toggle on.
   const [seenRequest, setSeenRequest] = useState(levelUpRequest);
   if (levelUpRequest !== seenRequest) {
     setSeenRequest(levelUpRequest);
@@ -55,7 +57,8 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
     }
   }
 
-  const maxLevel = 130;
+  // The top level the game has right now (130 today; more as they're released).
+  const maxLevel = useApp((s) => s.table.maxLevel);
   const canLog = steps != null || flowers != null;
 
   const submit = async () => {
@@ -78,10 +81,14 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
     setMore(false);
   };
 
-  const t = dash.target;
+  const tg = dash.target;
   const targetLine =
-    t.isToday && dash.phase === 'active' && dash.plan.status === 'ok'
-      ? `Today's target: ${fmt(roundNice(t.steps))} steps${t.flowersIfRiding > 0 ? ` · ${fmt(roundNice(t.flowersIfRiding))} flowers if you ride` : ''}`
+    tg.isToday && dash.phase === 'active' && dash.plan.status === 'ok'
+      ? tg.flowersIfRiding > 0
+        ? dash.rates.bikes
+          ? t("Today's target: {steps} steps · {flowers} flowers if you ride", { steps: fmt(roundNice(tg.steps)), flowers: fmt(roundNice(tg.flowersIfRiding)) })
+          : t("Today's target: {steps} steps · {flowers} flowers", { steps: fmt(roundNice(tg.steps)), flowers: fmt(roundNice(tg.flowersIfRiding)) })
+        : t("Today's target: {steps} steps", { steps: fmt(roundNice(tg.steps)) })
       : null;
 
   return (
@@ -89,7 +96,7 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
       <View onLayout={(e) => setSize((s) => ({ ...s, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }))}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <T v="h2" accessibilityRole="header">
-            Today
+            {t('Today')}
           </T>
           <T v="smallBold" soft>
             {fmtLongDay(dash.today)}
@@ -98,16 +105,16 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
         {!editing && existing ? (
           <View style={{ gap: 12 }}>
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Logged icon="shoe-print" value={existing.steps} label="steps" color={c.teal} />
-              <Logged icon="flower" value={existing.flowers} label="flowers" color={c.petalRed} />
+              <Logged icon="shoe-print" value={existing.steps} label={t('steps')} color={c.teal} />
+              <Logged icon="flower" value={existing.flowers} label={t('flowers')} color={c.petalRed} />
             </View>
             {existing.leveledUp ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Icon name="party-popper" size={20} color={c.nectar} />
-                <T v="bodyBold">Levelled up to {existing.newLevel}</T>
+                <T v="bodyBold">{t('Levelled up to {level}', { level: existing.newLevel ?? '' })}</T>
               </View>
             ) : null}
-            <PillButton label="Edit today" variant="secondary" icon="pencil" size="md" onPress={() => setEditing(true)} />
+            <PillButton label={t('Edit today')} variant="secondary" icon="pencil" size="md" onPress={() => setEditing(true)} />
           </View>
         ) : (
           <View style={{ gap: 14 }}>
@@ -116,54 +123,56 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
                 {targetLine}
               </T>
             ) : null}
-            <NumberField label="Steps today" value={steps} onChange={setSteps} size="xl" />
-            <NumberField label="Flowers today" value={flowers} onChange={setFlowers} size="xl" />
-            <Toggle label="I levelled up!" value={leveled} onChange={setLeveled} hint={leveled ? 'The level the game shows now.' : undefined} />
+            <NumberField label={t('Steps today')} value={steps} onChange={setSteps} size="xl" />
+            <NumberField label={t('Flowers today')} value={flowers} onChange={setFlowers} size="xl" />
+            <Toggle label={t('Levelled Up!')} value={leveled} onChange={setLeveled} hint={leveled ? t('The level the game shows now.') : undefined} />
             {leveled ? (
               <View style={{ gap: 8 }}>
-                <Stepper label="New level" value={newLevel} min={Math.min(maxLevel, baseLevel + 1)} max={maxLevel} onChange={setNewLevel} size={56} />
+                <Stepper label={t('New level')} value={newLevel} min={Math.min(maxLevel, baseLevel + 1)} max={maxLevel} onChange={setNewLevel} size={56} />
                 <T v="caption" soft center>
-                  Flowers start again from zero for the new level{newLevel > 100 ? ', and so do steps' : ''}.
+                  {newLevel > 100 ? t('Flowers start again from zero for the new level, and so do steps.') : t('Flowers start again from zero for the new level.')}
                 </T>
               </View>
             ) : null}
             <Pressable accessibilityRole="button" onPress={() => setMore((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }}>
               <Icon name={more ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
               <T v="smallBold" color={c.leafDeep}>
-                More (optional)
+                {t('More (optional)')}
               </T>
             </Pressable>
             {more ? (
               <View style={{ gap: 14 }}>
-                <NumberField label="Minutes out planting" value={minutes} onChange={setMinutes} size="md" hint="Helps me learn your real planting rate." max={1440} />
+                <NumberField label={t('Minutes out planting')} value={minutes} onChange={setMinutes} size="md" hint={t('Helps work out your real planting rate.')} max={1440} />
                 {minutes ? (
                   <Segmented
-                    label="Mostly"
+                    label={t('Mostly')}
                     value={mode}
                     onChange={setMode}
                     options={[
-                      { key: 'bike', label: 'Mostly biking' },
-                      { key: 'walk', label: 'Mostly walking' },
+                      { key: 'bike', label: t('Mostly biking') },
+                      { key: 'walk', label: t('Mostly walking') },
                     ]}
                   />
                 ) : null}
                 <Card variant="deep" style={{ gap: 10 }}>
-                  <T v="smallBold">Match the game</T>
+                  <T v="smallBold">{t('Match the game')}</T>
                   <T v="caption" soft>
-                    If your profile shows different numbers to go{leveled ? ` for Level ${newLevel + 1}` : ''}, enter them and I'll use those instead of my estimate.
+                    {leveled
+                      ? t('If your profile shows different numbers to go for Level {level}, enter them here to replace the estimate.', { level: newLevel + 1 })
+                      : t('If your profile shows different numbers to go, enter them here to replace the estimate.')}
                   </T>
-                  <NumberField label="Steps to go" value={syncSteps} onChange={setSyncSteps} size="md" />
-                  <NumberField label="Flowers to go" value={syncFlowers} onChange={setSyncFlowers} size="md" />
+                  <NumberField label={t('Steps to go')} value={syncSteps} onChange={setSyncSteps} size="md" />
+                  <NumberField label={t('Flowers to go')} value={syncFlowers} onChange={setSyncFlowers} size="md" />
                 </Card>
                 <View>
                   <T v="label" soft style={{ marginBottom: 6 }}>
-                    Note
+                    {t('Note')}
                   </T>
                   <TextInput
-                    accessibilityLabel="Note"
+                    accessibilityLabel={t('Note')}
                     value={note}
                     onChangeText={setNote}
-                    placeholder="Big Flower day, rainy walk…"
+                    placeholder={t('Big Flower day, rainy walk…')}
                     placeholderTextColor={c.inkSoft + '99'}
                     multiline
                     maxLength={280}
@@ -173,9 +182,9 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
               </View>
             ) : null}
             <View onLayout={(e) => setSize((s) => ({ ...s, bx: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, by: e.nativeEvent.layout.y + 20 }))}>
-              <PillButton label={existing ? 'Save changes' : 'Log today'} icon="sprout" onPress={submit} disabled={!canLog} haptic={false} />
+              <PillButton label={existing ? t('Save changes') : t('Log today')} icon="sprout" onPress={submit} disabled={!canLog} haptic={false} />
             </View>
-            {existing ? <PillButton label="Cancel" variant="ghost" size="sm" onPress={() => setEditing(false)} /> : null}
+            {existing ? <PillButton label={t('Cancel')} variant="ghost" size="sm" onPress={() => setEditing(false)} /> : null}
           </View>
         )}
       </View>

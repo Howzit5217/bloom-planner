@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover: full screen on iPhone, the app keeps clear of the notch and home bar itself. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <meta name="description" content="A pace planner for Pikmin Bloom: your level, your goal, and what it takes each day." />
+    <!-- Add to Home Screen on iPhone opens it full screen, like an app, with its own icon. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Bloom Planner" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#FBF7EC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#241F18" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="/bloom-planner/app/manifest.json" />
+    <link rel="apple-touch-icon" href="/bloom-planner/app/apple-touch-icon.png" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+        background: #fbf7ec;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background: #241f18;
+        }
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+        margin: 0;
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* While the app loads: the flower, gently breathing. React replaces it once the app is ready. */
+      .boot {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .boot svg {
+        width: 132px;
+        height: 132px;
+        animation: breathe 2.4s ease-in-out infinite;
+      }
+      @keyframes breathe {
+        50% {
+          transform: scale(1.06) rotate(4deg);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root">
+      <div class="boot" aria-label="Bloom Planner">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="27.2" r="17.2" fill="#E8614D" />
+          <circle cx="71.7" cy="43" r="17.2" fill="#E8614D" />
+          <circle cx="63.4" cy="68.4" r="17.2" fill="#E8614D" />
+          <circle cx="36.6" cy="68.4" r="17.2" fill="#E8614D" />
+          <circle cx="28.3" cy="43" r="17.2" fill="#E8614D" />
+          <circle cx="50" cy="50" r="13.2" fill="#FFB400" />
+        </svg>
+      </div>
+    </div>
+  </body>
+</html>

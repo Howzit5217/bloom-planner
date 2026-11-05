@@ -25,7 +25,7 @@ export function profile(p: Partial<Profile> = {}): Profile {
     lifetimeFlowers: null,
     goalLevel: 2,
     goalDate: '2027-01-01',
-    rates: { walkStepsPerHour: null, bikeFlowersPerHour: null, bikeStepsPerHour: null, walkFlowersPerHour: null, treadmillAvailable: true },
+    rates: { walkStepsPerHour: null, bikeFlowersPerHour: null, walkFlowersPerHour: null, treadmillAvailable: true },
     createdAt: '2026-11-04T12:00:00.000Z',
     startDate: '2026-11-04',
     ...p,

@@ -1,33 +1,40 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { daysBetween } from '@/engine/dates';
 import { fmt, fmtDate, fmtHours, fmtShort, fmtWeekday, roundNice } from '@/engine/format';
 import type { Dashboard } from '@/engine/summary';
 import { useTheme } from '@/theme/theme';
-import { PETALS, SPRING } from '@/theme/tokens';
+import { DifficultyFlower, DifficultyPill } from '@/features/shared/Difficulty';
+import { PETALS } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
+import { IconChip } from '@/ui/IconChip';
+import { FlowerRow } from '@/ui/skia/FlowerRow';
 import { GameNumber } from '@/ui/skia/GameNumber';
 import { LevelBadge } from '@/ui/skia/LevelBadge';
 import { Ring } from '@/ui/skia/Ring';
 import { T } from '@/ui/T';
+import { useT } from '@/i18n';
 
 /** Header: current level in the gold badge, the goal beneath. Tap for the level table. */
 export function HomeHeader({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
-  const goal = dash.phase === 'maxed' ? 'Level 130. The very top.' : `→ ${dash.goal.level} by ${fmtDate(dash.goal.date)}`;
+  const { t, tn } = useT();
+  const goal = dash.phase === 'maxed' ? t('Level {level}. The very top.', { level: dash.current.level }) : t('→ {level} by {date}', { level: dash.goal.level, date: fmtDate(dash.goal.date) });
   return (
     <View style={{ alignItems: 'center', gap: 10, paddingTop: 4 }}>
       <View style={{ flexDirection: 'row', gap: 8, alignSelf: 'stretch', justifyContent: 'space-between' }}>
         <Pill icon="calendar-blank" text={`${fmtWeekday(dash.today)}, ${fmtShort(dash.today)}`} />
-        <Pill icon="fire" text={dash.streak > 0 ? `${dash.streak}-day streak` : 'Start a streak'} tint={c.nectar} />
+        <Pill icon="fire" text={dash.streak > 0 ? tn(dash.streak, '{n}-day streak', '{n}-day streak') : t('Start a streak')} tint={c.nectar} />
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Level ${dash.current.level}. Open the level table.`} onPress={() => router.push('/levels')} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('Level {level}. Open the level table.', { level: dash.current.level })} onPress={() => router.push('/levels')} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.95 : 1 }] })}>
         <LevelBadge level={dash.current.level} size={118} />
       </Pressable>
-      <View style={{ backgroundColor: c.card, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, boxShadow: `0px 4px 14px 0px ${c.shadow}` }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.card, borderRadius: 999, paddingLeft: dash.difficulty ? 8 : 18, paddingRight: 18, paddingVertical: 8, boxShadow: `0px 4px 14px 0px ${c.shadow}` }}>
+        {/* The plan's flower: white when it's easy, then yellow, red, and blue for the hardest. */}
+        {dash.difficulty ? <DifficultyFlower difficulty={dash.difficulty.level} size={30} backdrop={c.leafPale} /> : null}
         <T v="h3" color={c.leafDeep}>
           {goal}
         </T>
@@ -49,11 +56,13 @@ function Pill({ icon, text, tint }: { icon: IconName; text: string; tint?: strin
 /** Steps and flowers into the current level. */
 export function RingsCard({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
+  const { t } = useT();
   const { steps, flowers } = dash.rings;
   const hitSteps = !!dash.todayEntry && dash.todayGoal.steps > 0 && dash.todayEntry.steps >= dash.todayGoal.steps;
   const hitFlowers = !!dash.todayEntry && dash.todayGoal.flowersIfRiding > 0 && dash.todayEntry.flowers >= dash.todayGoal.flowersIfRiding;
   const next = dash.current.level + 1;
-  const one = (label: string, d: typeof steps, colors: [string, string], hit: boolean, icon: IconName) => {
+  const one = (kind: 'steps' | 'flowers', d: typeof steps, colors: [string, string], hit: boolean, icon: IconName) => {
+    const label = kind === 'steps' ? t('Steps') : t('Flowers');
     const pct = Math.floor(d.fraction * 100);
     const done = d.need === 0 || d.remaining === 0;
     return (
@@ -64,16 +73,16 @@ export function RingsCard({ dash }: { dash: Dashboard }) {
           thickness={16}
           colors={colors}
           celebrate={hit}
-          accessibilityLabel={d.need === 0 ? `No ${label} needed for level ${next}` : `${label}: ${pct} percent, ${fmt(d.remaining)} to go`}
+          accessibilityLabel={d.need === 0 ? (kind === 'steps' ? t('No steps needed for level {level}', { level: next }) : t('No flowers needed for level {level}', { level: next })) : t('{what}: {pct} percent, {n} to go', { what: label, pct, n: fmt(d.remaining) })}
         >
           <Icon name={icon} size={18} color={colors[0]} />
           <GameNumber value={pct} size={34} format={(n) => `${n}%`} outline={false} fill={c.leafDeep} />
         </Ring>
         <T v="smallBold" center>
-          {d.need === 0 ? `No ${label} needed` : done ? `${label[0].toUpperCase()}${label.slice(1)} done!` : `${fmt(d.remaining)} to go`}
+          {d.need === 0 ? (kind === 'steps' ? t('No steps needed') : t('No flowers needed')) : done ? (kind === 'steps' ? t('Steps done!') : t('Flowers done!')) : t('{n} to go', { n: fmt(d.remaining) })}
         </T>
         <T v="caption" soft center>
-          {d.need === 0 ? ' ' : `of ${fmt(d.need)} ${label}`}
+          {d.need === 0 ? ' ' : kind === 'steps' ? t('of {n} steps', { n: fmt(d.need) }) : t('of {n} flowers', { n: fmt(d.need) })}
         </T>
       </View>
     );
@@ -81,7 +90,7 @@ export function RingsCard({ dash }: { dash: Dashboard }) {
   return (
     <Card>
       <T v="h3" style={{ marginBottom: 12 }}>
-        Toward Level {next}
+        {t('Toward Level {level}', { level: next })}
       </T>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {one('steps', steps, [c.leaf, c.teal], hitSteps, 'shoe-print')}
@@ -94,21 +103,23 @@ export function RingsCard({ dash }: { dash: Dashboard }) {
 /** The verdict. */
 export function PaceCard({ dash }: { dash: Dashboard }) {
   const { c, reduceMotion } = useTheme();
+  const { t, tn } = useT();
   const st = dash.standing;
   const behind = dash.phase === 'active' && st.verdict === 'behind';
-  const breathe = useSharedValue(1);
+  // A continuous 0-1 clock while behind; the card breathes on a sine of it, so the loop is seamless.
+  const breathe = useSharedValue(0);
   useEffect(() => {
-    if (behind && !reduceMotion) breathe.value = withRepeat(withTiming(1.02, { duration: 2200, easing: Easing.inOut(Easing.sin) }), -1, true);
+    if (behind && !reduceMotion) breathe.value = withRepeat(withTiming(1, { duration: 4400, easing: Easing.linear }), -1, false);
     else {
       cancelAnimation(breathe);
-      breathe.value = withSpring(1, SPRING);
+      breathe.value = withTiming(0, { duration: 300 });
     }
   }, [behind, reduceMotion, breathe]);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: breathe.value }] }));
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.01 * (1 - Math.cos(breathe.value * Math.PI * 2)) }] }));
 
   let icon: IconName = 'check-circle';
   let tone = c.leaf;
-  let headline = 'Right on track.';
+  let headline = t('Right on track.');
   let sub: string | null = null;
   const s = roundNice(dash.pace.stepsPerDay);
   const f = roundNice(dash.pace.flowersPerRideDay);
@@ -116,46 +127,54 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
     icon = 'trophy';
     tone = c.nectar;
     const early = Math.max(0, daysBetween(dash.today, dash.goal.date));
-    headline = `You reached Level ${dash.current.level}!`;
-    sub = early > 0 ? `${early} day${early === 1 ? '' : 's'} before your goal date. Set a new goal in Settings whenever you like.` : 'Set a new goal in Settings whenever you like.';
+    headline = t('You reached Level {level}!', { level: dash.current.level });
+    sub = early > 0 ? `${tn(early, '{n} day before your goal date.', '{n} days before your goal date.')} ${t('Set a new goal in Settings whenever you like.')}` : t('Set a new goal in Settings whenever you like.');
   } else if (dash.phase === 'maxed') {
     icon = 'crown';
     tone = c.nectar;
-    headline = 'Level 130. You finished the game.';
-    sub = `${fmt(dash.replay.days.length)} days logged. Every step counted.`;
+    headline = t('Level {level}. You finished the game.', { level: dash.current.level });
+    sub = t('{n} days logged. Every step counted.', { n: fmt(dash.replay.days.length) });
   } else if (dash.phase === 'datePassed') {
     icon = 'calendar-alert';
     tone = c.alert;
-    headline = 'Your goal date has passed.';
-    sub = `You're at Level ${dash.current.level}. Pick a new date in Settings and I'll replan.`;
+    headline = t('Your goal date has passed.');
+    sub = t("You're at Level {level}. Pick a new date in Settings to replan.", { level: dash.current.level });
   } else if (dash.plan.status === 'noRideDays') {
     icon = 'weather-cloudy-alert';
     tone = c.alert;
-    headline = 'No riding days left before the goal.';
-    sub = 'Every month is set to 0% rideable. Adjust your months in Settings.';
+    headline = t('No riding days left before the goal.');
+    sub = t('Every month is set to 0% rideable. Adjust your months in Settings.');
   } else if (st.verdict === 'ahead') {
     icon = 'sprout';
-    headline = `You're ${st.displayDays} day${st.displayDays === 1 ? '' : 's'} ahead. Nice.`;
+    headline = tn(st.displayDays, "You're {n} day ahead. Blooming lovely.", "You're {n} days ahead. Blooming lovely.");
   } else if (st.verdict === 'behind') {
     icon = 'weather-partly-cloudy';
     tone = c.alert;
-    headline = `You're ${st.displayDays} day${st.displayDays === 1 ? '' : 's'} behind.`;
-    sub = `Need ${fmt(s)} steps a day to recover.`;
+    headline = tn(st.displayDays, "You're {n} day behind.", "You're {n} days behind.");
+    sub = t('{n} steps a day would catch you up.', { n: fmt(s) });
   } else if (dash.replay.days.length === 0) {
     icon = 'seed';
-    headline = 'Ready when you are.';
-    sub = "Log your first day tonight and I'll tell you how you're doing.";
+    headline = t('All planted and ready.');
+    sub = t("Log your first day tonight to see how you're doing.");
   }
   const active = dash.phase === 'active' && dash.plan.status === 'ok';
   const bindingText =
-    dash.pace.binding === 'flowers' ? 'Flowers set the pace on this level.' : dash.pace.binding === 'steps' ? 'Steps set the pace on this level.' : null;
+    dash.pace.binding === 'flowers' ? t('Flowers set the pace on this level.') : dash.pace.binding === 'steps' ? t('Steps set the pace on this level.') : null;
+  const note = [
+    bindingText,
+    dash.pace.scale > 1.02
+      ? dash.current.level >= 100
+        ? t('Includes about {pct}% extra, because unused steps and flowers reset at each level-up.', { pct: Math.round((dash.pace.scale - 1) * 100) })
+        : t('Includes about {pct}% extra, because unused flowers reset at each level-up.', { pct: Math.round((dash.pace.scale - 1) * 100) })
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <Animated.View style={anim}>
       <Card variant="panel">
         <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-          <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: tone, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name={icon} size={26} color="#FFFFFF" />
-          </View>
+          <IconChip name={icon} size="lg" bg={tone} fg="#FFFFFF" />
           <View style={{ flex: 1 }}>
             <T v="h2" color={c.onPanel} accessibilityRole="header">
               {headline}
@@ -169,13 +188,18 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
         </View>
         {active ? (
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-            <Big value={s} label="steps a day" />
-            <Big value={f} label="flowers per riding day" />
+            <Big value={s} label={t('steps a day')} />
+            <Big value={f} label={dash.rates.bikes ? t('flowers per riding day') : t('flowers a day')} />
           </View>
         ) : null}
-        {active ? (
+        {active && dash.difficulty ? (
+          <View style={{ marginTop: 12 }}>
+            <DifficultyPill d={dash.difficulty} onPanel />
+          </View>
+        ) : null}
+        {active && note ? (
           <T v="caption" color={c.onPanelSoft} style={{ marginTop: 10 }}>
-            {[bindingText, dash.pace.scale > 1.02 ? `Includes about ${Math.round((dash.pace.scale - 1) * 100)}% extra, because unused ${dash.current.level >= 100 ? 'steps and flowers' : 'flowers'} reset at each level-up.` : null].filter(Boolean).join(' ')}
+            {note}
           </T>
         ) : null}
       </Card>
@@ -198,30 +222,43 @@ function Big({ value, label }: { value: number; label: string }) {
 /** How much movement today's targets imply. */
 export function TimeCard({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
+  const { t } = useT();
   if (dash.phase !== 'active' || dash.plan.status !== 'ok') return null;
-  const t = dash.time;
-  const where = t.walkWhere === 'indoor' ? 'walking indoors' : 'walking outside';
-  const day = dash.target.isToday ? 'today' : 'tomorrow';
+  const tc = dash.time;
+  const today = dash.target.isToday;
+  const walk = tc.walkHours > 0.01 ? (tc.walkWhere === 'indoor' ? t('{time} walking indoors', { time: fmtHours(tc.walkHours) }) : t('{time} walking outside', { time: fmtHours(tc.walkHours) })) : null;
+  // A ride plants flowers but earns no steps, so the walking is the same either way.
   const ride =
-    t.bikeHours > 0
-      ? `About ${fmtHours(t.bikeHours)} biking${t.walkHoursRideDay > 0.01 ? ` + ${fmtHours(t.walkHoursRideDay)} ${where}` : ''}.`
-      : `About ${fmtHours(t.walkHoursRideDay)} ${where}.`;
+    tc.bikeHours > 0.01
+      ? walk
+        ? t('About {bike} biking for the flowers, plus {walk} for the steps. Riding earns no steps.', { bike: fmtHours(tc.bikeHours), walk })
+        : t('About {bike} biking for the flowers. Riding earns no steps.', { bike: fmtHours(tc.bikeHours) })
+      : walk
+        ? t('About {walk}.', { walk })
+        : t('Nothing left to do.');
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Icon name="clock-outline" size={20} color={c.leafDeep} />
-        <T v="h3">Time it takes {day}</T>
+        <IconChip name="clock" />
+        <T v="h3">{today ? t('Time It Takes Today') : t('Time It Takes Tomorrow')}</T>
       </View>
-      <Row icon="bike" title={`If you ride ${day}`} text={ride} />
-      <Row icon={t.walkWhere === 'indoor' ? 'walk' : 'pine-tree'} title="If you don't" text={`About ${fmtHours(t.walkHoursRestDay)} ${where}.`} />
-      {t.implausible ? (
+      {dash.rates.bikes ? (
+        <>
+          <Row icon="bike" title={today ? t('If You Ride Today') : t('If You Ride Tomorrow')} text={ride} />
+          <Row icon={tc.walkWhere === 'indoor' ? 'walk' : 'pine-tree'} title={t("If You Don't")} text={walk ? t('About {walk}.', { walk }) : t('Nothing left to do.')} />
+        </>
+      ) : (
+        // Walking only: the same walk earns the steps and plants the flowers.
+        <Row icon={tc.walkWhere === 'indoor' ? 'walk' : 'pine-tree'} title={t('On Foot')} text={walk ? t('About {walk}, for the steps and the flowers together.', { walk }) : t('Nothing left to do.')} />
+      )}
+      {tc.implausible ? (
         <View style={{ marginTop: 8, backgroundColor: c.alertPale, borderRadius: 14, padding: 12 }}>
-          <T v="small">That's more than 6 hours of movement. A later goal date would make this a lot kinder.</T>
+          <T v="small">{t("That's more than 6 hours of movement. A later goal date would make this a lot kinder.")}</T>
         </View>
       ) : null}
       {dash.rates.estimated.length > 0 ? (
         <T v="caption" soft style={{ marginTop: 8 }}>
-          Using typical rates for now. Log a few days and I'll work out your real ones.
+          {t('Using typical rates for now. Log a few days to work out your real ones.')}
         </T>
       ) : null}
     </Card>
@@ -229,12 +266,9 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
 }
 
 function Row({ icon, title, text }: { icon: IconName; title: string; text: string }) {
-  const { c } = useTheme();
   return (
     <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 6 }}>
-      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: c.leafPale, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} size={20} color={c.leafDeep} />
-      </View>
+      <IconChip name={icon} size="sm" />
       <View style={{ flex: 1 }}>
         <T v="smallBold">{title}</T>
         <T v="small" soft>
@@ -248,47 +282,43 @@ function Row({ icon, title, text }: { icon: IconName; title: string; text: strin
 /** Consecutive days logged: a row of small flowers. */
 export function StreakCard({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
+  const { t, tn } = useT();
   const colors = PETALS(c);
   return (
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <T v="h3">Streak</T>
+        <T v="h3">{t('Streak')}</T>
         <T v="smallBold" color={c.leafDeep}>
-          {dash.streak} day{dash.streak === 1 ? '' : 's'}
+          {tn(dash.streak, '{n} day', '{n} days')}
         </T>
       </View>
-      <View accessible accessibilityLabel={`Logged ${dash.recent.filter((d) => d.logged).length} of the last ${dash.recent.length} days`} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        {dash.recent.map((d, i) => (
-          <View key={d.date} style={{ alignItems: 'center', gap: 2 }}>
-            <Icon name={d.logged ? 'flower' : 'flower-outline'} size={20} color={d.logged ? colors[i % colors.length] === c.petalWhite ? c.petalPurple : colors[i % colors.length] : c.inkSoft + '66'} />
-          </View>
-        ))}
-      </View>
+      <FlowerRow
+        accessibilityLabel={t('Logged {n} of the last {total} days', { n: dash.recent.filter((d) => d.logged).length, total: dash.recent.length })}
+        items={dash.recent.map((d, i) => (d.logged ? (colors[i % colors.length] === c.petalWhite ? c.petalPurple : colors[i % colors.length]) : null))}
+      />
     </Card>
   );
 }
 
 /** "Level 111 in about 12 days." */
 export function MilestoneCard({ dash }: { dash: Dashboard }) {
-  const { c } = useTheme();
+  const { t, tn } = useT();
   if (dash.phase !== 'active') return null;
   const next = dash.current.level + 1;
   let text: string;
   let sub: string | null = null;
   if (dash.replay.readyToLevel) {
-    text = `Level ${next} is ready: both targets met.`;
-    sub = 'Claim it in the game, then tell me today.';
+    text = t('Level {level} is ready: both targets met.', { level: next });
+    sub = t("Claim it in the game, then mark it in today's log.");
   } else if (dash.nextMilestone && dash.plan.status === 'ok') {
     const days = Math.max(0, daysBetween(dash.today, dash.nextMilestone.date));
-    text = days === 0 ? `Level ${next} could land today.` : `Level ${next} in about ${days} day${days === 1 ? '' : 's'}.`;
-    sub = `Around ${fmtDate(dash.nextMilestone.date)}, at the planned pace.`;
+    text = days === 0 ? t('Level {level} could land today.', { level: next }) : tn(days, 'Level {level} in about {n} day.', 'Level {level} in about {n} days.', { level: next });
+    sub = t('Around {date}, at the planned pace.', { date: fmtDate(dash.nextMilestone.date) });
   } else return null;
   return (
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: c.leafPale, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="flag-variant" size={24} color={c.leafDeep} />
-        </View>
+        <IconChip name="flag-variant" size="lg" />
         <View style={{ flex: 1 }}>
           <T v="h3">{text}</T>
           {sub ? (

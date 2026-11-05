@@ -1,0 +1,62 @@
+name: Website and web app
+
+# Publishes https://howzit5217.github.io/bloom-planner/ on every push to main:
+#   /          the download page (docs/)
+#   /app/      the app itself, built for the web: how iPhones (and computers) use Bloom Planner.
+#              Open it in Safari and Add to Home Screen; it runs full screen with its own icon.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the web app
+        # Copies Skia's canvaskit.wasm into public/ and exports to dist/ (under /bloom-planner/app).
+        run: npm run build:web
+
+      - name: Put the site together
+        run: |
+          mkdir -p _site/app
+          cp -r docs/. _site/
+          cp -r dist/. _site/app/
+          # The app routes its own pages: opening /app/settings directly lands in the app too.
+          cp dist/index.html _site/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

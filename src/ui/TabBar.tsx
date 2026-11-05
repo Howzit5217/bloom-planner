@@ -9,6 +9,7 @@ import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { T } from './T';
+import { useT } from '@/i18n';
 
 const ICONS: Record<string, [IconName, IconName]> = {
   index: ['flower', 'flower-outline'],
@@ -55,6 +56,7 @@ function Tab({ name, label, focused, onPress }: { name: string; label: string; f
 /** Floating pill tab bar, like the game's rounded floating controls. */
 export function TabBar({ state, descriptors, navigateToTab }: BottomTabBarProps) {
   const { c } = useTheme();
+  const { t } = useT();
   const insets = useSafeAreaInsets();
   return (
     <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: Math.max(insets.bottom, 10), paddingHorizontal: 16 }}>
@@ -71,7 +73,7 @@ export function TabBar({ state, descriptors, navigateToTab }: BottomTabBarProps)
       >
         {state.routes.map((route, i) => {
           const focused = state.index === i;
-          const label = descriptors[route.key].options.title ?? route.name;
+          const label = t(descriptors[route.key].options.title ?? route.name);
           return (
             <Tab
               key={route.key}

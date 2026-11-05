@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Easing, useDerivedValue, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import type { BurnDown, BurnPoint, DailyBar, SeasonBar, TimelineItem } from '@/engine/charts';
-import { fmt, fmtDate, fmtShort, fmtWeekday, MONTHS_SHORT, roundNice } from '@/engine/format';
+import { fmt, fmtDate, fmtShort, fmtWeekday, listJoin, monthShort, roundNice } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { PETALS } from '@/theme/tokens';
 import { flowerPath } from '@/ui/skia/shapes';
 import { T } from '@/ui/T';
+import { t } from '@/i18n';
 
 const useMountProgress = (delay = 100, duration = 900) => {
   const p = useSharedValue(0);
@@ -72,7 +73,7 @@ function BurnPanel({ data, which, width, label, color }: { data: BurnDown; which
   const remainingNow = lastPoint[which];
   const planNow = interpolateAt(data.plan, lastPoint.x, which);
   return (
-    <View accessible accessibilityRole="image" accessibilityLabel={`${label} left to goal: ${fmt(remainingNow)}. The plan expected ${fmt(planNow)} by now.`}>
+    <View accessible accessibilityRole="image" accessibilityLabel={t('{what} left to goal: {n}. The plan expected {plan} by now.', { what: label, n: fmt(remainingNow), plan: fmt(planNow) })}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
         <T v="smallBold">{label} left</T>
         <T v="smallBold" color={ahead ? c.leafDeep : c.alert}>
@@ -99,8 +100,8 @@ export function BurnDownChart({ data, width, startLabel, endLabel }: { data: Bur
   const { c } = useTheme();
   return (
     <View style={{ gap: 14 }}>
-      <BurnPanel data={data} which="steps" width={width} label="Steps" color={c.teal} />
-      {data.maxFlowers > 1 ? <BurnPanel data={data} which="flowers" width={width} label="Flowers" color={c.petalRed} /> : null}
+      <BurnPanel data={data} which="steps" width={width} label={t('Steps')} color={c.teal} />
+      {data.maxFlowers > 1 ? <BurnPanel data={data} which="flowers" width={width} label={t('Flowers')} color={c.petalRed} /> : null}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <T v="caption" soft>
           {startLabel}
@@ -110,8 +111,8 @@ export function BurnDownChart({ data, width, startLabel, endLabel }: { data: Bur
         </T>
       </View>
       <View style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
-        <Key color={c.ink} label="You (solid)" />
-        <Key color={c.inkSoft} label="Required pace (dashed)" dashed />
+        <Key color={c.ink} label={t('You (solid)')} />
+        <Key color={c.inkSoft} label={t('Required pace (dashed)')} dashed />
       </View>
     </View>
   );
@@ -148,7 +149,7 @@ function DailyBarPair({ i, b, bw, gap, H, grow, sTarget, fTarget, colors }: { i:
   );
 }
 
-export function DailyBarsChart({ bars, width, stepsTarget, flowersTarget }: { bars: DailyBar[]; width: number; stepsTarget: number; flowersTarget: number }) {
+export function DailyBarsChart({ bars, width, stepsTarget, flowersTarget, bikes = true }: { bars: DailyBar[]; width: number; stepsTarget: number; flowersTarget: number; bikes?: boolean }) {
   const { c } = useTheme();
   const H = 150;
   const grow = useSharedValue(0);
@@ -164,7 +165,7 @@ export function DailyBarsChart({ bars, width, stepsTarget, flowersTarget }: { ba
     <View>
       <Pressable
         accessibilityRole="adjustable"
-        accessibilityLabel="Last 30 days, steps and flowers against the daily target. Tap a bar for the day's detail."
+        accessibilityLabel={t("Last 30 days, steps and flowers against the daily target. Tap a bar for the day's detail.")}
         onPress={(e) => setSel(Math.max(0, Math.min(bars.length - 1, Math.floor(e.nativeEvent.locationX / (bw * 2 + gap)))))}
       >
         <Canvas style={{ width, height: H }}>
@@ -182,21 +183,27 @@ export function DailyBarsChart({ bars, width, stepsTarget, flowersTarget }: { ba
           {fmtShort(bars[0].date)}
         </T>
         <T v="caption" soft>
-          Dashed line = daily target
+          {t('Dashed line = daily target')}
         </T>
         <T v="caption" soft>
-          Today
+          {t('Today')}
         </T>
       </View>
       <View style={{ minHeight: 44, justifyContent: 'center', marginTop: 6 }}>
         {s ? (
           <T v="small">
             {fmtWeekday(s.date)} {fmtShort(s.date)}:{' '}
-            {s.logged ? `${fmt(s.steps)} steps (target ${fmt(roundNice(stepsTarget))}) · ${fmt(s.flowers)} flowers${flowersTarget > 0 ? ` (target ${fmt(roundNice(flowersTarget))} on a ride day)` : ''}` : 'not logged'}
+            {s.logged
+              ? flowersTarget > 0
+                ? bikes
+                  ? t('{steps} steps (target {sTarget}) · {flowers} flowers (target {fTarget} on a ride day)', { steps: fmt(s.steps), sTarget: fmt(roundNice(stepsTarget)), flowers: fmt(s.flowers), fTarget: fmt(roundNice(flowersTarget)) })
+                  : t('{steps} steps (target {sTarget}) · {flowers} flowers (target {fTarget})', { steps: fmt(s.steps), sTarget: fmt(roundNice(stepsTarget)), flowers: fmt(s.flowers), fTarget: fmt(roundNice(flowersTarget)) })
+                : t('{steps} steps (target {sTarget}) · {flowers} flowers', { steps: fmt(s.steps), sTarget: fmt(roundNice(stepsTarget)), flowers: fmt(s.flowers) })
+              : t('not logged')}
           </T>
         ) : (
           <T v="caption" soft>
-            Tap a day for the detail.
+            {t('Tap a day for the detail.')}
           </T>
         )}
       </View>
@@ -228,7 +235,7 @@ export function LevelTimeline({ items }: { items: TimelineItem[] }) {
   const currentIndex = Math.max(0, items.findIndex((i) => i.status === 'current'));
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentOffset={{ x: Math.max(0, currentIndex * step - step), y: 0 }}>
-      <View style={{ width: W, height: H }} accessible accessibilityLabel={`Level timeline from ${items[0]?.level} to ${items[items.length - 1]?.level}`}>
+      <View style={{ width: W, height: H }} accessible accessibilityLabel={t('Level timeline from {from} to {to}', { from: items[0]?.level ?? '', to: items[items.length - 1]?.level ?? '' })}>
         <Canvas style={{ position: 'absolute', width: W, height: H }}>
           <Line p1={vec(step / 2, cy)} p2={vec(W - step / 2, cy)} color={c.leafPale} strokeWidth={6} strokeCap="round" />
           <Group clip={clip}>
@@ -289,7 +296,7 @@ export function SeasonalChart({ bars, width }: { bars: SeasonBar[]; width: numbe
   const slow = bars.filter((b) => b.rate < 0.4);
   return (
     <View>
-      <Canvas style={{ width, height: H }} accessibilityLabel="Flowers by month">
+      <Canvas style={{ width, height: H }} accessibilityLabel={t('Flowers by month')}>
         {bars.map((b, i) => (
           <SeasonColumn key={`${b.year}-${b.month}`} b={b} i={i} colW={colW} H={H} grow={grow} max={max} colors={b.rate < 0.4 ? [c.alertPale, c.alert] : [c.leafPale, c.leaf]} />
         ))}
@@ -297,25 +304,25 @@ export function SeasonalChart({ bars, width }: { bars: SeasonBar[]; width: numbe
       <View style={{ flexDirection: 'row' }}>
         {bars.map((b) => (
           <View key={`${b.year}-${b.month}`} style={{ width: colW, alignItems: 'center' }}>
-            <T v="caption" color={b.rate < 0.4 ? c.alert : c.inkSoft} style={{ fontSize: 11 }}>
-              {MONTHS_SHORT[b.month][0]}
+            <T v="caption" color={b.rate < 0.4 ? c.alert : c.inkSoft} numberOfLines={1} style={{ fontSize: 10.5, letterSpacing: -0.2 }}>
+              {monthShort(b.month)}
             </T>
             <T v="caption" soft style={{ fontSize: 10 }}>
-              {Math.round(b.rideDays)}d
+              {t('{n}d', { n: Math.round(b.rideDays) })}
             </T>
           </View>
         ))}
       </View>
       <View style={{ flexDirection: 'row', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
-        <Swatch color={c.leafPale} label="Planned flowers" />
-        <Swatch color={c.leaf} label="Planted" />
+        <Swatch color={c.leafPale} label={t('Planned flowers')} />
+        <Swatch color={c.leaf} label={t('Planted')} />
         <T v="caption" soft>
-          d = rideable days
+          {t('d = rideable days')}
         </T>
       </View>
       {slow.length ? (
         <T v="small" style={{ marginTop: 8 }}>
-          Slow months ahead: {slow.map((b) => MONTHS_SHORT[b.month]).join(', ')}. Bank what you can before them.
+          {t('Slow months ahead: {months}. Bank what you can before them.', { months: listJoin(slow.map((b) => monthShort(b.month))) })}
         </T>
       ) : null}
     </View>

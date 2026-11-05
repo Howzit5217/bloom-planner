@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bloom Planner</title>
+<meta name="description" content="A free, unofficial pace planner for Pikmin Bloom. Enter your level and your goal date, and see each day whether you're on pace and exactly what it takes.">
+<meta name="theme-color" content="#FBF7EC">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" rel="stylesheet">
+<style>
+  :root {
+    --canvas: #FBF7EC; --canvas-deep: #F2EADA; --card: #FFFDF8; --ink: #3A3226; --ink-soft: #6E6455;
+    --leaf: #5BA85A; --leaf-deep: #3C7A3E; --leaf-pale: #DCEEDA; --button: #43853F; --button-pressed: #336B31;
+    --panel: #346E36; --on-panel: #FFFFFF; --on-panel-soft: rgba(255,255,255,0.86);
+    --shadow: rgba(120,100,70,0.12); --meadow-top: #D8F0B8; --meadow-bottom: #A9DB7E; --tile: #E7E2D9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #241F18; --canvas-deep: #1B1712; --card: #30291F; --ink: #F2EADA; --ink-soft: #C9BFAE;
+      --leaf: #6FBF6B; --leaf-deep: #9CD597; --leaf-pale: #2E4A2C; --button: #4F9A4A; --button-pressed: #3F7F3B;
+      --panel: #264E28; --shadow: rgba(0,0,0,0.35); --meadow-top: #2F4A24; --meadow-bottom: #3D5E2E; --tile: #3A342C;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 17px/1.55 Nunito, system-ui, sans-serif; }
+  a { color: var(--leaf-deep); font-weight: 700; }
+  h1, h2, h3 { font-family: 'Baloo 2', Nunito, sans-serif; line-height: 1.15; margin: 0; }
+  .meadow { position: relative; height: 150px; background: linear-gradient(var(--meadow-top), var(--meadow-bottom)); overflow: hidden; }
+  .meadow svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .sheet { position: relative; margin-top: -28px; background: var(--canvas); border-radius: 28px 28px 0 0; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 16px; }
+  .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 0 24px; }
+  .hero .icon { width: 128px; height: 128px; border-radius: 30px; margin-top: -72px; box-shadow: 0 10px 28px var(--shadow); background: var(--card); }
+  .hero h1 { font-size: clamp(40px, 9vw, 60px); font-weight: 800; color: var(--leaf-deep); margin-top: 18px; }
+  .hero p { max-width: 560px; margin: 10px 0 0; font-size: 19px; color: var(--ink-soft); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 26px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; min-height: 58px; padding: 0 28px; border-radius: 999px; font: 800 19px/1 'Baloo 2', Nunito, sans-serif; text-decoration: none; transition: transform .12s ease; }
+  .btn:active { transform: scale(0.96); }
+  .btn.primary { background: var(--button); color: #fff; box-shadow: 0 6px 16px var(--shadow); }
+  .btn.primary:hover { background: var(--button-pressed); }
+  .btn.quiet { background: var(--tile); color: var(--ink); }
+  .btn svg { width: 24px; height: 24px; }
+  .fine { margin-top: 12px; font-size: 14px; color: var(--ink-soft); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 10px 0 30px; }
+  .card { background: var(--card); border-radius: 26px; padding: 22px; box-shadow: 0 4px 14px var(--shadow); }
+  .card h3 { font-size: 21px; margin: 10px 0 4px; }
+  .card p { margin: 0; color: var(--ink-soft); }
+  .chip { width: 46px; height: 46px; border-radius: 50%; background: var(--leaf-pale); display: grid; place-items: center; }
+  .chip .mdi { font-size: 27px; line-height: 1; color: var(--leaf-deep); }
+  .chip.pair { width: auto; padding: 0 12px; border-radius: 23px; gap: 2px; display: inline-flex; align-items: center; }
+  .btn .mdi { font-size: 26px; line-height: 1; }
+  .share { display: inline-flex; vertical-align: -4px; font-size: 20px; color: var(--leaf-deep); }
+  section { margin: 34px 0; }
+  section > h2 { font-size: 30px; margin-bottom: 14px; }
+  .panel { background: var(--panel); color: var(--on-panel); border-radius: 28px; padding: 26px; }
+  .panel p { color: var(--on-panel-soft); margin: 8px 0 0; }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .steps li { counter-increment: s; display: flex; gap: 14px; align-items: flex-start; background: var(--card); border-radius: 22px; padding: 16px 18px; box-shadow: 0 3px 12px var(--shadow); }
+  .steps li::before { content: counter(s); flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--leaf-pale); color: var(--leaf-deep); font: 800 20px/36px 'Baloo 2', sans-serif; text-align: center; }
+  .grades { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .grade { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 8px; border-radius: 999px; background: rgba(16,52,20,0.45); font-weight: 700; }
+  .grade svg { width: 26px; height: 26px; }
+  footer { padding: 26px 0 40px; font-size: 14px; color: var(--ink-soft); text-align: center; }
+  footer p { margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<div class="meadow" aria-hidden="true"><svg id="meadow"></svg></div>
+
+<main class="sheet">
+  <div class="wrap">
+    <div class="hero">
+      <svg class="icon" viewBox="0 0 128 128" aria-hidden="true" id="hero-icon"></svg>
+      <h1>Bloom Planner</h1>
+      <p>A pace planner for Pikmin Bloom. Enter your level and your goal date, and every day you'll see whether you're on pace and exactly what it takes.</p>
+      <div class="buttons">
+        <a class="btn primary" id="get-android" href="https://github.com/Howzit5217/bloom-planner/releases/latest">
+          <span class="mdi mdi-android" aria-hidden="true"></span>
+          Download for Android
+        </a>
+        <a class="btn quiet" href="app/">
+          <span class="mdi mdi-apple" aria-hidden="true"></span>
+          Open on iPhone
+        </a>
+      </div>
+      <div class="fine" id="release-line">Free. No ads, no account, no tracking.</div>
+    </div>
+
+    <section>
+      <div class="grid">
+        <div class="card">
+          <div class="chip"><span class="mdi mdi-calendar-check"></span></div>
+          <h3>A Target for Every Day</h3>
+          <p>Steps and flowers for today, worked out from your goal date and where you are now. Log each evening and the plan keeps up.</p>
+        </div>
+        <div class="card">
+          <div class="chip pair"><span class="mdi mdi-walk"></span><span class="mdi mdi-bike"></span></div>
+          <h3>Walking, Biking, or Both</h3>
+          <p>Riding plants flowers fast but earns no steps; the plan knows. Only walk? Turn biking off and every day counts.</p>
+        </div>
+        <div class="card">
+          <div class="chip"><span class="mdi mdi-weather-partly-cloudy"></span></div>
+          <h3>Honest About the Weather</h3>
+          <p>Ten years of local weather history show which months you can really ride, so January doesn't get promised the same as June.</p>
+        </div>
+        <div class="card">
+          <div class="chip"><span class="mdi mdi-translate"></span></div>
+          <h3>In Ten Languages</h3>
+          <p>The same languages as Pikmin Bloom: English, Español, Français, Português, Deutsch, Italiano, 日本語, 한국어, 繁體中文 and 简体中文.</p>
+        </div>
+        <div class="card">
+          <div class="chip"><span class="mdi mdi-shield-check"></span></div>
+          <h3>Private by Design</h3>
+          <p>Your log stays on your phone. The only thing that leaves it is a place's coordinates, sent to Open-Meteo for weather history.</p>
+        </div>
+        <div class="card">
+          <div class="chip"><span class="mdi mdi-update"></span></div>
+          <h3>Updates Itself</h3>
+          <p>When a new version or corrected level data is out, the app says so on its home screen. Tap, download, install over the top; your log is kept.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="panel">
+        <h2>Every Plan Gets a Flower</h2>
+        <p>Each goal is graded by the time it asks of you on a busy day, walking and riding together. The flower shows on the home screen, so how hard the stretch ahead is never comes as a surprise.</p>
+        <div class="grades" id="grades"></div>
+      </div>
+    </section>
+
+    <section id="android">
+      <h2>Install on Android</h2>
+      <ol class="steps">
+        <li><span>Tap <strong>Download for Android</strong> on your phone. It's a single APK file, signed, from this project's GitHub releases.</span></li>
+        <li><span>Open the downloaded file. If Android asks, allow your browser to install apps, then tap <strong>Install</strong>.</span></li>
+        <li><span>Open Bloom Planner and set up your level and goal. New versions show up on the home screen when they're out.</span></li>
+      </ol>
+    </section>
+
+    <section id="iphone">
+      <h2>On iPhone</h2>
+      <ol class="steps">
+        <li><span>Open <a href="app/">Bloom Planner on the web</a> in <strong>Safari</strong>. It's the same app, running in the browser: nothing to download.</span></li>
+        <li><span>Tap the Share button <span class="share mdi mdi-export-variant" aria-label="Share"></span> and choose <strong>Add to Home Screen</strong>.</span></li>
+        <li><span>Open it from the home screen. It runs full screen with its own icon, and your log stays on your iPhone.</span></li>
+      </ol>
+      <p class="fine" style="margin-top: 14px">The web version has everything except evening reminders, which only the Android app can send. It also works on a computer, in any modern browser.</p>
+    </section>
+  </div>
+
+  <footer class="wrap">
+    <p>Bloom Planner is an unofficial, fan-made planner. It is not affiliated with or endorsed by Scopely or Nintendo. Pikmin Bloom is a trademark of its owners.</p>
+    <p>Level data from the <a href="https://www.pikminwiki.com/Level">Pikmin wiki</a>. Weather history by <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0).</p>
+    <p><a href="https://github.com/Howzit5217/bloom-planner">Source on GitHub</a></p>
+  </footer>
+</main>
+
+<script>
+  // The app's flat flower: five round petals in one colour and a golden centre.
+  function flower(cx, cy, r, color, rot) {
+    var petals = '';
+    for (var i = 0; i < 5; i++) {
+      var a = rot + (i / 5) * Math.PI * 2 - Math.PI / 2;
+      petals += '<circle cx="' + (cx + Math.cos(a) * r * 0.57).toFixed(1) + '" cy="' + (cy + Math.sin(a) * r * 0.57).toFixed(1) + '" r="' + (r * 0.43).toFixed(1) + '" fill="' + color + '"/>';
+    }
+    var shade = color === '#FFFFFF' ? '<g transform="translate(0 ' + (r * 0.07).toFixed(1) + ')" opacity="0.5">' + petals.replace(/#FFFFFF/g, '#B9AD95') + '</g>' : '';
+    return shade + petals + '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.33).toFixed(1) + '" fill="#FFB400"/>';
+  }
+  var COLORS = ['#E8614D', '#F2C14E', '#FFFFFF', '#5B9BD5'];
+
+  // A meadow along the top, different every visit.
+  (function () {
+    var svg = document.getElementById('meadow');
+    var w = Math.max(360, window.innerWidth), h = 150, out = '';
+    var n = Math.round(w / 34);
+    for (var i = 0; i < n; i++) {
+      var x = (i + 0.5) * (w / n) + (Math.random() - 0.5) * 24;
+      var y = 18 + Math.random() * 96;
+      var r = 6 + Math.random() * 9;
+      out += '<line x1="' + x + '" y1="' + (y + r * 0.6) + '" x2="' + (x + (Math.random() - 0.5) * 6) + '" y2="' + (y + r * 2.4) + '" stroke="#4F9A4A" stroke-width="2.4" stroke-linecap="round"/>';
+      out += flower(x, y, r, COLORS[Math.floor(Math.random() * 4)], Math.random() * Math.PI);
+    }
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    svg.innerHTML = out;
+  })();
+
+  // The app icon: the red flower on flat grass green, small flowers planted evenly all round it.
+  (function () {
+    var small = '', colors = ['#FFFFFF', '#F2C14E', '#5B9BD5', '#FFFFFF', '#F2C14E', '#FFFFFF', '#5B9BD5', '#F2C14E', '#FFFFFF', '#5B9BD5'];
+    for (var i = 0; i < 10; i++) {
+      var a = -Math.PI / 2 + Math.PI / 10 + (i / 10) * Math.PI * 2, d = i % 2 ? 0.43 : 0.385;
+      small += flower(128 * (0.5 + Math.cos(a) * d), 128 * (0.48 + Math.sin(a) * d * 0.98), 128 * (i % 2 ? 0.036 : 0.046), colors[i], i * 0.7);
+    }
+    var shade = '';
+    for (var j = 0; j < 5; j++) {
+      var b = (j / 5) * Math.PI * 2 - Math.PI / 2;
+      shade += '<circle cx="' + (64 + Math.cos(b) * 20.4).toFixed(1) + '" cy="' + (61.4 + 3.6 + Math.sin(b) * 20.4).toFixed(1) + '" r="15.4" fill="#2F6B2C" opacity="0.32"/>';
+    }
+    document.getElementById('hero-icon').innerHTML =
+      '<defs><clipPath id="tile"><rect width="128" height="128" rx="30"/></clipPath></defs>' +
+      '<g clip-path="url(#tile)"><rect width="128" height="128" fill="#86C760"/>' + small + shade + flower(64, 61.4, 35.8, '#E8614D', 0) + '</g>';
+  })();
+
+  // The four grades, easiest first.
+  (function () {
+    var grades = [['Easy', '#FFFFFF'], ['Steady', '#F2C14E'], ['Hard', '#E8614D'], ['Very Hard', '#5B9BD5']];
+    document.getElementById('grades').innerHTML = grades.map(function (g) {
+      return '<span class="grade"><svg viewBox="0 0 26 26">' + flower(13, 13, 11, g[1], 0.3) + '</svg>' + g[0] + '</span>';
+    }).join('');
+  })();
+
+  // Point the button straight at the newest APK, with its version and size.
+  fetch('https://api.github.com/repos/Howzit5217/bloom-planner/releases/latest')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (rel) {
+      if (!rel) return;
+      var apk = (rel.assets || []).filter(function (a) { return /\.apk$/i.test(a.name); })[0];
+      if (!apk) return;
+      document.getElementById('get-android').href = apk.browser_download_url;
+      var mb = (apk.size / 1048576).toFixed(0);
+      document.getElementById('release-line').textContent = 'Version ' + String(rel.tag_name).replace(/^v/, '') + ' · ' + mb + ' MB · Free. No ads, no account, no tracking.';
+    })
+    .catch(function () {});
+</script>
+</body>
+</html>

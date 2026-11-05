@@ -17,9 +17,8 @@
     },
     "android": {
       "package": "io.github.howzit5217.bloomplanner",
-      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#7CC35B",
+        "backgroundColor": "#86C760",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -36,6 +35,12 @@
       ]
     },
     "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Bloom Planner",
+      "shortName": "Bloom Planner",
+      "themeColor": "#FBF7EC",
+      "backgroundColor": "#FBF7EC",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
@@ -44,12 +49,11 @@
       "expo-font",
       "expo-web-browser",
       "expo-sharing",
-      "@react-native-community/datetimepicker",
       [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160,
+          "imageWidth": 180,
           "resizeMode": "contain",
           "backgroundColor": "#FBF7EC",
           "dark": {
@@ -75,10 +79,12 @@
       "./plugins/withReleaseSigning"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/bloom-planner/app"
     },
     "extra": {
-      "githubRepo": "Howzit5217/bloom-planner"
+      "githubRepo": "Howzit5217/bloom-planner",
+      "beta": 0
     }
   }
 }

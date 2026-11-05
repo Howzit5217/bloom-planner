@@ -74,19 +74,21 @@ export type ReqFn = (level: number) => Requirement | null;
 export interface Rates {
   walkStepsPerHour: number | null;
   bikeFlowersPerHour: number | null;
-  bikeStepsPerHour: number | null;
   walkFlowersPerHour: number | null;
   treadmillAvailable: boolean;
+  /** Rides a bike for flowers. Missing means yes (setups from before this choice existed). */
+  bikes?: boolean;
 }
 
 export interface ResolvedRates {
   walkStepsPerHour: number;
   bikeFlowersPerHour: number;
-  bikeStepsPerHour: number;
   walkFlowersPerHour: number;
   treadmillAvailable: boolean;
-  /** Which of the four rates are defaults because the user said "I don't know yet". */
-  estimated: Array<keyof Omit<Rates, 'treadmillAvailable'>>;
+  /** Rides a bike for flowers; without one, flowers come from walking, on any day. */
+  bikes: boolean;
+  /** Which of the rates in use are defaults because the user said 'Not sure yet'. */
+  estimated: Array<keyof Omit<Rates, 'treadmillAvailable' | 'bikes'>>;
 }
 
 export interface Profile {

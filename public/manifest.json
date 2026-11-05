@@ -1,0 +1,16 @@
+{
+  "name": "Bloom Planner",
+  "short_name": "Bloom Planner",
+  "description": "A pace planner for Pikmin Bloom: your level, your goal, and what it takes each day.",
+  "start_url": "/bloom-planner/app/",
+  "scope": "/bloom-planner/app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF7EC",
+  "theme_color": "#FBF7EC",
+  "icons": [
+    { "src": "/bloom-planner/app/logo192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/bloom-planner/app/logo512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/bloom-planner/app/logo512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

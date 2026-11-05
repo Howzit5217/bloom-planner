@@ -50,6 +50,14 @@ const isClear = (f: ForecastLite, preset: ThresholdPreset) => {
  * Priority on any day: milestone > behind-pace > ride nudge > daily reminder.
  * Pure: the caller schedules the result and records what was used.
  */
+/** Translator hooks: the app passes its own; tests and the default use plain English. */
+export interface NotifyText {
+  t: (english: string, params?: Record<string, string | number>) => string;
+  tn: (n: number, one: string, other: string, params?: Record<string, string | number>) => string;
+}
+const fill = (s: string, p?: Record<string, string | number>) => (p ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in p ? String(p[k]) : m)) : s);
+const ENGLISH: NotifyText = { t: fill, tn: (n, one, other, p) => fill(n === 1 ? one : other, { n, ...p }) };
+
 export function planNotifications(args: {
   prefs: NotifyPrefs;
   dash: Dashboard;
@@ -57,7 +65,9 @@ export function planNotifications(args: {
   forecast: ForecastLite[];
   preset: ThresholdPreset;
   now: Date;
+  text?: NotifyText;
 }): PlannedNotification[] {
+  const { t, tn } = args.text ?? ENGLISH;
   const { prefs, dash, seasonRates, forecast, preset, now } = args;
   if (!prefs.enabled) return [];
   const today = dash.today;
@@ -87,8 +97,8 @@ export function planNotifications(args: {
           minute: prefs.minute,
           kind: 'milestone',
           level: m.level,
-          title: `Level ${m.level} is nearly here!`,
-          body: lead === 0 ? 'At your pace it could land today.' : `About ${lead} day${lead === 1 ? '' : 's'} to go at your pace.`,
+          title: t('Level {level} Is Nearly Here!', { level: m.level }),
+          body: lead === 0 ? t('At your pace it could land today.') : tn(lead, 'About {n} day to go at your pace.', 'About {n} days to go at your pace.'),
         };
       }
     }
@@ -103,14 +113,16 @@ export function planNotifications(args: {
           hour: prefs.hour,
           minute: prefs.minute,
           kind: 'behind',
-          title: 'A little behind, no stress',
-          body: `You're about ${dash.standing.displayDays} days behind. A couple of longer rides would close the gap.`,
+          title: t('A Little Behind, No Stress'),
+          body: dash.rates.bikes
+            ? t("You're about {n} days behind. A couple of longer rides would close the gap.", { n: dash.standing.displayDays })
+            : t("You're about {n} days behind. A couple of longer walks would close the gap.", { n: dash.standing.displayDays }),
         };
       }
     }
 
     // Ride nudge: tomorrow only (we need today's flowers and a forecast), high-rideable month, max 2 a week.
-    if (!pick && active && prefs.nudges && i === 1 && recentNudges < 2) {
+    if (!pick && active && dash.rates.bikes && prefs.nudges && i === 1 && recentNudges < 2) {
       const todayFlowers = dash.todayEntry ? dash.todayEntry.flowers : null;
       const f = forecast.find((x) => x.date === date);
       if (todayFlowers === 0 && f && (seasonRates[monthIndex(date)] ?? 0) >= 0.6 && isClear(f, preset)) {
@@ -119,15 +131,15 @@ export function planNotifications(args: {
           hour: NUDGE_HOUR,
           minute: 0,
           kind: 'nudge',
-          title: 'Today looks lovely for a ride',
-          body: 'Dry, bright and mild out there. A good day to plant some flowers.',
+          title: t('Today Looks Lovely for a Ride'),
+          body: t('Dry, bright and mild out there. A good day to plant some flowers.'),
         };
       }
     }
 
     if (!pick) {
       if (isToday && (dash.loggedToday || reminderPassed)) continue;
-      pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: "How'd today go?", body: 'Pop in your steps and flowers. It takes ten seconds.' };
+      pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: t("How'd Today Go?"), body: t('Pop in your steps and flowers. It takes ten seconds.') };
     }
     out.push(pick);
   }

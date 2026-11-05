@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
 import { climateSummary, seasonRatesFromClimate, type ClimateCache } from '@/engine/climate';
 import type { PlayLocation, SeasonRate, ThresholdPreset } from '@/engine/types';
 import { fetchClimate, placeLabel, searchPlaces, type Place } from '@/services/climateApi';
@@ -13,6 +13,9 @@ import { PillButton } from '@/ui/PillButton';
 import { Seedling } from '@/ui/skia/Seedling';
 import { T } from '@/ui/T';
 import { MonthBars } from './MonthBars';
+import { t, useT } from '@/i18n';
+import { monthList } from '@/i18n/climate-text';
+import { useAppWidth } from '@/ui/layout';
 
 export interface ClimateResult {
   location: PlayLocation;
@@ -22,9 +25,9 @@ export interface ClimateResult {
 
 interface Props {
   preset: ThresholdPreset;
-  /** "Looks right" */
+  /** 'Looks right' */
   onAccept: (r: ClimateResult) => void;
-  /** "Let me adjust these myself", a skip, or a failed lookup. `prefill` carries climate rates when there are some. */
+  /** 'Adjust these by hand', a skip, or a failed lookup. `prefill` carries climate rates when there are some. */
   onManual: (prefill: ClimateResult | null, reason: 'adjust' | 'skip' | 'failed') => void;
   allowSkip?: boolean;
 }
@@ -42,7 +45,8 @@ const deviceTz = () => {
 /** Search a place (or use the current location), fetch its weather history, show the derived months. */
 export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Props) {
   const { c } = useTheme();
-  const { width } = useWindowDimensions();
+  useT();
+  const width = useAppWidth();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Place[]>([]);
   const [searching, setSearching] = useState(false);
@@ -56,7 +60,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
     if (phase.k !== 'search') return;
     const q = query.trim();
     if (q.length < 2) return;
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       abort.current?.abort();
       const ctrl = new AbortController();
       abort.current = ctrl;
@@ -65,22 +69,22 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
       try {
         setResults(await searchPlaces(q, ctrl.signal));
       } catch {
-        if (!ctrl.signal.aborted) setSearchError("Couldn't search right now. Check your connection, or set your months by hand.");
+        if (!ctrl.signal.aborted) setSearchError(t("Couldn't search right now. Check your connection, or set your months by hand."));
       } finally {
         if (!ctrl.signal.aborted) setSearching(false);
       }
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [query, phase.k]);
 
   const lookup = async (label: string, latitude: number, longitude: number, timezone: string, elevation: number | null, unnamed = false) => {
-    setPhase({ k: 'loading', label: label || 'this spot' });
+    setPhase({ k: 'loading', label: label || t('this spot') });
     try {
       const climate = await fetchClimate(latitude, longitude, timezone);
       const location: PlayLocation = { label, latitude, longitude, timezone, elevation, resolvedAt: new Date().toISOString(), climateYears: climate.years };
       setPhase({ k: 'result', r: { location, climate, rates: seasonRatesFromClimate(climate, preset) }, unnamed });
     } catch {
-      setPhase({ k: 'failed', message: "I couldn't fetch the weather history for that spot. You can set your months by hand instead, and try again later from Settings." });
+      setPhase({ k: 'failed', message: t("The weather history for that spot couldn't be loaded. Set your months by hand instead, and try again later from Settings.") });
     }
   };
 
@@ -89,10 +93,10 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== 'granted') {
-        setLocError('No problem. Location is off, so type a town instead.');
+        setLocError(t('No problem. Location is off, so type a town instead.'));
         return;
       }
-      setPhase({ k: 'loading', label: 'your location' });
+      setPhase({ k: 'loading', label: t('your location') });
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
       const { latitude, longitude, altitude } = pos.coords;
       let label = '';
@@ -105,7 +109,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
       await lookup(label, latitude, longitude, deviceTz(), altitude ?? null, !label);
     } catch {
       setPhase({ k: 'search' });
-      setLocError("Couldn't get your location. Type a town instead.");
+      setLocError(t("Couldn't get your location. Type a town instead."));
     }
   };
 
@@ -114,10 +118,10 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
       <View style={{ alignItems: 'center', gap: 12, paddingVertical: 20 }}>
         <GrowingSeedling />
         <T v="h3" center>
-          Reading the weather history for {phase.label}…
+          {t('Reading the weather history for {place}…', { place: phase.label })}
         </T>
         <T v="small" soft center>
-          Ten years of days, sorted into good and bad for planting. This takes a second or two.
+          {t('Ten years of days, sorted into good and bad for planting. This takes a second or two.')}
         </T>
       </View>
     );
@@ -126,9 +130,9 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
   if (phase.k === 'failed') {
     return (
       <View style={{ gap: 16 }}>
-        <Banner icon="weather-cloudy-alert" tone="alert" title="Weather lookup didn't work" text={phase.message} />
-        <PillButton label="Set my months by hand" icon="tune-variant" onPress={() => onManual(null, 'failed')} />
-        <PillButton label="Try again" variant="secondary" onPress={() => setPhase({ k: 'search' })} />
+        <Banner icon="weather-cloudy-alert" tone="alert" title={t("Weather Lookup Didn't Work")} text={phase.message} />
+        <PillButton label={t('Set the months by hand')} icon="tune-variant" onPress={() => onManual(null, 'failed')} />
+        <PillButton label={t('Try again')} variant="secondary" onPress={() => setPhase({ k: 'search' })} />
       </View>
     );
   }
@@ -142,22 +146,20 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
         <Card>
           <T v="h2">{name}</T>
           <T v="small" soft>
-            Based on the last {r.climate.years} years of weather here.
+            {t('Based on the last {years} years of weather here.', { years: r.climate.years })}
           </T>
           <T v="body" style={{ marginTop: 10 }}>
-            Best months: {s.bestText}, around {s.bestDays} rideable days each.
+            {t('Best months: {months}, around {days} rideable days each.', { months: monthList(s.best), days: s.bestDays })}
           </T>
-          <T v="body">
-            Worst months: {s.worstText}, around {s.worstDays}.
-          </T>
+          <T v="body">{t('Worst months: {months}, around {days}.', { months: monthList(s.worst), days: s.worstDays })}</T>
           <View style={{ marginTop: 14 }}>
             <MonthBars rates={r.rates.map((x) => x.rideable)} width={width - 48 - 36} />
           </View>
         </Card>
-        {unnamed ? <Banner icon="map-marker-question" tone="nectar" text="I couldn't find a name for this spot. Is this where you plant? If not, try a different place." /> : null}
-        <PillButton label="Looks right" icon="check" onPress={() => onAccept(r)} />
-        <PillButton label="Let me adjust these myself" variant="secondary" icon="tune-variant" onPress={() => onManual(r, 'adjust')} />
-        <PillButton label="Try a different place" variant="ghost" onPress={() => setPhase({ k: 'search' })} />
+        {unnamed ? <Banner icon="map-marker-question" tone="nectar" text={t('This spot has no name on the map. Is this where you plant? If not, try a different place.')} /> : null}
+        <PillButton label={t('Looks right')} icon="check" onPress={() => onAccept(r)} />
+        <PillButton label={t('Adjust these by hand')} variant="secondary" icon="tune-variant" onPress={() => onManual(r, 'adjust')} />
+        <PillButton label={t('Try a different place')} variant="ghost" onPress={() => setPhase({ k: 'search' })} />
       </View>
     );
   }
@@ -178,10 +180,10 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
       >
         <Icon name="magnify" size={22} color={c.inkSoft} />
         <TextInput
-          accessibilityLabel="Town or city where you plant"
+          accessibilityLabel={t('Town or city where you plant')}
           value={query}
           onChangeText={setQuery}
-          placeholder="Town or city"
+          placeholder={t('Town or city')}
           placeholderTextColor={c.inkSoft + '99'}
           autoCorrect={false}
           returnKeyType="search"
@@ -215,19 +217,19 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
       {searchError ? <Banner icon="wifi-off" tone="alert" text={searchError} /> : null}
       {query.trim().length >= 2 && !searching && !results.length && !searchError ? (
         <T v="small" soft>
-          No places found. Try a nearby town.
+          {t('No places found. Try a nearby town.')}
         </T>
       ) : null}
-      <PillButton label="Use my current location" variant="secondary" icon="crosshairs-gps" onPress={useMyLocation} />
+      <PillButton label={t('Use current location')} variant="secondary" icon="crosshairs-gps" onPress={useMyLocation} />
       {locError ? (
         <T v="small" soft>
           {locError}
         </T>
       ) : null}
       <T v="caption" soft>
-        Only the coordinates are sent, and only to Open-Meteo, for weather history. With "current location", your phone's own maps service turns them into a place name.
+        {t('Only the coordinates are sent, and only to Open-Meteo, for weather history. With "current location", your phone\'s own maps service turns them into a place name.')}
       </T>
-      {allowSkip ? <PillButton label="Skip, I'll set my months by hand" variant="ghost" onPress={() => onManual(null, 'skip')} /> : null}
+      {allowSkip ? <PillButton label={t('Skip and set the months by hand')} variant="ghost" onPress={() => onManual(null, 'skip')} /> : null}
     </View>
   );
 }

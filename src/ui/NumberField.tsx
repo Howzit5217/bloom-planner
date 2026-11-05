@@ -4,6 +4,7 @@ import { fmt } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { font, radius } from '@/theme/tokens';
 import { T } from './T';
+import { t } from '@/i18n';
 
 interface Props {
   label: string;
@@ -20,7 +21,7 @@ interface Props {
 }
 
 /** Big numeric input. Shows thousands separators; stores a plain number (or null when empty). */
-export function NumberField({ label, value, onChange, placeholder = '0', hint, size = 'lg', max = 99_999_999, style, suffix, error, onSubmit }: Props) {
+export function NumberField({ label, value, onChange, placeholder, hint, size = 'lg', max = 99_999_999, style, suffix, error, onSubmit }: Props) {
   const { c } = useTheme();
   const [text, setText] = useState(value == null ? '' : fmt(value));
   const [prevValue, setPrevValue] = useState(value);
@@ -52,8 +53,8 @@ export function NumberField({ label, value, onChange, placeholder = '0', hint, s
           accessibilityLabel={label}
           accessibilityHint={hint}
           value={text}
-          onChangeText={(t) => {
-            const digits = t.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+          onChangeText={(raw) => {
+            const digits = raw.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
             if (digits === '') {
               setText('');
               setPrevValue(null);
@@ -67,9 +68,11 @@ export function NumberField({ label, value, onChange, placeholder = '0', hint, s
           }}
           keyboardType="number-pad"
           inputMode="numeric"
+          // Tapping a filled field selects it, so typing replaces the number instead of adding to it.
+          selectTextOnFocus
           returnKeyType="done"
           onSubmitEditing={onSubmit}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('Tap to type')}
           placeholderTextColor={c.inkSoft + '88'}
           maxLength={12}
           selectionColor={c.leaf}

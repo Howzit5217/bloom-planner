@@ -3,14 +3,16 @@ import { PlaceFinder } from '@/features/shared/PlaceFinder';
 import { useApp } from '@/store/app';
 import { SubScreen } from '@/ui/SubScreen';
 import { T } from '@/ui/T';
+import { useT } from '@/i18n';
 
 export default function LocationScreen() {
   const preset = useApp((s) => s.settings.preset);
+  const { t } = useT();
   const setLocationAndClimate = useApp((s) => s.setLocationAndClimate);
   return (
-    <SubScreen title="Where you play">
+    <SubScreen title={t('Where You Play')}>
       <T v="body" soft>
-        Planting needs you outside. Pick where you usually walk and ride, and I'll read its weather history.
+        {t('Planting needs you outside. Pick where you usually walk and ride to look up its weather history.')}
       </T>
       <PlaceFinder
         preset={preset}
