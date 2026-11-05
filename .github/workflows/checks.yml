@@ -20,7 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Validate the level table
-        run: node -e "const d=require('./src/data/bloom-levels.json'); if(!Number.isInteger(d.version)||d.levels.length<d.maxLevel) throw new Error('bloom-levels.json: bump version and keep every level'); console.log('levels v'+d.version+':', d.levels.length)"
+        run: |
+          node -e "const d=require('./src/data/bloom-levels.json'); if (!Number.isInteger(d.version) || d.levels.length < d.maxLevel) throw new Error('bloom-levels.json needs an integer version and every level'); console.log('level data v' + d.version, d.levels.length, 'levels')"
       - run: npx tsc --noEmit
       - run: npx eslint src
       - run: npx jest --ci
