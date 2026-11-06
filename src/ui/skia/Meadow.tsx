@@ -36,10 +36,45 @@ export function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: s
   draw(0);
 }
 
+/** How high in the sky (0 to 1 above the horizon) sits where: high noon stays below the status bar and the top row of pills. */
+const sunY = (hz: number, height: number) => Math.max(40, hz - 18 - height * (hz - 44) * 0.7);
+
+/**
+ * The sun itself, its bright corona and solid disc: drawn last, over anything that dims the scene (the
+ * dark theme's veil), as a light does. The sky's glow and rays round it are drawSky's.
+ */
+export function drawSunDisc(canvas: SkCanvas, hz: number, left: number, viewW: number, look: SkyLook) {
+  if (!look.sun) return;
+  const sx = left + look.sun.x * viewW;
+  const sy = sunY(hz, look.sun.height);
+  const low = 1 - look.sun.height;
+  const light = mix('#FFF6D6', look.sun.color, 0.35 + 0.5 * low);
+  const clear = (hex: string) => Skia.Color(`${hex}00`);
+  const lit = Skia.Paint();
+  lit.setAntiAlias(true);
+  lit.setBlendMode(BlendMode.Screen);
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  // The corona: a bright glow hugging the disc, twice over (a tight white one, a wide warm one).
+  lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 90, [Skia.Color(light), clear(light)], [0, 1], TileMode.Clamp));
+  lit.setAlphaf(0.85);
+  canvas.drawCircle(sx, sy, 90, lit);
+  lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 46, [Skia.Color('#FFFFFF'), Skia.Color('#FFFFFF'), clear('#FFFFFF')], [0, 0.45, 1], TileMode.Clamp));
+  lit.setAlphaf(1);
+  canvas.drawCircle(sx, sy, 46, lit);
+  // The disc itself, solid and bright: white-hot nearly to a thin warm edge (golden when it's low).
+  const edge = mix('#FFE45C', look.sun.color, 0.25 + 0.5 * low);
+  paint.setAlphaf(1);
+  paint.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 24, [Skia.Color('#FFFFFF'), Skia.Color('#FFFBE6'), Skia.Color(mix('#FFFBE6', edge, 0.6)), Skia.Color(edge)], [0, 0.5, 0.82, 1], TileMode.Clamp));
+  canvas.drawCircle(sx, sy, 24, paint);
+  paint.setShader(null);
+}
+
 /**
  * The sky from the top down to the horizon `hz`, `fullW` wide: the gradient, stars and clouds across
  * all of it, and the sun or moon placed over the part the screen shows (`viewW` wide from `left`).
- * `clouds: false` leaves the clouds out, for a scene that has them drifting live (Home).
+ * `clouds: false` leaves the clouds out, for a scene that has them drifting live (Home). The sun's
+ * disc is drawSunDisc's, drawn after the rest of the scene.
  */
 export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW: number, left: number, viewW: number, look: SkyLook, { clouds = true }: { clouds?: boolean } = {}) {
   const paint = Skia.Paint();
@@ -60,23 +95,37 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
   const glow = Skia.Paint();
   glow.setAntiAlias(true);
   glow.setMaskFilter(Skia.MaskFilter.MakeBlur(0, 14, true));
-  // High noon stays below the status bar and the top row of pills.
-  const skyY = (height: number) => Math.max(40, hz - 18 - height * (hz - 44) * 0.7);
+  const skyY = (height: number) => sunY(hz, height);
   if (look.sun) {
     const sx = left + look.sun.x * viewW;
     const sy = skyY(look.sun.height);
-    // A broad, soft halo lighting the sky round the sun: bigger and warmer the lower it is.
     const low = 1 - look.sun.height;
-    const halo = Skia.Paint();
-    halo.setAntiAlias(true);
-    halo.setBlendMode(BlendMode.Screen);
-    halo.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), viewW * (0.38 + 0.3 * low), [Skia.Color(look.sun.color), Skia.Color(`${look.sun.color}00`)], [0, 1], TileMode.Clamp));
-    halo.setAlphaf(0.32 + 0.25 * low);
-    canvas.drawRect(Skia.XYWHRect(0, 0, fullW, hz + 1), halo);
-    color(glow, look.sun.color, 0.55);
-    canvas.drawCircle(sx, sy, 30, glow);
-    color(paint, look.sun.color);
-    canvas.drawCircle(sx, sy, 15, paint);
+    // The sun's light, brightest at the disc: white-hot by day, golden low down.
+    const light = mix('#FFF6D6', look.sun.color, 0.35 + 0.5 * low);
+    const clear = (hex: string) => Skia.Color(`${hex}00`);
+    const lit = Skia.Paint();
+    lit.setAntiAlias(true);
+    lit.setBlendMode(BlendMode.Screen);
+    // The sky lit round it, far across: bigger and warmer the lower the sun.
+    lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), viewW * (0.5 + 0.35 * low), [Skia.Color(look.sun.color), clear(look.sun.color)], [0, 1], TileMode.Clamp));
+    lit.setAlphaf(0.5 + 0.3 * low);
+    canvas.drawRect(Skia.XYWHRect(0, 0, fullW, hz + 1), lit);
+    // Rays: soft beams fanning out from the sun, fading as they go.
+    const rays = Skia.PathBuilder.Make();
+    const reach = viewW * (0.42 + 0.2 * low);
+    const RAYS = 14;
+    for (let i = 0; i < RAYS; i++) {
+      const a = (i / RAYS) * Math.PI * 2 + 0.11 + (i % 2) * 0.05;
+      const half = i % 2 ? 0.035 : 0.055;
+      const len = reach * (i % 3 === 0 ? 1 : i % 3 === 1 ? 0.78 : 0.62);
+      rays.moveTo(sx, sy);
+      rays.lineTo(sx + Math.cos(a - half) * len, sy + Math.sin(a - half) * len);
+      rays.lineTo(sx + Math.cos(a + half) * len, sy + Math.sin(a + half) * len);
+      rays.close();
+    }
+    lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), reach, [Skia.Color(light), clear(light)], [0, 1], TileMode.Clamp));
+    lit.setAlphaf(0.32 + 0.12 * low);
+    canvas.drawPath(rays.build(), lit);
   }
   if (look.moon) {
     const mx = left + look.moon.x * viewW;
@@ -204,7 +253,8 @@ export function shineOf(look: SkyLook, rand: () => number, w: number, lightX: nu
 }
 
 /** The grass blades' colour, darker at night. */
-export const bladeColorOf = (c: Palette, look: SkyLook) => mix(mix(c.grassBlade, look.groundNear, 0.35), '#1B2B44', look.night * 0.45);
+// The grass turns with the ground through autumn and winter (green blades on gold ground looked painted on).
+export const bladeColorOf = (c: Palette, look: SkyLook) => mix(mix(c.grassBlade, look.groundNear, 0.35 + 0.45 * look.turn), '#1B2B44', look.night * 0.45);
 
 /** A grass blade from (x, y) up, `len` long, leaning by `lean`. */
 export function drawBlade(canvas: SkCanvas, blade: SkPaint, x: number, y: number, len: number, lean: number, width: number) {
@@ -330,6 +380,7 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
     drawHaze(canvas, w, hz, Math.min(groundH * (look.fog ? 0.45 : own ? 0.12 : 0.08), look.fog ? 400 : own ? 110 : 70), look.fog ? 0.85 : own ? 0.8 : 0.45, look);
     // This is a still strip above a page: rain or snow would only hang in it (Home has it falling).
     drawWeather(canvas, rand, w, h, hz, look, c, { falling: false });
+    if (hz > 0) drawSunDisc(canvas, hz, 0, w, look);
   }, Skia.XYWHRect(0, 0, w, h));
 }
 

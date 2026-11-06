@@ -20,17 +20,23 @@ export interface CameraFrame {
   pad: number;
   picW: number;
   picH: number;
+  /**
+   * How tall the drawing is on screen: the frame's height plus whatever lies below it under the
+   * system's navigation bar (Android draws the app there too, past the window's height).
+   */
+  viewH: number;
 }
 
-export function cameraFrame(W: number, H: number, cy: number): CameraFrame {
+export function cameraFrame(W: number, H: number, cy: number, below = 0): CameraFrame {
   const F = H * 0.9;
   const tiltMax = Math.atan((cy + 36) / F);
-  // The bottom of the screen at the full tilt looks this far below the horizon in the level view,
-  // and that far down the view has to be this much wider than the screen.
-  const groundMax = F * Math.tan(Math.atan((H - cy) / F) + tiltMax) + 24;
+  // The bottom of the drawing (the screen's, and anything under the navigation bar below it) at the
+  // full tilt looks this far below the horizon in the level view, and that far down the view has to
+  // be this much wider than the screen.
+  const groundMax = F * Math.tan(Math.atan((H + below - cy) / F) + tiltMax) + 24;
   const widen = (Math.sin(tiltMax) / F) * groundMax + Math.cos(tiltMax);
   const pad = Math.ceil((W / 2) * (widen - 1) + 16);
-  return { W, H, cy, F, tiltMax, pad, picW: W + pad * 2, picH: Math.ceil(cy + groundMax) };
+  return { W, H, cy, F, tiltMax, pad, picW: W + pad * 2, picH: Math.ceil(cy + groundMax), viewH: H + below };
 }
 
 /** The tilt at a share of the way down (0 to 1), easing into its last stop like a camera settling. */

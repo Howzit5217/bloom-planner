@@ -6,7 +6,7 @@ import { lookKey, type SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
+import { bladeColorOf, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
 import { fallOf, Precipitation } from './Precipitation';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
@@ -137,6 +137,8 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.1), look.fog ? 400 : 60), look.fog ? 0.85 : 0.55, look);
     // Rain and snow fall live over the top (Precipitation), not frozen into this picture.
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c, { falling: false });
+    // The sun last, bright over everything that dims the scene.
+    drawSunDisc(canvas, hz, f.pad, f.W, look);
   }, Skia.XYWHRect(0, 0, f.picW, f.picH));
   // The clouds, from their own sequence so the field stays as it was.
   const cloudRand = rng(seed ^ 0x2545f491);
@@ -258,8 +260,8 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
     ticker.setActive(moving);
   }, [moving, ticker]);
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.H }}>
-      <Canvas style={{ width: frame.W, height: frame.H }}>
+    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.viewH }}>
+      <Canvas style={{ width: frame.W, height: frame.viewH }}>
         <Group matrix={matrix}>
           {image ? <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : <Picture picture={scene.picture} />}
           {scene.clouds.map((k, i) => (

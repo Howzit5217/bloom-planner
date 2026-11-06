@@ -44,6 +44,7 @@ export function useGlide(ref: AnimatedRef<Animated.ScrollView>, horizontal: bool
       on.set(0);
       cancelAnimation(at);
     };
-    return { go, stop };
+    // Whether a glide is under way (on the UI thread), so a scroll it makes can be told from a finger's.
+    return { go, stop, active: on };
   }, [at, on, ref, horizontal]);
 }

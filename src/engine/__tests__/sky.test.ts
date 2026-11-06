@@ -1,4 +1,4 @@
-import { defaultSunTimes, lookKey, skyLook, SKY_PALETTES, solarDay, sunTimes, weatherFromCode } from '../sky';
+import { defaultSunTimes, lookKey, seasonGround, skyLook, SKY_PALETTES, solarDay, sunTimes, weatherFromCode } from '../sky';
 
 const utc = (iso: string) => new Date(iso).getTime();
 const near = (ms: number | null, iso: string, minutes = 6) => {
@@ -46,12 +46,45 @@ describe('the sky', () => {
     expect(skyLook(at(22), sun, 'clear').phase).toBe('night');
   });
 
-  it('uses the palette as is on a clear midday, with the sun high and no stars', () => {
+  it('uses the palette as is on a clear midday, with the sun up and no stars', () => {
     const noon = skyLook(at(12, 30), sun, 'clear');
     expect(noon.top).toBe(SKY_PALETTES.day.top);
     expect(noon.stars).toBe(0);
-    expect(noon.sun!.height).toBeGreaterThan(0.95);
+    // November at 40 degrees north: the sun stands about 31 degrees up at noon, under half the sky.
+    expect(noon.sun!.height).toBeGreaterThan(0.4);
+    expect(noon.sun!.height).toBeLessThan(0.55);
     expect(noon.darkSky).toBe(false);
+  });
+
+  it('follows the seasons: the sun higher at a summer noon than a winter one, on a wider arc', () => {
+    const june = sunTimes(40.71, -74.0, '2026-06-21');
+    const december = sunTimes(40.71, -74.0, '2026-12-21');
+    expect(june.noonAltitude).toBeCloseTo(72.7, 0);
+    expect(december.noonAltitude).toBeCloseTo(25.9, 0);
+    const noonOf = (t: typeof june) => (t.sunrise! + t.sunset!) / 2;
+    const summer = skyLook(noonOf(june), june, 'clear', 40.71);
+    const winter = skyLook(noonOf(december), december, 'clear', 40.71);
+    expect(summer.sun!.height).toBeGreaterThan(0.95);
+    expect(winter.sun!.height).toBeLessThan(0.4);
+    // An hour after sunrise the summer sun is further out toward the edge than the winter one.
+    const early = (t: typeof june) => t.sunrise! + 3_600_000;
+    expect(skyLook(early(june), june, 'clear', 40.71).sun!.x).toBeLessThan(skyLook(early(december), december, 'clear', 40.71).sun!.x);
+  });
+
+  it('turns the ground gold in autumn and straw in winter, half a year on in the south, green in the tropics', () => {
+    const october = new Date(2026, 9, 20).getTime();
+    const april = new Date(2026, 3, 20).getTime();
+    const north = seasonGround(october, 45);
+    expect(north.turn).toBeGreaterThan(0.9);
+    // Gold: more red than green in the near field.
+    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const [r, g] = rgb(north.groundNear);
+    expect(r).toBeGreaterThan(g);
+    // The same day in the south is spring there: green.
+    expect(seasonGround(october, -35).turn).toBeLessThan(0.1);
+    expect(seasonGround(april, 45).turn).toBeLessThan(0.1);
+    // Near the equator it stays summer green all year.
+    expect(seasonGround(october, 5)).toMatchObject({ groundNear: '#66AE42', turn: 0 });
   });
 
   it('shows stars on a clear night and none behind clouds', () => {

@@ -162,7 +162,10 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const rail = useScrollRail();
   // Home: a camera over the meadow that tilts down as the page scrolls, until the field fills the screen.
   const appWidth = useAppWidth();
-  const frame = useMemo(() => cameraFrame(appWidth, height, Math.round(height * SKY_SHARE)), [appWidth, height]);
+  // Down under Android's navigation bar too, where the app is drawn past the window's height: cut
+  // short there, the bare ground colour showed as a band along the bottom.
+  const below = Platform.OS === 'android' ? insets.bottom : 0;
+  const frame = useMemo(() => cameraFrame(appWidth, height, Math.round(height * SKY_SHARE), below), [appWidth, height, below]);
   // Shared with the backdrop behind the app's column on a wide screen, so both tilt together.
   const tilt = worldTilt;
   const wide = useWide();

@@ -37,6 +37,16 @@ export interface PlannedNotification {
   level?: number;
 }
 
+/** Anything shown at a time on a day: the check-in and its nudges, and the weather alerts. */
+export interface Schedulable {
+  date: DayKey;
+  hour: number;
+  minute: number;
+  kind: string;
+  title: string;
+  body: string;
+}
+
 export const NOTIFY_HORIZON_DAYS = 14;
 const NUDGE_HOUR = 9;
 

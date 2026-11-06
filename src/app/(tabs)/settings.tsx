@@ -14,7 +14,7 @@ import { WeatherLimits } from '@/features/shared/WeatherLimits';
 import { CustomGoalForm } from '@/features/home/NewGoal';
 import { EasyVerdict, GoalVerdict, useEarliestDate, useMoreChallenge } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
-import { requestPermission } from '@/services/notifications';
+import { notificationsSupported, requestPermission } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
 import { useApp, useDashboard, type LogMode, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
@@ -96,7 +96,8 @@ export default function Settings() {
   const dash = useDashboard();
   const st = useApp();
   const profile = st.profile;
-  const [timeSheet, setTimeSheet] = useState(false);
+  // The time being picked: the evening check-in's, or the morning forecast's.
+  const [timeSheet, setTimeSheet] = useState<'reminder' | 'forecast' | null>(null);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
   const [checking, setChecking] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -168,7 +169,15 @@ export default function Settings() {
   const setRate = (k: RateKey, v: number | null) => st.setRates({ ...profile.rates, [k]: v });
   const pickTime = () => {
     setTimeDraft({ hour: notif.hour, minute: notif.minute });
-    setTimeSheet(true);
+    setTimeSheet('reminder');
+  };
+  const wa = st.settings.weatherAlerts;
+  const pickForecastTime = () => {
+    setTimeDraft({ hour: wa.hour, minute: wa.minute });
+    setTimeSheet('forecast');
+  };
+  const setAlerts = (patch: Partial<typeof wa>) => {
+    void st.updateSettings({ weatherAlerts: { ...wa, ...patch } }).then(() => scheduleNotifications());
   };
 
   return (
@@ -344,8 +353,8 @@ export default function Settings() {
         ) : null}
       </Section>
 
-      {/* A web page cannot remind anyone at 8pm, so the web version has no reminders. */}
-      {!IS_WEB ? (
+      {/* The web app's come through the browser, while it's open (a web page can't wake itself up). */}
+      {notificationsSupported() ? (
         <Section title={t('Reminders')} icon="bell">
           <Toggle
             label={t('Evening Check-In')}
@@ -406,8 +415,45 @@ export default function Settings() {
               />
             </View>
           </Reveal>
+          {IS_WEB ? <WebNotifyNote /> : null}
         </Section>
       ) : null}
+
+      {/* Like a small weather channel for walks: the morning forecast, high UV, rain on the way, and
+          hard days ahead. They need the play location's forecast. */}
+      <Section title={t('Weather Alerts')} icon="weather-partly-cloudy">
+        {!notificationsSupported() ? (
+          <T v="small" soft>
+            {t('This browser can’t show notifications. On an iPhone, add the web app to the Home Screen, then turn these on there.')}
+          </T>
+        ) : !st.location ? (
+          <T v="small" soft>
+            {t('Weather alerts need the place you play. Set it under Where You Play above.')}
+          </T>
+        ) : (
+          <>
+            <Toggle
+              label={t('Weather Alerts')}
+              hint={t('The forecast for your walks, and a heads-up before the weather turns.')}
+              value={wa.enabled}
+              onChange={async (on) => {
+                const ok = on ? await requestPermission() : true;
+                setAlerts({ enabled: on && ok });
+              }}
+            />
+            <Reveal open={wa.enabled} gap={14}>
+              <View style={{ gap: 14 }}>
+                <Toggle label={t('Morning Forecast')} hint={t('The day ahead: its weather, high and low, rain and UV.')} value={wa.forecast} onChange={(b) => setAlerts({ forecast: b })} />
+                {wa.forecast ? <LinkRow label={t('Forecast at {time}', { time: fmtClock(wa.hour, wa.minute) })} onPress={pickForecastTime} icon="clock-edit" /> : null}
+                <Toggle label={t('High UV Warnings')} hint={t('When the UV gets high: a reminder to wear sunscreen.')} value={wa.uv} onChange={(b) => setAlerts({ uv: b })} />
+                <Toggle label={t('Rain on the Way')} hint={t('An hour before rain is likely, so you can walk first.')} value={wa.rain} onChange={(b) => setAlerts({ rain: b })} />
+                <Toggle label={t('Storms, Snow, Heat and Cold')} hint={t('The evening before a stormy, snowy, too hot or too cold day.')} value={wa.severe} onChange={(b) => setAlerts({ severe: b })} />
+              </View>
+            </Reveal>
+            {IS_WEB ? <WebNotifyNote /> : null}
+          </>
+        )}
+      </Section>
 
       {/* A sun by day and a moon by night, as the app looks right now. */}
       <Section title={t('Appearance')} icon={isDark ? 'moon-waning-crescent' : 'white-balance-sunny'}>
@@ -497,18 +543,25 @@ export default function Settings() {
         </Section>
       ) : null}
 
-      <Sheet visible={timeSheet} onClose={() => setTimeSheet(false)} title={t('Reminder Time')} scroll={false}>
+      <Sheet visible={timeSheet != null} onClose={() => setTimeSheet(null)} title={timeSheet === 'forecast' ? t('Forecast Time') : t('Reminder Time')} scroll={false}>
         <TimeWheel hour={timeDraft.hour} minute={timeDraft.minute} onChange={(hour, minute) => setTimeDraft({ hour, minute })} />
         <T v="small" soft center>
-          {t('Your evening check-in comes at {time}, once a day at most.', {
-            time: fmtClock(timeDraft.hour, timeDraft.minute),
-          })}
+          {timeSheet === 'forecast'
+            ? t('Your morning forecast comes at {time}.', { time: fmtClock(timeDraft.hour, timeDraft.minute) })
+            : t('Your evening check-in comes at {time}, once a day at most.', {
+                time: fmtClock(timeDraft.hour, timeDraft.minute),
+              })}
         </T>
         <PillButton
-          label={t('Set Reminder')}
+          label={timeSheet === 'forecast' ? t('Set Time') : t('Set Reminder')}
           icon="bell-check"
           onPress={async () => {
-            setTimeSheet(false);
+            const which = timeSheet;
+            setTimeSheet(null);
+            if (which === 'forecast') {
+              setAlerts({ hour: timeDraft.hour, minute: timeDraft.minute });
+              return;
+            }
             await st.updateSettings({
               notifications: {
                 ...notif,
@@ -557,5 +610,15 @@ export default function Settings() {
         </T>
       </Sheet>
     </Screen>
+  );
+}
+
+/** On the web, notifications come only while the app is open: said once, under each kind. */
+function WebNotifyNote() {
+  const { t } = useT();
+  return (
+    <T v="caption" soft>
+      {t('In the web app, these come while Bloom Planner is open, in a tab or in the background.')}
+    </T>
   );
 }

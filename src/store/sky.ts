@@ -79,6 +79,7 @@ export function useSkyLook(): SkyLook {
     // The play location's own date, which can differ from the phone's near midnight.
     const sun = location ? sunTimes(location.latitude, location.longitude, solarDay(now, location.longitude)) : defaultSunTimes(date);
     const live = location && weather && now - weather.at < STALE && Math.abs(weather.latitude - location.latitude) < 0.05 ? weatherFromCode(weather.code, weather.cloudCover) : 'clear';
-    return skyLook(now, sun, live);
+    // The seasons (the sun's path, the ground's colours) are the play location's, or a mid-northern place's.
+    return skyLook(now, sun, live, location?.latitude);
   }, [now, location, weather]);
 }

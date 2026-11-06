@@ -33,6 +33,8 @@ interface Props {
 
 /** On the web, which sends no end of a drag: this long without a new number and it has come to rest. */
 const WEB_REST_MS = 250;
+/** On the web, the browser's own glide to a number is surely done by then. */
+const WEB_GLIDE_MS = 900;
 
 /**
  * A ruler of numbers you drag sideways: it moves calmly under the finger, a short flick coasts
@@ -49,7 +51,10 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
   const [startX] = useState(() => (value - min) * TICK);
   const emitted = useRef(value);
   const settled = useRef(value);
-  const dragging = useRef(false);
+  // A finger on the ruler, known on the UI thread where the scroll events arrive, in their order: a
+  // flag set from them on the JS side could land late (a fling's end after the next drag began) and
+  // left the number standing still for a whole drag.
+  const touching = useSharedValue(0);
   // The newest number waiting for the next frame: a fast slide passes several in one, and only the
   // last is wanted, never each in turn after the ruler has stopped.
   const pending = useRef<number | null>(null);
@@ -75,8 +80,13 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
   // whole pixels, and that error added up level by level until it stopped off the line.
   const offsets = useMemo(() => Array.from({ length: count }, (_, i) => i * TICK), [count]);
   // The value the app itself is gliding to (on the web, where a scroll can't tell who moved it):
-  // until it gets there, or a finger or wheel takes over, the scrolling isn't the user's.
-  const glide = useRef<number | null>(null);
+  // until it gets there, a finger or wheel takes over, or long enough has passed for it to have
+  // arrived, the scrolling isn't the user's. (Waiting on the exact arrival alone, a glide that ended
+  // a whisker off left the number standing still.)
+  const glide = useRef<{ to: number; until: number } | null>(null);
+  const glideTo = (n: number) => {
+    glide.current = { to: n, until: Date.now() + WEB_GLIDE_MS };
+  };
 
   // What the scrolling calls, made once: a new number re-renders the ruler, and new functions would
   // set its scroll handlers up again every time, which slowed the number down mid-slide.
@@ -107,15 +117,15 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
       userTook: () => {
         glide.current = null;
       },
-      // Only a drag (or its fling) changes the level; a glide to a typed value must not step through.
+      // Every level the ruler passes is the number, except on the app's own glide to a number already
+      // showing (a typed one, or a tap): it mustn't step through the ones between.
       emit: (v: number) => {
-        if (WEB) {
+        if (WEB && glide.current) {
           // The web sends no drag events: every scroll is the user's, except the app's own glide.
-          if (glide.current != null) {
-            if (v === glide.current) glide.current = null;
-            return;
-          }
-        } else if (!dragging.current) return;
+          const g = glide.current;
+          if (v === g.to || Date.now() > g.until) glide.current = null;
+          if (v === g.to || Date.now() <= g.until) return;
+        }
         pending.current = clamp(v);
         if (frame.current == null) frame.current = requestAnimationFrame(flush);
         if (WEB) {
@@ -123,9 +133,8 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
           webRest.current = setTimeout(() => rest(pending.current ?? emitted.current), WEB_REST_MS);
         }
       },
-      // A tick per level while dragging: a firmer one on every tenth, and a solid stop at either end.
+      // A tick per level as it moves: a firmer one on every tenth, and a solid stop at either end.
       tick: (lv: number) => {
-        if (!dragging.current) return;
         if (lv <= min || lv >= max) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         else if (lv % 10 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         else Haptics.selectionAsync().catch(() => {});
@@ -135,12 +144,9 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
         const n = clamp(lv);
         if (n === emitted.current) return;
         Haptics.selectionAsync().catch(() => {});
-        if (WEB) glide.current = n;
+        if (WEB) glideTo(n);
         rest(n);
         slide.go((n - min) * TICK, x.get());
-      },
-      setDragging: (d: boolean) => {
-        dragging.current = d;
       },
       // Wherever a drag or fling ends, it finishes exactly on the nearest number's line, and that's
       // the number it rests on.
@@ -159,16 +165,17 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
     return () => cancelAnimationFrame(id);
   }, [width, min, ref]);
 
-  // A change from elsewhere: glide the ruler to it.
+  // A change from elsewhere: glide the ruler to it (never out from under a finger).
   useEffect(() => {
-    if (value === emitted.current || dragging.current) return;
+    if (value === emitted.current || touching.get()) return;
     emitted.current = value;
     settled.current = value;
-    if (WEB) glide.current = value;
+    if (WEB) glideTo(value);
     slide.go((value - min) * TICK, x.get());
-  }, [value, min, slide, x]);
+  }, [value, min, slide, x, touching]);
 
-  const { emit, tick, settle, setDragging } = api;
+  const { emit, tick, settle } = api;
+  const gliding = slide.active;
   const onScroll = useAnimatedScrollHandler(
     {
       onScroll: (e) => {
@@ -176,28 +183,29 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
       },
       onBeginDrag: () => {
         // A finger takes over from any glide.
+        touching.set(1);
         slide.stop();
-        scheduleOnRN(setDragging, true);
-      },
-      onMomentumEnd: (e) => {
-        scheduleOnRN(setDragging, false);
-        scheduleOnRN(settle, e.contentOffset.x);
       },
       onEndDrag: (e) => {
-        if (Math.abs(e.velocity?.x ?? 0) < 0.05) {
-          scheduleOnRN(setDragging, false);
-          scheduleOnRN(settle, e.contentOffset.x);
-        }
+        touching.set(0);
+        if (Math.abs(e.velocity?.x ?? 0) < 0.05) scheduleOnRN(settle, e.contentOffset.x);
+      },
+      onMomentumEnd: (e) => {
+        // A fling's end reported once the next drag has begun: that drag settles it instead, and no
+        // glide pulls the ruler out from under the finger.
+        if (touching.get()) return;
+        scheduleOnRN(settle, e.contentOffset.x);
       },
     },
-    [api],
+    [api, touching, gliding],
   );
 
-  // The level under the needle, live while you drag, with a tick per level.
+  // The level under the needle, live as the ruler moves (a finger, a fling, its settling), with a
+  // tick per level; not on the app's own glide, where the number is already the one it's going to.
   useAnimatedReaction(
     () => Math.round(x.value / TICK),
     (cur, prev) => {
-      if (prev === null || cur === prev) return;
+      if (prev === null || cur === prev || gliding.get()) return;
       bob.set(withSequence(withTiming(1.15, { duration: 50 }), withSpring(1, { damping: 12, stiffness: 260 })));
       scheduleOnRN(emit, min + cur);
       scheduleOnRN(tick, min + cur);

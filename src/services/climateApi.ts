@@ -1,6 +1,7 @@
 import { subDays, subYears } from 'date-fns';
 import { buildHistograms, type ClimateCache, type ClimateDay } from '@/engine/climate';
 import { toKey } from '@/engine/dates';
+import type { AlertForecast } from '@/engine/weatherAlerts';
 import type { ForecastWeatherDay } from '@/engine/weatherPlan';
 
 /**
@@ -140,6 +141,46 @@ export async function fetchForecast(latitude: number, longitude: number, timezon
     wind: d.wind_speed_10m_max?.[i] ?? 0,
     daylight: d.daylight_duration?.[i] ?? 0,
   }));
+}
+
+/**
+ * The next two days in detail, for the weather alerts: each day's weather, highs and lows (and how
+ * they feel), rain and its chance, snow, gusts and the UV index at its highest; and hour by hour, the
+ * chance of rain, how much, the UV index and the weather. Times are the place's own clock.
+ */
+export async function fetchAlertForecast(latitude: number, longitude: number, timezone: string): Promise<AlertForecast> {
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,precipitation_probability_max,snowfall_sum,wind_gusts_10m_max,uv_index_max` +
+    `&hourly=precipitation_probability,precipitation,uv_index,weather_code` +
+    `&timezone=${encodeURIComponent(timezone || 'auto')}&forecast_days=3`;
+  const json = await getJson(url, 12000);
+  const d = json?.daily;
+  const h = json?.hourly;
+  if (!d || !Array.isArray(d.time) || !h || !Array.isArray(h.time)) throw new ClimateError('No forecast');
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return {
+    days: d.time.map((date: string, i: number) => ({
+      date,
+      code: num(d.weather_code?.[i]),
+      tmax: num(d.temperature_2m_max?.[i]),
+      tmin: num(d.temperature_2m_min?.[i]),
+      feelsMax: num(d.apparent_temperature_max?.[i]),
+      feelsMin: num(d.apparent_temperature_min?.[i]),
+      precip: num(d.precipitation_sum?.[i]),
+      precipChance: num(d.precipitation_probability_max?.[i]),
+      snow: num(d.snowfall_sum?.[i]),
+      gusts: num(d.wind_gusts_10m_max?.[i]),
+      uvMax: num(d.uv_index_max?.[i]),
+    })),
+    hours: h.time.map((time: string, i: number) => ({
+      time,
+      precipChance: num(h.precipitation_probability?.[i]),
+      precip: num(h.precipitation?.[i]),
+      uv: num(h.uv_index?.[i]),
+      code: num(h.weather_code?.[i]),
+    })),
+  };
 }
 
 /** The weather right now, for the backdrop's sky. Two decimals (about 1 km) is plenty for a sky. */

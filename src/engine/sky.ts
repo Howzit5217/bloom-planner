@@ -10,6 +10,8 @@ export interface SunTimes {
   sunset: number | null;
   /** Midnight sun or polar night. */
   polar: 'day' | 'night' | null;
+  /** How high the sun stands at noon, in degrees: low in winter, high in summer (the seasons' path). */
+  noonAltitude: number;
 }
 
 // ─── The sun ───
@@ -36,11 +38,12 @@ export function sunTimes(latitude: number, longitude: number, day: string): SunT
   const transit = J2000 + jStar + 0.0053 * Math.sin(M * RAD) - 0.0069 * Math.sin(2 * lambda * RAD);
   const sinDec = Math.sin(lambda * RAD) * Math.sin(23.4397 * RAD);
   const cosDec = Math.cos(Math.asin(sinDec));
+  const noonAltitude = 90 - Math.abs(latitude - Math.asin(sinDec) / RAD);
   const cosW = (Math.sin(-0.833 * RAD) - Math.sin(latitude * RAD) * sinDec) / (Math.cos(latitude * RAD) * cosDec);
-  if (cosW > 1) return { sunrise: null, sunset: null, polar: 'night' };
-  if (cosW < -1) return { sunrise: null, sunset: null, polar: 'day' };
+  if (cosW > 1) return { sunrise: null, sunset: null, polar: 'night', noonAltitude };
+  if (cosW < -1) return { sunrise: null, sunset: null, polar: 'day', noonAltitude };
   const w = Math.acos(cosW) / RAD / 360;
-  return { sunrise: fromJulian(transit - w), sunset: fromJulian(transit + w), polar: null };
+  return { sunrise: fromJulian(transit - w), sunset: fromJulian(transit + w), polar: null, noonAltitude };
 }
 
 /** The calendar day at a longitude right now (yyyy-MM-dd), by local solar time: the day whose sunrise and sunset matter. */
@@ -48,10 +51,69 @@ export function solarDay(now: number, longitude: number): string {
   return new Date(now + (longitude / 360) * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** Without a play location: 6:30 to 18:30 on the device's clock. */
+/** Where the seasons are taken from without a play location: a mid-northern latitude. */
+export const DEFAULT_LATITUDE = 40;
+
+/** Without a play location: 6:30 to 18:30 on the device's clock, the sun as high as at a mid-northern latitude. */
 export function defaultSunTimes(now: Date): SunTimes {
   const at = (h: number, min: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, min).getTime();
-  return { sunrise: at(6, 30), sunset: at(18, 30), polar: null };
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return { sunrise: at(6, 30), sunset: at(18, 30), polar: null, noonAltitude: sunTimes(DEFAULT_LATITUDE, 0, day).noonAltitude };
+}
+
+// ─── The seasons ───
+
+/** The ground by day through the year: winter straw, spring green, a deeper summer green, autumn gold. */
+const SEASON_GROUND = {
+  winter: { groundFar: '#CACBA4', groundMid: '#B3B88D', groundNear: '#9CA57A' },
+  spring: { groundFar: '#B2DE84', groundMid: '#93CE64', groundNear: '#74BA4C' },
+  summer: { groundFar: '#A6D879', groundMid: '#86C559', groundNear: '#66AE42' },
+  fall: { groundFar: '#EBCB6A', groundMid: '#E0A94A', groundNear: '#CC8B3C' },
+} as const;
+type SeasonName = keyof typeof SEASON_GROUND;
+type GroundKey = keyof (typeof SEASON_GROUND)['spring'];
+
+/**
+ * Each season at its height, by day of the year in the north (the south is half a year on): mid
+ * January, late April, mid July, and the autumn colours at their peak in late October.
+ */
+const SEASON_PEAKS: Array<{ day: number; season: SeasonName }> = [
+  { day: 15, season: 'winter' },
+  { day: 112, season: 'spring' },
+  { day: 196, season: 'summer' },
+  { day: 293, season: 'fall' },
+];
+
+const dayOfYear = (ms: number) => {
+  const d = new Date(ms);
+  return Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86_400_000) + 1;
+};
+
+/**
+ * The ground's colours for the season at a place: between the two seasons either side of the date,
+ * half a year on south of the equator, and less of it the nearer the equator (none in the tropics,
+ * where it stays summer green). `turn` is how far it has turned from green (autumn and winter).
+ */
+export function seasonGround(now: number, latitude: number): Record<GroundKey, string> & { turn: number } {
+  const south = latitude < 0;
+  const day = (dayOfYear(now) + (south ? 182 : 0) - 1) % 365 + 1;
+  let i = SEASON_PEAKS.length - 1;
+  while (i > 0 && SEASON_PEAKS[i].day > day) i--;
+  const a = SEASON_PEAKS[i];
+  const b = SEASON_PEAKS[(i + 1) % SEASON_PEAKS.length];
+  const span = (b.day - a.day + 365) % 365 || 365;
+  const f = ((day - a.day + 365) % 365) / span;
+  // Eased, so each season lingers round its peak and the change comes between.
+  const k = f * f * (3 - 2 * f);
+  // How seasonal the place is: none within about 12 degrees of the equator, all of it from 32.
+  const strength = Math.max(0, Math.min(1, (Math.abs(latitude) - 12) / 20));
+  const turnOf = (n: SeasonName) => (n === 'fall' || n === 'winter' ? 1 : 0);
+  const out = {} as Record<GroundKey, string>;
+  for (const key of ['groundFar', 'groundMid', 'groundNear'] as const) {
+    const here = mix(SEASON_GROUND[a.season][key], SEASON_GROUND[b.season][key], k);
+    out[key] = mix(SEASON_GROUND.summer[key], here, strength);
+  }
+  return { ...out, turn: strength * (turnOf(a.season) * (1 - k) + turnOf(b.season) * k) };
 }
 
 // ─── The weather ───
@@ -110,6 +172,8 @@ export interface SkyLook {
   groundFar: string;
   groundMid: string;
   groundNear: string;
+  /** How far the ground has turned from green with the season (autumn, winter), 0..1, for the grass. */
+  turn: number;
   /** 0 by day, 1 deep in the night: dims flowers, lights fireflies. */
   night: number;
   /** How bright the stars are (0..1); none behind clouds. */
@@ -160,7 +224,7 @@ function keyframes(sun: SunTimes): Array<{ at: number; phase: SkyPhase }> {
   ];
 }
 
-export function skyLook(now: number, sun: SunTimes, weather: SkyWeather): SkyLook {
+export function skyLook(now: number, sun: SunTimes, weather: SkyWeather, latitude: number = DEFAULT_LATITUDE): SkyLook {
   // Where we are between two keyframes, and how far.
   let a: SkyPhase = 'day';
   let b: SkyPhase = 'day';
@@ -190,21 +254,35 @@ export function skyLook(now: number, sun: SunTimes, weather: SkyWeather): SkyLoo
   const wash = WASH[weather];
   const washColor = mix(wash.day, wash.night, night);
   const sky = (k: keyof Palette, w: number) => mix(mix(pa[k], pb[k], f), washColor, w);
-  const ground = (k: keyof Palette) => mix(mix(pa[k], pb[k], f), '#7C8A80', wash.amount * 0.25);
+  // The ground in the season's colours, lit as the time of day lights it (dawn, dusk and night keep
+  // their own share of the day's colour), then greyed by the weather.
+  const season = seasonGround(now, latitude);
+  const lit = (p: Palette, k: GroundKey) => {
+    const day = hex(SKY_PALETTES.day[k]);
+    const at = hex(p[k]);
+    const s = hex(season[k]);
+    return toHex(s.map((v, i) => v * (at[i] / Math.max(1, day[i]))));
+  };
+  const ground = (k: GroundKey) => mix(mix(lit(pa, k), lit(pb, k), f), '#7C8A80', wash.amount * 0.25);
 
   const open = weather === 'clear' || weather === 'partly';
   // The sun's arc through the day; low and golden near sunrise and sunset.
   let sunPos: SkyLook['sun'] = null;
   let moon: SkyLook['moon'] = null;
+  // The seasons' path: as high at noon as the sun really stands there that day (low in winter, high in
+  // summer), and across more of the sky the longer the day.
+  const peak = Math.max(0.3, Math.min(1, sun.noonAltitude / 70));
   if (sun.sunrise != null && sun.sunset != null) {
     const p = (now - sun.sunrise) / (sun.sunset - sun.sunrise);
     if (p > -0.02 && p < 1.02 && open) {
-      const height = Math.max(0, Math.sin(Math.min(1, Math.max(0, p)) * Math.PI));
-      sunPos = { x: 0.12 + 0.76 * Math.min(1, Math.max(0, p)), height, color: mix('#FFB36B', '#FFF4C2', Math.min(1, height * 2.2)) };
+      const height = Math.max(0, Math.sin(Math.min(1, Math.max(0, p)) * Math.PI)) * peak;
+      const dayShare = (sun.sunset - sun.sunrise) / 86_400_000;
+      const half = Math.max(0.24, Math.min(0.44, 0.14 + 0.55 * dayShare));
+      sunPos = { x: 0.5 - half + 2 * half * Math.min(1, Math.max(0, p)), height, color: mix('#FFB36B', '#FFF4C2', Math.min(1, height * 2.2)) };
     }
     if (night > 0.6 && open) moon = { x: 0.84, height: 0.3 };
   } else if (sun.polar === 'day' && open) {
-    sunPos = { x: 0.5, height: 0.6, color: '#FFF4C2' };
+    sunPos = { x: 0.5, height: Math.max(0.2, peak * 0.6), color: '#FFF4C2' };
   } else if (sun.polar === 'night' && open) {
     moon = { x: 0.84, height: 0.3 };
   }
@@ -217,6 +295,7 @@ export function skyLook(now: number, sun: SunTimes, weather: SkyWeather): SkyLoo
     groundFar: ground('groundFar'),
     groundMid: ground('groundMid'),
     groundNear: ground('groundNear'),
+    turn: season.turn,
     night,
     stars: weather === 'clear' ? night : weather === 'partly' ? night * 0.6 : 0,
     sun: sunPos,

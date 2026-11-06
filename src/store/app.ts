@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import bundledJson from '@/data/bloom-levels.json';
 import { PRESETS, seasonRatesFromClimate, walkRatesFromClimate, type ClimateCache } from '@/engine/climate';
+import { DEFAULT_WEATHER_ALERTS, type WeatherAlertPrefs } from '@/engine/weatherAlerts';
 import { DEFAULT_LIMITS, forecastWeights, walkFallback, type TempLimits } from '@/engine/weatherPlan';
 import { useForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
@@ -47,6 +48,8 @@ export interface Settings {
   language: LangPref;
   preset: ThresholdPreset;
   notifications: NotificationPrefs;
+  /** The weather alerts: the morning forecast, high UV, rain on the way, and hard days ahead. */
+  weatherAlerts: WeatherAlertPrefs;
   dismissed: Record<string, boolean>;
   updates: { enabled: boolean; lastCheck: string | null; latest: AppUpdateInfo | null; dismissedVersion: string | null };
   /** Beta builds only: take new test builds (GitHub pre-releases) as well as releases. */
@@ -76,6 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
     nudgeDates: [],
     lastMilestoneLevel: null,
   },
+  weatherAlerts: DEFAULT_WEATHER_ALERTS,
   dismissed: {},
   updates: { enabled: true, lastCheck: null, latest: null, dismissedVersion: null },
   dev: { betaUpdates: true },
@@ -199,6 +203,7 @@ export const useApp = create<AppState>((set, get) => ({
           ...DEFAULT_SETTINGS,
           ...(settings ?? {}),
           notifications: { ...DEFAULT_SETTINGS.notifications, ...(settings?.notifications ?? {}) },
+          weatherAlerts: { ...DEFAULT_SETTINGS.weatherAlerts, ...(settings?.weatherAlerts ?? {}) },
           updates: { ...DEFAULT_SETTINGS.updates, ...(settings?.updates ?? {}) },
           dev: { ...DEFAULT_SETTINGS.dev, ...(settings?.dev ?? {}) },
           limits: limitsFrom(settings),

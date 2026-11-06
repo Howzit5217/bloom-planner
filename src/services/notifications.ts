@@ -1,10 +1,17 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { fromKey } from '@/engine/dates';
-import type { PlannedNotification } from '@/engine/notifyPlan';
+import type { Schedulable } from '@/engine/notifyPlan';
 import { t } from '@/i18n';
 
 const CHANNEL = 'daily';
+/** The weather alerts have their own channel, so Android can quieten them apart from the check-in. */
+const WEATHER_CHANNEL = 'weather';
+const WEATHER_KINDS = new Set(['forecast', 'uv', 'rain', 'storm', 'snow', 'heat', 'cold']);
+
+
+/** The phone app can always show notifications (once allowed). */
+export const notificationsSupported = () => true;
 
 export function configureNotifications() {
   Notifications.setNotificationHandler({
@@ -12,13 +19,21 @@ export function configureNotifications() {
   });
 }
 
+/** The channels made (Android): a channel that couldn't be made isn't asked for, so its notifications still come, on the default one. */
+const madeChannels = new Set<string>();
+
 async function ensureChannel() {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync(CHANNEL, {
-    name: t('Daily check-in'),
-    description: t('One friendly reminder a day at most.'),
-    importance: Notifications.AndroidImportance.DEFAULT,
-  });
+  const make = async (id: string, name: string, description: string) => {
+    try {
+      await Notifications.setNotificationChannelAsync(id, { name, description, importance: Notifications.AndroidImportance.DEFAULT });
+      madeChannels.add(id);
+    } catch {
+      // Expo Go can refuse to make channels; the permission prompt and the notifications go ahead without.
+    }
+  };
+  await make(CHANNEL, t('Daily check-in'), t('One friendly reminder a day at most.'));
+  await make(WEATHER_CHANNEL, t('Weather alerts'), t('The morning forecast, high UV, rain on the way, and storms, snow, heat or cold ahead.'));
 }
 
 export async function hasPermission(): Promise<boolean> {
@@ -33,8 +48,13 @@ export async function requestPermission(): Promise<boolean> {
   return s.granted || s.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
 }
 
+const channelFor = (kind: string) => {
+  const id = WEATHER_KINDS.has(kind) ? WEATHER_CHANNEL : CHANNEL;
+  return madeChannels.has(id) ? { channelId: id } : {};
+};
+
 /** Replace everything scheduled with the given plan. */
-export async function applySchedule(plan: PlannedNotification[]): Promise<void> {
+export async function applySchedule(plan: Schedulable[]): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
   if (!plan.length || !(await hasPermission())) return;
   await ensureChannel();
@@ -45,7 +65,7 @@ export async function applySchedule(plan: PlannedNotification[]): Promise<void> 
     if (d.getTime() <= now + 60_000) continue;
     await Notifications.scheduleNotificationAsync({
       content: { title: n.title, body: n.body, data: { kind: n.kind } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: d, channelId: CHANNEL },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: d, ...channelFor(n.kind) },
     });
   }
 }
