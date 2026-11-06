@@ -7,7 +7,8 @@ import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, sho
 import { CustomGoalCard, NewGoalCard, showsCustomGoal, showsNewGoal } from '@/features/home/NewGoal';
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
-import { downloadAndInstall } from '@/services/installUpdate';
+import { updateLabel } from '@/features/shared/UpdatePrompt';
+import { useUpdateInstall } from '@/services/installUpdate';
 import { requestPermission } from '@/services/notifications';
 import { isNewerThanThisBuild } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
@@ -26,7 +27,7 @@ export default function Home() {
   const saveEntry = useApp((s) => s.saveEntry);
   const refreshToday = useApp((s) => s.refreshToday);
   const [levelUpRequest, setLevelUpRequest] = useState(0);
-  const [updating, setUpdating] = useState(false);
+  const install = useUpdateInstall();
   // The meadow grows fuller with the level reached.
   const level = dash?.current.level ?? null;
   const maxLevel = useApp((s) => s.table.maxLevel);
@@ -55,14 +56,13 @@ export default function Home() {
           title={t('Version {version} Is Ready', { version: latest!.version })}
           text={latest!.notes ? (latest!.notes.split('\n').find((l) => l.trim())?.replace(/^[#*\-\s]+/, '') ?? t('A new version is available.')) : t('A new version is available.')}
           action={{
-            // Android: downloads in the app and opens the installer, so it's one tap on Install.
-            label: Platform.OS === 'android' && latest!.apkUrl ? (updating ? t('Downloading the update…') : t('Update now')) : t('See what’s new'),
-            onPress: async () => {
+            // Android: downloads in the app (with its progress) and opens the installer, so it's one
+            // tap on Install; the same download as the popup's.
+            label: Platform.OS === 'android' && latest!.apkUrl ? updateLabel(install.step, install.share, t) : t('See what’s new'),
+            onPress: () => {
               if (Platform.OS !== 'android' || !latest!.apkUrl) return void WebBrowser.openBrowserAsync(latest!.url);
-              if (updating) return;
-              setUpdating(true);
-              await downloadAndInstall(latest!.apkUrl);
-              setUpdating(false);
+              if (install.step === 'downloading') return;
+              void install.start(latest!.apkUrl);
             },
           }}
           onDismiss={() => updateSettings({ updates: { ...settings.updates, dismissedVersion: latest!.version } })}
