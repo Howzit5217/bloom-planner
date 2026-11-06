@@ -87,6 +87,13 @@ export async function applySchedule(plan: Schedulable[]): Promise<void> {
   }
 }
 
+/** One notification a few seconds from now, to see the alerts work (Settings). */
+export async function sendTest(title: string, body: string): Promise<void> {
+  if (!(await hasPermission())) return;
+  const at = Date.now() + 3000;
+  setTimeout(() => void show({ date: '', hour: 0, minute: 0, kind: `test-${at}`, title, body }, at), 3000);
+}
+
 export async function cancelAll(): Promise<void> {
   for (const t of timers) clearTimeout(t);
   timers.length = 0;

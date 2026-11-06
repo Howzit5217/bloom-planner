@@ -14,11 +14,11 @@ const CLOSE_MS = 200;
  * either. Until it's first toggled it's just its content (a section that starts open shows at once);
  * with reduced motion it simply shows and hides.
  */
-export function Reveal({ open, children, gap = 0 }: { open: boolean; children: ReactNode; gap?: number }) {
+export function Reveal({ open, children, gap = 0, onClosed }: { open: boolean; children: ReactNode; gap?: number; onClosed?: () => void }) {
   const { reduceMotion } = useTheme();
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) setMounted(true);
-  if (!open && mounted && reduceMotion) setMounted(false);
+  if (!open && mounted && reduceMotion && !onClosed) setMounted(false);
   // Once toggled, it animates from then on.
   const [toggled, setToggled] = useState(false);
   const [lastOpen, setLastOpen] = useState(open);
@@ -31,11 +31,17 @@ export function Reveal({ open, children, gap = 0 }: { open: boolean; children: R
   useEffect(() => {
     if (reduceMotion) {
       p.value = open ? 1 : 0;
+      if (!open) onClosed?.();
       return;
     }
+    // Folded away: gone, or (with `onClosed`, something leaving for good) the owner takes it out at
+    // that moment, so the space it closed doesn't open for an instant before it goes.
+    const closed = () => (onClosed ? onClosed() : setMounted(false));
     p.value = withTiming(open ? 1 : 0, { duration: open ? OPEN_MS : CLOSE_MS, easing: Easing.out(Easing.cubic) }, (done) => {
-      if (done && !open) scheduleOnRN(setMounted, false);
+      if (done && !open) scheduleOnRN(closed);
     });
+    // onClosed is read when the fold ends; a new one each render mustn't start it again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, p, reduceMotion]);
   const box = useAnimatedStyle(() => ({ height: height * p.value, marginTop: -gap * (1 - p.value), overflow: 'hidden' }));
   // Fades in a little behind the opening, so the content doesn't show squeezed.

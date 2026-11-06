@@ -14,6 +14,7 @@ import { requestPermission } from '@/services/notifications';
 import { isNewerThanThisBuild } from '@/services/updates';
 import { useApp, useDashboard } from '@/store/app';
 import { Banner } from '@/ui/Banner';
+import { Reveal } from '@/ui/Reveal';
 import { useBloom } from '@/ui/bloom';
 import { fmtClock } from '@/ui/TimeWheel';
 import { Screen } from '@/ui/Screen';
@@ -29,6 +30,14 @@ export default function Home() {
   const saveEntry = useApp((s) => s.saveEntry);
   const refreshToday = useApp((s) => s.refreshToday);
   const [levelUpRequest, setLevelUpRequest] = useState(0);
+  // Banners on their way out: each folds away first, and is dismissed once it has.
+  const [closing, setClosing] = useState<Record<string, () => void>>({});
+  const fold = (key: string, done: () => void) => () => setClosing((s) => ({ ...s, [key]: done }));
+  const folded = (key: string) => {
+    const done = closing[key];
+    setClosing(({ [key]: _gone, ...rest }) => rest);
+    done?.();
+  };
   const install = useUpdateInstall();
   // The meadow grows fuller with the level reached.
   const level = dash?.current.level ?? null;
@@ -67,7 +76,7 @@ export default function Home() {
               void install.start(latest!.apkUrl);
             },
           }}
-          onDismiss={() => updateSettings({ updates: { ...settings.updates, dismissedVersion: latest!.version } })}
+          onDismiss={fold('update', () => void updateSettings({ updates: { ...settings.updates, dismissedVersion: latest!.version } }))}
         />
       ),
     });
@@ -89,7 +98,7 @@ export default function Home() {
               : t("This needs {steps} steps a day at its busiest. That's about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })
           }
           action={{ label: t('Change the goal'), onPress: () => router.push('/settings') }}
-          onDismiss={() => dismiss(impossibleKey)}
+          onDismiss={fold('impossible', () => dismiss(impossibleKey))}
         />
       ),
     });
@@ -126,12 +135,12 @@ export default function Home() {
               await updateSettings({ notifications: { ...settings.notifications, enabled: ok, askedAt: new Date().toISOString() } });
             },
           }}
-          onDismiss={() => updateSettings({ notifications: { ...settings.notifications, askedAt: new Date().toISOString() } })}
+          onDismiss={fold('notify', () => void updateSettings({ notifications: { ...settings.notifications, askedAt: new Date().toISOString() } }))}
         />
       ),
     });
   if (dash.rates.estimated.length > 0 && obs.loggedDays < 7 && !dismissed['rates-week'])
-    banners.push({ key: 'rates', node: <Banner icon="speedometer-slow" text={t('Log a few days to work out your real rates.')} onDismiss={() => dismiss('rates-week')} /> });
+    banners.push({ key: 'rates', node: <Banner icon="speedometer-slow" text={t('Log a few days to work out your real rates.')} onDismiss={fold('rates', () => dismiss('rates-week'))} /> });
   if (obs.ready && (dash.rates.estimated.length > 0 || drift) && !dismissed[observedKey])
     banners.push({
       key: 'observed',
@@ -140,11 +149,12 @@ export default function Home() {
           icon="chart-box"
           text={`${t('A week of logs in: you average {steps} steps and {flowers} flowers a day.', { steps: fmt(obs.medianSteps), flowers: fmt(obs.medianFlowers) })}${obs.bikeFlowersPerHour ? ` ${t('Biking, you plant about {n} an hour.', { n: fmt(obs.bikeFlowersPerHour) })}` : ''}`}
           action={{ label: t('Compare with your rates'), onPress: () => router.push('/settings') }}
-          onDismiss={() => dismiss(observedKey)}
+          onDismiss={fold('observed', () => dismiss(observedKey))}
         />
       ),
     });
 
+  const bannerKeys = new Set(banners.map((b) => b.key));
   // Only cards with something to show, so every gap between them is the same.
   const cards = [
     <HomeHeader key="h" dash={dash} />,
@@ -169,11 +179,22 @@ export default function Home() {
         await scheduleNotifications().catch(() => {});
       }}
     >
-      {cards.map((card, i) => (
-        <StaggerIn key={(card as { key: string }).key ?? i} index={i}>
-          {card}
-        </StaggerIn>
-      ))}
+      {cards.map((card, i) => {
+        const key = (card as { key: string }).key ?? String(i);
+        const shown = (
+          <StaggerIn key={key} index={i}>
+            {card}
+          </StaggerIn>
+        );
+        // A banner folds away when it's put away, and what's below moves up to close the gap.
+        return bannerKeys.has(key) ? (
+          <Reveal key={key} open={!closing[key]} gap={16} onClosed={() => folded(key)}>
+            {shown}
+          </Reveal>
+        ) : (
+          shown
+        );
+      })}
     </Screen>
   );
 }

@@ -9,6 +9,7 @@ import {
   segmentAt,
   type Plan,
   type ProjectedLevel,
+  type DayWeights,
 } from './plan';
 import { initialState, replayLog, type ReplayResult } from './progress';
 import { flowerDays, observedRates, resolveRates, type ObservedRates } from './rates';
@@ -110,6 +111,11 @@ export interface Dashboard {
    * behind, or easier from being ahead. Only when the standing says so, not a change of weather.
    */
   difficultyShift: { from: PlanDifficulty; way: 'harder' | 'easier' } | null;
+  /**
+   * What the plan is built from besides the goal: walking days, the forecast's days and the week's
+   * rhythm. A goal being chosen is checked with these too, so it grades the same as once saved.
+   */
+  goalInputs: { walkRates?: number[]; walkDays?: DayWeights; rideDays?: DayWeights; rhythm?: (d: Date) => number };
 }
 
 const ring = (done: number, need: number): RingData => ({
@@ -273,5 +279,6 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     impossible,
     difficulty,
     difficultyShift,
+    goalInputs: { walkRates, walkDays: forecast?.walk, rideDays: forecast?.ride, rhythm },
   };
 }

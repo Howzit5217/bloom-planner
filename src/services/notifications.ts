@@ -70,6 +70,16 @@ export async function applySchedule(plan: Schedulable[]): Promise<void> {
   }
 }
 
+/** One notification a few seconds from now, to see the alerts work (Settings). */
+export async function sendTest(title: string, body: string): Promise<void> {
+  if (!(await hasPermission())) return;
+  await ensureChannel();
+  await Notifications.scheduleNotificationAsync({
+    content: { title, body, data: { kind: 'test' } },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3, ...channelFor('forecast') },
+  });
+}
+
 export async function cancelAll(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }

@@ -14,7 +14,7 @@ import { WeatherLimits } from '@/features/shared/WeatherLimits';
 import { CustomGoalForm } from '@/features/home/NewGoal';
 import { EasyVerdict, GoalVerdict, useEarliestDate, useMoreChallenge } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
-import { notificationsSupported, requestPermission } from '@/services/notifications';
+import { notificationsSupported, requestPermission, sendTest } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
 import { useApp, useDashboard, type LogMode, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
@@ -96,6 +96,7 @@ export default function Settings() {
   const dash = useDashboard();
   const st = useApp();
   const profile = st.profile;
+  const [testSent, setTestSent] = useState(false);
   // The time being picked: the evening check-in's, or the morning forecast's.
   const [timeSheet, setTimeSheet] = useState<'reminder' | 'forecast' | null>(null);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
@@ -117,6 +118,9 @@ export default function Settings() {
           bikeFlowersPerHour: dash.rates.bikeFlowersPerHour,
           bikes: dash.rates.bikes,
           walkFlowersPerHour: dash.rates.walkFlowersPerHour,
+          // Walking days, the forecast and the week's rhythm, as the saved plan has them: without,
+          // the time shown while choosing changed a moment after the goal saved.
+          ...dash.goalInputs,
         }
       : null;
   const draftCheck =
@@ -448,6 +452,18 @@ export default function Settings() {
                 <Toggle label={t('High UV Warnings')} hint={t('When the UV gets high: a reminder to wear sunscreen.')} value={wa.uv} onChange={(b) => setAlerts({ uv: b })} />
                 <Toggle label={t('Rain on the Way')} hint={t('An hour before rain is likely, so you can walk first.')} value={wa.rain} onChange={(b) => setAlerts({ rain: b })} />
                 <Toggle label={t('Storms, Snow, Heat and Cold')} hint={t('The evening before a stormy, snowy, too hot or too cold day.')} value={wa.severe} onChange={(b) => setAlerts({ severe: b })} />
+                {/* To see they work (and how they look), especially in a browser. */}
+                <PillButton
+                  label={testSent ? t('It arrives in a few seconds.') : t('Send a test alert')}
+                  icon="bell-ring-outline"
+                  variant="secondary"
+                  size="md"
+                  onPress={() => {
+                    void sendTest(t('Weather Alerts Are On'), t('This is how they’ll look: the forecast, high UV, rain on the way, and hard days ahead.'));
+                    setTestSent(true);
+                    setTimeout(() => setTestSent(false), 5000);
+                  }}
+                />
               </View>
             </Reveal>
             {IS_WEB ? <WebNotifyNote /> : null}

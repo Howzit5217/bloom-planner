@@ -17,23 +17,49 @@ export const color = (paint: SkPaint, hex: string, alpha = 1) => {
   paint.setAlphaf(alpha);
 };
 
-/** A flat, puffy cloud like the game's: three or four round bumps on a flat base, lighter on top. */
-export function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, paint: SkPaint, rand: () => number) {
-  const bumps = 3 + Math.floor(rand() * 2);
-  const parts: Array<[number, number, number]> = [];
-  for (let i = 0; i < bumps; i++) {
-    const t = bumps === 1 ? 0.5 : i / (bumps - 1);
-    const r = s * (0.32 + (1 - Math.abs(t - 0.5) * 2) * 0.22 + rand() * 0.06);
-    parts.push([x + (t - 0.5) * s * 1.5, y - r * 0.55, r]);
+/** How far a cloud reaches round its middle, in its sizes: for the picture it's drawn into. */
+export const CLOUD_BOUNDS = { left: -1.75, top: -1.1, width: 3.5, height: 1.55 };
+
+/**
+ * A cloud as clouds look: a heap of soft puffs, the biggest in the middle rising into a dome with a
+ * few billows on top, a flatter, shaded base, the tops lit from above, and soft edges all round.
+ * Its shape comes from `rand`, so each cloud is its own.
+ */
+export function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, _paint: SkPaint, rand: () => number) {
+  const base = y + s * 0.16;
+  const puffs: Array<[number, number, number]> = [];
+  const n = 10 + Math.floor(rand() * 5);
+  for (let i = 0; i < n; i++) {
+    const t = (i / (n - 1)) * 2 - 1 + (rand() - 0.5) * 0.25;
+    const dome = Math.max(0, 1 - t * t);
+    const r = s * (0.15 + 0.25 * dome + rand() * 0.07);
+    // Sitting on the base: none hangs much below it.
+    const cy = Math.min(y - dome * s * 0.28 - rand() * s * 0.1, base - r * 0.72);
+    puffs.push([x + t * s * 0.95, cy, r]);
   }
-  const draw = (dy: number) => {
-    canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(x - s * 0.95, y - s * 0.28 + dy, s * 1.9, s * 0.5), s * 0.25, s * 0.25), paint);
-    for (const [cx, cy, r] of parts) canvas.drawCircle(cx, cy + dy, r, paint);
-  };
-  color(paint, shade, 0.9);
-  draw(s * 0.09);
-  color(paint, fill, 0.97);
-  draw(0);
+  for (let i = 0; i < 3; i++) {
+    const t = (rand() - 0.5) * 0.9;
+    puffs.push([x + t * s * 0.8, y - (1 - t * t) * s * 0.5 - rand() * s * 0.08, s * (0.16 + rand() * 0.08)]);
+  }
+  const top = y - s * 0.95;
+  const blur = Math.max(1.5, s * 0.045);
+  const soft = Skia.Paint();
+  soft.setAntiAlias(true);
+  // A faint shadow on the air below, then the body: lit at the top, greying toward the base.
+  soft.setMaskFilter(Skia.MaskFilter.MakeBlur(0, blur * 2.5, true));
+  soft.setColor(Skia.Color(shade));
+  soft.setAlphaf(0.35);
+  for (const [cx, cy, r] of puffs) if (cy > y - s * 0.2) canvas.drawCircle(cx, cy + r * 0.25, r * 0.95, soft);
+  soft.setAlphaf(1);
+  soft.setMaskFilter(Skia.MaskFilter.MakeBlur(0, blur, true));
+  soft.setShader(Skia.Shader.MakeLinearGradient(vec(x, top), vec(x, base), [Skia.Color(mix(fill, '#FFFFFF', 0.45)), Skia.Color(fill), Skia.Color(shade)], [0, 0.5, 1], TileMode.Clamp));
+  for (const [cx, cy, r] of puffs) canvas.drawCircle(cx, cy, r, soft);
+  soft.setShader(null);
+  // Where the light catches the billows' tops.
+  soft.setMaskFilter(Skia.MaskFilter.MakeBlur(0, blur * 2.2, true));
+  soft.setColor(Skia.Color(mix(fill, '#FFFFFF', 0.75)));
+  soft.setAlphaf(0.5);
+  for (const [cx, cy, r] of puffs) if (cy < y - s * 0.12) canvas.drawCircle(cx - r * 0.18, cy - r * 0.24, r * 0.55, soft);
 }
 
 /** How high in the sky (0 to 1 above the horizon) sits where: high noon stays below the status bar and the top row of pills. */
@@ -55,16 +81,18 @@ export function drawSunDisc(canvas: SkCanvas, hz: number, left: number, viewW: n
   lit.setBlendMode(BlendMode.Screen);
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
+  // Behind cloud it's still there: a pale, softer disc in a dimmer glow (and the drifting clouds pass over it).
+  const through = 1 - look.veil;
   // The corona: a bright glow hugging the disc, twice over (a tight white one, a wide warm one).
-  lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 90, [Skia.Color(light), clear(light)], [0, 1], TileMode.Clamp));
-  lit.setAlphaf(0.85);
-  canvas.drawCircle(sx, sy, 90, lit);
+  lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 90 + 40 * look.veil, [Skia.Color(light), clear(light)], [0, 1], TileMode.Clamp));
+  lit.setAlphaf(0.85 * (0.35 + 0.65 * through));
+  canvas.drawCircle(sx, sy, 90 + 40 * look.veil, lit);
   lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 46, [Skia.Color('#FFFFFF'), Skia.Color('#FFFFFF'), clear('#FFFFFF')], [0, 0.45, 1], TileMode.Clamp));
-  lit.setAlphaf(1);
+  lit.setAlphaf(0.25 + 0.75 * through);
   canvas.drawCircle(sx, sy, 46, lit);
   // The disc itself, solid and bright: white-hot nearly to a thin warm edge (golden when it's low).
   const edge = mix('#FFE45C', look.sun.color, 0.25 + 0.5 * low);
-  paint.setAlphaf(1);
+  paint.setAlphaf(1 - 0.72 * look.veil);
   paint.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), 24, [Skia.Color('#FFFFFF'), Skia.Color('#FFFBE6'), Skia.Color(mix('#FFFBE6', edge, 0.6)), Skia.Color(edge)], [0, 0.5, 0.82, 1], TileMode.Clamp));
   canvas.drawCircle(sx, sy, 24, paint);
   paint.setShader(null);
@@ -108,7 +136,9 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
     lit.setBlendMode(BlendMode.Screen);
     // The sky lit round it, far across: bigger and warmer the lower the sun.
     lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), viewW * (0.5 + 0.35 * low), [Skia.Color(look.sun.color), clear(look.sun.color)], [0, 1], TileMode.Clamp));
-    lit.setAlphaf(0.5 + 0.3 * low);
+    // Through cloud the light spreads, softer: a bright patch rather than the clear sky's glow.
+    const through = 1 - look.veil;
+    lit.setAlphaf((0.5 + 0.3 * low) * (0.3 + 0.7 * through));
     canvas.drawRect(Skia.XYWHRect(0, 0, fullW, hz + 1), lit);
     // Rays: soft beams fanning out from the sun, fading as they go.
     const rays = Skia.PathBuilder.Make();
@@ -124,18 +154,23 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
       rays.close();
     }
     lit.setShader(Skia.Shader.MakeRadialGradient(vec(sx, sy), reach, [Skia.Color(light), clear(light)], [0, 1], TileMode.Clamp));
-    lit.setAlphaf(0.32 + 0.12 * low);
-    canvas.drawPath(rays.build(), lit);
+    // Rays only where the sky is clear enough to show them.
+    lit.setAlphaf((0.32 + 0.12 * low) * through * through);
+    if (through > 0.4) canvas.drawPath(rays.build(), lit);
   }
   if (look.moon) {
     const mx = left + look.moon.x * viewW;
     const my = skyY(look.moon.height);
     const R = 15;
-    // A soft halo, then a round disc lit from the upper left, with a few gentle craters.
-    color(glow, '#E4E9FF', 0.4);
+    const through = 1 - look.veil;
+    // A soft halo, then a round disc lit from the upper left, with a few gentle craters (paler behind cloud).
+    color(glow, '#E4E9FF', 0.4 * (0.4 + 0.6 * through));
     canvas.drawCircle(mx, my, R * 2.1, glow);
-    color(glow, '#F6F3DF', 0.25);
+    color(glow, '#F6F3DF', 0.25 * through);
     canvas.drawCircle(mx, my, R * 1.35, glow);
+    const behind = Skia.Paint();
+    behind.setAlphaf(1 - 0.7 * look.veil);
+    canvas.saveLayer(behind);
     paint.setAlphaf(1);
     paint.setShader(Skia.Shader.MakeRadialGradient(vec(mx - R * 0.35, my - R * 0.35), R * 1.45, [Skia.Color('#FFFDF0'), Skia.Color('#F1ECD2'), Skia.Color('#DCD6BC')], [0, 0.6, 1], TileMode.Clamp));
     canvas.drawCircle(mx, my, R, paint);
@@ -149,20 +184,22 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
       color(paint, '#D8D1B6', 0.75);
       canvas.drawCircle(mx + dx * R, my + dy * R, cr * R, paint);
     }
+    canvas.restore();
   }
   if (!clouds) return;
   const shade = cloudShade(look);
   for (const k of cloudsOf(look, rand, hz, fullW, viewW)) cloud(canvas, k.x, k.y, k.s, look.cloudColor, shade, paint, rand);
 }
 
-/** The clouds' shaded underside. */
-export const cloudShade = (look: SkyLook) => mix(look.cloudColor, look.mid, 0.35);
+/** The clouds' shaded underside: a soft blue-grey, deeper in bad weather (the cloud colour greys already). */
+export const cloudShade = (look: SkyLook) => mix(mix(look.cloudColor, '#7E8CA0', 0.38), look.mid, 0.2);
 
 /** Where the clouds go along the upper sky, sized to the screen: as many as the weather has. */
 export function cloudsOf(look: SkyLook, rand: () => number, hz: number, fullW: number, viewW: number): Array<{ x: number; y: number; s: number }> {
   const count = Math.round(look.clouds * Math.max(0.6, fullW / 420));
   return Array.from({ length: count }, () => {
-    const s = viewW * (0.07 + rand() * 0.07);
+    // Bigger and heavier the more the sky is covered.
+    const s = viewW * (0.07 + rand() * 0.07) * (1 + 0.6 * look.veil);
     const y = hz * (0.18 + rand() * 0.62);
     return { x: rand() * (fullW + s) - s * 0.5, y, s };
   });
@@ -181,7 +218,10 @@ export function drawSunlight(canvas: SkCanvas, w: number, hz: number, groundH: n
   if (!sun && !moon) return;
   const tint = sun ? sun.color : '#CFDBFF';
   const low = sun ? 1 - sun.height : 0.6;
-  const strength = sun ? 0.55 + 0.3 * low : 0.14;
+  // Under cloud the light on the field is flat: as much of it as gets through.
+  const through = 1 - look.veil;
+  const strength = (sun ? 0.55 + 0.3 * low : 0.14) * through;
+  if (strength <= 0.01) return;
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
   paint.setBlendMode(BlendMode.Screen);
@@ -194,14 +234,14 @@ export function drawSunlight(canvas: SkCanvas, w: number, hz: number, groundH: n
   // The glint where the light meets the horizon.
   const glint = Skia.Matrix().translate(lightX, hz).scale(1, 0.12).translate(-lightX, -hz);
   paint.setShader(Skia.Shader.MakeRadialGradient(vec(lightX, hz), w * 0.32, [Skia.Color('#FFFFFF'), Skia.Color(tint), Skia.Color(`${tint}00`)], [0, 0.35, 1], TileMode.Clamp, glint));
-  paint.setAlphaf(sun ? 0.5 + 0.3 * low : 0.12);
+  paint.setAlphaf((sun ? 0.5 + 0.3 * low : 0.12) * through);
   canvas.drawRect(Skia.XYWHRect(0, hz - 10, w, Math.min(groundH, 60) + 10), paint);
   // The side away from the light, a little in shade.
   const shade = Skia.Paint();
   shade.setAntiAlias(true);
   const away = lightX < w / 2 ? w : 0;
   shade.setShader(Skia.Shader.MakeLinearGradient(vec(lightX, 0), vec(away, 0), [Skia.Color('#0B2A1200'), Skia.Color('#0B2A12')], [0.25, 1], TileMode.Clamp));
-  shade.setAlphaf(sun ? 0.12 + 0.12 * low : 0.06);
+  shade.setAlphaf((sun ? 0.12 + 0.12 * low : 0.06) * through);
   canvas.drawRect(Skia.XYWHRect(0, hz, w, groundH), shade);
 }
 
@@ -212,7 +252,7 @@ export function drawSunlight(canvas: SkCanvas, w: number, hz: number, groundH: n
 export function fieldLight(look: SkyLook, w: number, lightX: number) {
   const sun = look.sun;
   const moon = !sun && look.moon ? look.moon : null;
-  const on = sun ? 1 : moon ? 0.35 : 0;
+  const on = (sun ? 1 : moon ? 0.35 : 0) * (1 - look.veil);
   return {
     on,
     tint: sun ? sun.color : '#CFDBFF',

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AppState } from 'react-native';
+import { useEffect, useMemo } from 'react';
+import { AccessibilityInfo, AppState } from 'react-native';
 import { create } from 'zustand';
 import { defaultSunTimes, skyLook, solarDay, sunTimes, weatherFromCode, type SkyLook } from '@/engine/sky';
+import { lapseSteps } from '@/engine/skyClock';
 import { fetchCurrentWeather } from '@/services/climateApi';
 import * as db from '@/storage/db';
 import { useApp } from './app';
@@ -49,25 +50,76 @@ export const useWeather = create<WeatherState>((set, get) => ({
   },
 }));
 
+/** A step of the run-through, this far apart. */
+const LAPSE_STEP_MS = 150;
+
 /**
- * The sky right now: the time of day at the play location (sunrise and sunset worked out on the
- * device) and its current weather. Without a location, the default day (6:30 to 18:30) and a
- * clear sky. Looks again every five minutes and whenever the app comes back.
+ * The time the sky shows, one for the whole app: now, moved on every five minutes; but when the app
+ * comes back after a while, the sky runs quickly through the time in between (the sun across the
+ * sky, dusk into night) for a couple of seconds, from how it was left to how it is now, rather than
+ * jumping. With reduced motion it moves straight on.
+ */
+export const useSkyClock = create<{ shown: number }>(() => ({ shown: Date.now() }));
+
+let lapse: ReturnType<typeof setInterval> | null = null;
+let clockStarted = false;
+let still = false;
+
+/** Move the sky's clock on to `to`: straight there after a short time away, through the time between after a long one. */
+function catchUp(to: number) {
+  if (lapse) clearInterval(lapse);
+  lapse = null;
+  const steps = still ? [to] : lapseSteps(useSkyClock.getState().shown, to);
+  if (steps.length === 1) {
+    useSkyClock.setState({ shown: to });
+    return;
+  }
+  let i = 0;
+  lapse = setInterval(() => {
+    useSkyClock.setState({ shown: steps[i++] });
+    if (i >= steps.length && lapse) {
+      clearInterval(lapse);
+      lapse = null;
+    }
+  }, LAPSE_STEP_MS);
+}
+
+/** Starts the sky's clock (once for the app): every five minutes, and on coming back. */
+function startSkyClock() {
+  if (clockStarted) return;
+  clockStarted = true;
+  AccessibilityInfo.isReduceMotionEnabled()
+    .then((r) => {
+      still = r;
+    })
+    .catch(() => {});
+  AccessibilityInfo.addEventListener('reduceMotionChanged', (r) => {
+    still = r;
+  });
+  setInterval(() => {
+    if (!lapse) useSkyClock.setState({ shown: Date.now() });
+  }, 5 * 60_000);
+  AppState.addEventListener('change', (state) => {
+    if (state === 'active') catchUp(Date.now());
+  });
+}
+
+/**
+ * The sky right now (see useSkyClock for "now"): the time of day at the play location (sunrise and
+ * sunset worked out on the device) and its current weather. Without a location, the default day
+ * (6:30 to 18:30) and a clear sky.
  */
 export function useSkyLook(): SkyLook {
   const location = useApp((s) => s.location);
   const weather = useWeather((s) => s.weather);
   const refresh = useWeather((s) => s.refresh);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useSkyClock((s) => s.shown);
   useEffect(() => {
+    startSkyClock();
     void refresh();
-    const tick = () => {
-      setNow(Date.now());
-      void refresh();
-    };
-    const id = setInterval(tick, 5 * 60_000);
+    const id = setInterval(() => void refresh(), 5 * 60_000);
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') tick();
+      if (s === 'active') void refresh();
     });
     return () => {
       clearInterval(id);

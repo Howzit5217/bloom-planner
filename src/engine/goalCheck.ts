@@ -34,6 +34,8 @@ export interface GoalCheckInput {
   walkRates?: number[];
   walkDays?: DayWeights;
   rideDays?: DayWeights;
+  /** The week's rhythm (easy days lighter), as the saved plan has it. */
+  rhythm?: (d: Date) => number;
 }
 
 export type GoalProblem = 'levelTooLow' | 'past' | 'noRideDays' | 'tooManySteps' | 'tooManyFlowers';
@@ -76,6 +78,7 @@ export function checkGoal(input: GoalCheckInput): GoalCheck {
     walkRates: input.walkRates,
     walkDays: input.walkDays,
     flowerDays: bikes ? input.rideDays : input.walkDays,
+    rhythm: input.rhythm,
   });
   if (plan.status === 'reached') return { ok: true, problem: null, plan, ...base };
   if (plan.status === 'noTime') return { ok: false, problem: 'past', plan, ...base };

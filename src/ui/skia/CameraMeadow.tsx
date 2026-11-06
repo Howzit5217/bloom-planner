@@ -1,4 +1,4 @@
-import { Canvas, createPicture, Group, Image, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkImage, type SkPicture } from '@shopify/react-native-skia';
+import { Canvas, createPicture, Group, Image, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkImage, type SkPicture, type SkRect } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useState } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
 import { useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
@@ -6,7 +6,7 @@ import { lookKey, type SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
+import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
 import { fallOf, Precipitation } from './Precipitation';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
@@ -32,6 +32,8 @@ interface Scene {
 
 interface Drifter {
   picture: SkPicture;
+  /** The same, drawn once into an image: soft-edged clouds cost too much to draw afresh each frame. */
+  image: SkImage | null;
   x: number;
   y: number;
   s: number;
@@ -147,8 +149,11 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
   const clouds = cloudsOf(look, cloudRand, f.cy, f.picW, f.W).map((k): Drifter => {
     const paint = Skia.Paint();
     paint.setAntiAlias(true);
+    const bounds = Skia.XYWHRect(CLOUD_BOUNDS.left * k.s, CLOUD_BOUNDS.top * k.s, CLOUD_BOUNDS.width * k.s, CLOUD_BOUNDS.height * k.s);
+    const picture = createPicture((cv) => cloud(cv, 0, 0, k.s, look.cloudColor, shade, paint, cloudRand), bounds);
     return {
-      picture: createPicture((cv) => cloud(cv, 0, 0, k.s, look.cloudColor, shade, paint, cloudRand), Skia.XYWHRect(-k.s * 1.3, -k.s * 1.3, k.s * 2.6, k.s * 2)),
+      picture,
+      image: pictureImage(picture, bounds),
       x: k.x,
       y: k.y,
       s: k.s,
@@ -188,16 +193,36 @@ function SwaySprig({ s, picture, clock, matrix }: { s: Sprig; picture: SkPicture
  * again off the far side.
  */
 function DriftCloud({ k, clock, span }: { k: Drifter; clock: SharedValue<number>; span: number }) {
-  const lap = span + k.s * 2.6;
+  const reach = -CLOUD_BOUNDS.left * k.s;
+  const lap = span + CLOUD_BOUNDS.width * k.s;
   const transform = useDerivedValue(() => {
-    const at = (((k.x + k.s * 1.3 + (clock.value / 1000) * k.speed) % lap) + lap) % lap;
-    return [{ translateX: at - k.s * 1.3 }, { translateY: k.y }];
+    const at = (((k.x + reach + (clock.value / 1000) * k.speed) % lap) + lap) % lap;
+    return [{ translateX: at - reach }, { translateY: k.y }];
   });
   return (
     <Group transform={transform}>
-      <Picture picture={k.picture} />
+      {k.image ? <Image image={k.image} x={CLOUD_BOUNDS.left * k.s} y={CLOUD_BOUNDS.top * k.s} width={CLOUD_BOUNDS.width * k.s} height={CLOUD_BOUNDS.height * k.s} fit="fill" /> : <Picture picture={k.picture} />}
     </Group>
   );
+}
+
+/** A small picture as an image (a cloud), sharp to two device pixels per point. */
+function pictureImage(picture: SkPicture, r: SkRect): SkImage | null {
+  const scale = Math.min(PixelRatio.get(), 2);
+  try {
+    const surface = Platform.OS === 'web' ? Skia.Surface.Make(Math.ceil(r.width * scale), Math.ceil(r.height * scale)) : Skia.Surface.MakeOffscreen(Math.ceil(r.width * scale), Math.ceil(r.height * scale));
+    if (!surface) return null;
+    const canvas = surface.getCanvas();
+    canvas.scale(scale, scale);
+    canvas.translate(-r.x, -r.y);
+    canvas.drawPicture(picture);
+    surface.flush();
+    const image = surface.makeImageSnapshot().makeNonTextureImage();
+    surface.dispose();
+    return image;
+  } catch {
+    return null;
+  }
 }
 
 /**

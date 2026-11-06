@@ -93,10 +93,12 @@ describe('the sky', () => {
     expect(skyLook(at(23), sun, 'clear').darkSky).toBe(true);
   });
 
-  it('greys the sky for bad weather and hides the sun', () => {
+  it('greys the sky for bad weather, the sun still up there behind the cloud', () => {
     const rain = skyLook(at(12), sun, 'rain');
     expect(rain.top).not.toBe(SKY_PALETTES.day.top);
-    expect(rain.sun).toBeNull();
+    expect(rain.sun).not.toBeNull();
+    expect(rain.veil).toBeGreaterThan(0.7);
+    expect(skyLook(at(12), sun, 'clear').veil).toBe(0);
     expect(rain.rain).toBe(true);
     expect(skyLook(at(12), sun, 'snow').snow).toBe(true);
   });

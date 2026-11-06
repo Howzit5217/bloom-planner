@@ -80,6 +80,8 @@ function LevelGoalForm({ dash }: { dash: Dashboard }) {
     bikeFlowersPerHour: dash.rates.bikeFlowersPerHour,
     bikes: dash.rates.bikes,
     walkFlowersPerHour: dash.rates.walkFlowersPerHour,
+    // As the saved plan will have it, so the grade shown is the one it keeps.
+    ...dash.goalInputs,
   };
   const check = checkGoal({ ...base, goalLevel: level, goalKey: date });
   const earliest = useEarliestDate(check.ok ? null : { ...base, goalLevel: level });

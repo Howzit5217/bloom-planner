@@ -1,5 +1,8 @@
 import { addDaysKey } from '../dates';
 import { computeDashboard } from '../summary';
+import { difficultyOfPlan } from '../difficulty';
+import { checkGoal } from '../goalCheck';
+import { DEFAULT_RHYTHM, makeRhythm } from '../rhythm';
 import { ALL_RIDEABLE, entry, profile, table } from './helpers';
 
 // 2 levels of 10,000 steps / 1,000 flowers each, 20 plan days -> 1,000 steps and 100 flowers a day.
@@ -62,5 +65,16 @@ describe('the streak flowers', () => {
     expect(byDate['2026-11-08'].hit).toBe(true);
     // How hard the day as logged was: 400 steps is an easy day.
     expect(byDate['2026-11-06'].did).toBe('easy');
+  });
+});
+
+describe('a goal being chosen', () => {
+  it('grades the same as the plan it becomes once saved (the forecast and the easy days in both)', () => {
+    const rhythm = makeRhythm(DEFAULT_RHYTHM);
+    const forecast = { walk: { '2026-11-09': 0.4, '2026-11-10': 0.7 }, ride: { '2026-11-09': 0 }, day: {}, why: {} };
+    const d = computeDashboard({ table: t, overrides: {}, profile: p, entries: [], seasonRates: ALL_RIDEABLE, today: '2026-11-08', forecast, rhythm });
+    const check = checkGoal({ start: d.plan.start, startKey: d.plan.startKey, goalKey: p.goalDate, goalLevel: p.goalLevel, seasonRates: ALL_RIDEABLE, req: d.req, bikeFlowersPerHour: d.rates.bikeFlowersPerHour, bikes: d.rates.bikes, walkFlowersPerHour: d.rates.walkFlowersPerHour, ...d.goalInputs });
+    expect(check.plan?.status).toBe('ok');
+    expect(difficultyOfPlan(check.plan!, d.rates)).toEqual(d.difficulty);
   });
 });

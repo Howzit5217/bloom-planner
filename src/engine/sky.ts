@@ -163,6 +163,8 @@ const WASH: Record<SkyWeather, { amount: number; day: string; night: string }> =
 };
 
 const CLOUDS: Record<SkyWeather, number> = { clear: 2, partly: 5, cloudy: 8, fog: 3, rain: 8, snow: 7, storm: 9 };
+/** How much of the sun (or moon) the weather's cloud hides: it's always up there, just behind more or less cloud. */
+const VEIL: Record<SkyWeather, number> = { clear: 0, partly: 0.12, cloudy: 0.72, fog: 0.8, rain: 0.82, snow: 0.75, storm: 0.92 };
 
 export interface SkyLook {
   phase: SkyPhase;
@@ -178,9 +180,11 @@ export interface SkyLook {
   night: number;
   /** How bright the stars are (0..1); none behind clouds. */
   stars: number;
-  /** The sun or moon across the sky: x 0..1 left to right, height 0..1 above the horizon; null when hidden. */
+  /** The sun or moon across the sky: x 0..1 left to right, height 0..1 above the horizon; null when it's set. */
   sun: { x: number; height: number; color: string } | null;
   moon: { x: number; height: number } | null;
+  /** How much the cloud cover hides the sun or moon (and its light), 0 clear to 1 hidden. */
+  veil: number;
   clouds: number;
   /** Cloud colour: white by day, warm at dawn and dusk, slate at night, grey in bad weather. */
   cloudColor: string;
@@ -265,8 +269,8 @@ export function skyLook(now: number, sun: SunTimes, weather: SkyWeather, latitud
   };
   const ground = (k: GroundKey) => mix(mix(lit(pa, k), lit(pb, k), f), '#7C8A80', wash.amount * 0.25);
 
-  const open = weather === 'clear' || weather === 'partly';
-  // The sun's arc through the day; low and golden near sunrise and sunset.
+  // The sun's arc through the day; low and golden near sunrise and sunset. It's there whatever the
+  // weather, behind as much cloud as there is (`veil`).
   let sunPos: SkyLook['sun'] = null;
   let moon: SkyLook['moon'] = null;
   // The seasons' path: as high at noon as the sun really stands there that day (low in winter, high in
@@ -274,16 +278,16 @@ export function skyLook(now: number, sun: SunTimes, weather: SkyWeather, latitud
   const peak = Math.max(0.3, Math.min(1, sun.noonAltitude / 70));
   if (sun.sunrise != null && sun.sunset != null) {
     const p = (now - sun.sunrise) / (sun.sunset - sun.sunrise);
-    if (p > -0.02 && p < 1.02 && open) {
+    if (p > -0.02 && p < 1.02) {
       const height = Math.max(0, Math.sin(Math.min(1, Math.max(0, p)) * Math.PI)) * peak;
       const dayShare = (sun.sunset - sun.sunrise) / 86_400_000;
       const half = Math.max(0.24, Math.min(0.44, 0.14 + 0.55 * dayShare));
       sunPos = { x: 0.5 - half + 2 * half * Math.min(1, Math.max(0, p)), height, color: mix('#FFB36B', '#FFF4C2', Math.min(1, height * 2.2)) };
     }
-    if (night > 0.6 && open) moon = { x: 0.84, height: 0.3 };
-  } else if (sun.polar === 'day' && open) {
+    if (night > 0.6) moon = { x: 0.84, height: 0.3 };
+  } else if (sun.polar === 'day') {
     sunPos = { x: 0.5, height: Math.max(0.2, peak * 0.6), color: '#FFF4C2' };
-  } else if (sun.polar === 'night' && open) {
+  } else if (sun.polar === 'night') {
     moon = { x: 0.84, height: 0.3 };
   }
   const cloudColor = mix(mix(mix('#FFFFFF', '#FFE2CF', phase === 'dawn' || phase === 'dusk' ? 0.6 : 0), '#4B5578', night), '#9AA3B1', Math.max(0, wash.amount - 0.2));
@@ -300,6 +304,7 @@ export function skyLook(now: number, sun: SunTimes, weather: SkyWeather, latitud
     stars: weather === 'clear' ? night : weather === 'partly' ? night * 0.6 : 0,
     sun: sunPos,
     moon,
+    veil: VEIL[weather],
     clouds: CLOUDS[weather],
     cloudColor,
     rain: weather === 'rain' || weather === 'storm',
