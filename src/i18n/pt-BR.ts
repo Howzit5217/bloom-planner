@@ -136,7 +136,9 @@ export const ptBR: Dict = {
   "Get the Android App": "Baixar o app para Android",
   "Goal": "Meta",
   "Goal Reached!": "Meta alcançada!",
+  "Goal by {date}": "Meta até {date}",
   "Goal reached. Pick the next one: steps, flowers and the time to do them in.": "Meta alcançada. Escolha a próxima: passos, flores e o tempo para chegar lá.",
+  "Goal: level {level} by {date}": "Meta: nível {level} até {date}",
   "Good-Day-to-Ride Nudges": "Avisos de dia bom para pedalar",
   "Grow a Blue Seedling": "Faça crescer um broto azul",
   "Grow a Gray Seedling": "Faça crescer um broto cinza",
@@ -521,5 +523,4 @@ export const ptBR: Dict = {
   "{what}: {pct} percent, {n} to go": "{what}: {pct} por cento, faltam {n}",
   "{years} years sampled ({days} days), looked up {date}. Threshold: {preset}.": "{years} anos analisados ({days} dias), consultados em {date}. Limite: {preset}.",
   "{year}. Back to the days": "{year}. Voltar aos dias",
-  "→ {level} by {date}": "→ {level} até {date}",
 };

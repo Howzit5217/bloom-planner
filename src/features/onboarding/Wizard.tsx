@@ -35,6 +35,7 @@ import { Icon, type IconName } from '@/ui/Icon';
 import { IconChip } from '@/ui/IconChip';
 import { NumberField } from '@/ui/NumberField';
 import { PillButton } from '@/ui/PillButton';
+import { Reveal } from '@/ui/Reveal';
 import { BloomFlower } from '@/ui/skia/BloomFlower';
 import { PetalBurst } from '@/ui/skia/PetalBurst';
 import { Ring } from '@/ui/skia/Ring';
@@ -451,11 +452,9 @@ export function Wizard() {
           <View style={{ gap: 18 }}>
             <Title sub={t('A ride plants flowers far faster than walking, but earns no steps.')}>{t('And on the Bike?')}</Title>
             <Toggle label={t('Biking for Flowers')} hint={t('Turn off to plan flowers from walking only.')} value={bikes} onChange={setBikes} />
-            {bikes ? (
-              <Animated.View key="bike" entering={FadeIn.duration(220)} style={{ gap: 18 }}>
-                {rateFields(BIKE_RATES)}
-              </Animated.View>
-            ) : null}
+            <Reveal open={bikes} gap={18}>
+              <View style={{ gap: 18 }}>{rateFields(BIKE_RATES)}</View>
+            </Reveal>
           </View>
         );
       case 6:

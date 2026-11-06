@@ -136,7 +136,9 @@ export const es: Dict = {
   "Get the Android App": "Descargar la app para Android",
   "Goal": "Objetivo",
   "Goal Reached!": "¡Objetivo cumplido!",
+  "Goal by {date}": "Meta para el {date}",
   "Goal reached. Pick the next one: steps, flowers and the time to do them in.": "Objetivo cumplido. Elige el siguiente: pasos, flores y el tiempo para lograrlo.",
+  "Goal: level {level} by {date}": "Meta: nivel {level} para el {date}",
   "Good-Day-to-Ride Nudges": "Avisos de buen día para la bici",
   "Grow a Blue Seedling": "Haz crecer un brote azul",
   "Grow a Gray Seedling": "Haz crecer un brote gris",
@@ -521,5 +523,4 @@ export const es: Dict = {
   "{what}: {pct} percent, {n} to go": "{what}: {pct} por ciento, faltan {n}",
   "{years} years sampled ({days} days), looked up {date}. Threshold: {preset}.": "{years} años analizados ({days} días), consultado el {date}. Umbral: {preset}.",
   "{year}. Back to the days": "{year}. Volver a los días",
-  "→ {level} by {date}": "→ {level} para el {date}",
 };

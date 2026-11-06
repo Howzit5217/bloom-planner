@@ -2,6 +2,7 @@ import { Pressable, View } from 'react-native';
 import { weekdayName, weekdayShort } from '@/engine/format';
 import { easyDaysOf, MAX_EASY_DAYS, type RhythmPrefs, type Weekday } from '@/engine/rhythm';
 import { useTheme } from '@/theme/theme';
+import { Reveal } from '@/ui/Reveal';
 import { ScrollText } from '@/ui/ScrollText';
 import { T } from '@/ui/T';
 import { Toggle } from '@/ui/Toggle';
@@ -27,7 +28,7 @@ export function EasyDays({ value, onChange }: { value: RhythmPrefs; onChange: (p
   return (
     <View style={{ gap: 10 }}>
       <Toggle label={t('Vary the Days')} hint={t('Easy days ask for about 60% of a usual day and the others a little more, so each week comes out the same. Every day differs a little.')} value={value.vary} onChange={(vary) => onChange({ ...value, vary })} />
-      {value.vary ? (
+      <Reveal open={value.vary} gap={10}>
         <View style={{ gap: 6 }}>
           <T v="smallBold">{t('Easy days')}</T>
           <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -55,7 +56,7 @@ export function EasyDays({ value, onChange }: { value: RhythmPrefs; onChange: (p
             {t('Pick up to two.')}
           </T>
         </View>
-      ) : null}
+      </Reveal>
     </View>
   );
 }

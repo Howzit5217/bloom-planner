@@ -86,7 +86,7 @@ function LevelGoalForm({ dash }: { dash: Dashboard }) {
     <>
       <Stepper label={t('Target level')} value={level} min={Math.min(maxLevel, dash.current.level + 1)} max={maxLevel} onChange={setLevel} size={56} />
       <DateField label={t('Target date')} value={date} onChange={setDate} minimumDate={fromKey(addDaysKey(dash.today, 1))} />
-      {difficulty ? <DifficultyPill d={difficulty} /> : null}
+      {difficulty ? <DifficultyPill d={difficulty} wide /> : null}
       {check.ok ? null : <GoalVerdict check={check} earliest={earliest} onUseDate={setDate} />}
       <PillButton label={t('Set this goal')} icon="flag-checkered" disabled={!check.ok} onPress={() => void updateProfile({ goalLevel: level, goalDate: date })} />
     </>

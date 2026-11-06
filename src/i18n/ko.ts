@@ -136,7 +136,9 @@ export const ko: Dict = {
   "Get the Android App": "Android 앱 받기",
   "Goal": "목표",
   "Goal Reached!": "목표 달성!",
+  "Goal by {date}": "목표: {date}까지",
   "Goal reached. Pick the next one: steps, flowers and the time to do them in.": "목표 달성. 다음 목표를 고르세요: 걸음 수, 꽃, 기간.",
+  "Goal: level {level} by {date}": "목표: {date}까지 레벨 {level}",
   "Good-Day-to-Ride Nudges": "자전거 타기 좋은 날 알림",
   "Grow a Blue Seedling": "파란 모종 키우기",
   "Grow a Gray Seedling": "회색 모종 키우기",
@@ -521,5 +523,4 @@ export const ko: Dict = {
   "{what}: {pct} percent, {n} to go": "{what}: {pct}퍼센트, {n} 남음",
   "{years} years sampled ({days} days), looked up {date}. Threshold: {preset}.": "{years}년({days}일) 분석, {date} 조회. 기준: {preset}.",
   "{year}. Back to the days": "{year}년. 날짜 보기로 돌아가기",
-  "→ {level} by {date}": "{date}까지 → {level}",
 };

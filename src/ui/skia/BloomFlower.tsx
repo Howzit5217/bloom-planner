@@ -23,14 +23,14 @@ const cubicOut = (x: number) => {
   return 1 - u * u * u;
 };
 
-function Petal({ t, path, angle, start, cx, cy, color, dy = 0 }: { t: SharedValue<number>; path: SkPath; angle: number; start: number; cx: number; cy: number; color: string; dy?: number }) {
+function Petal({ t, path, angle, start, cx, cy, color, dy = 0, stroke }: { t: SharedValue<number>; path: SkPath; angle: number; start: number; cx: number; cy: number; color: string; dy?: number; stroke?: number }) {
   // Each petal swings out from the closed bud at the top to its place, and swells as it goes.
   const transform = useDerivedValue((): Transforms3d => {
     const x = clamp01((t.value - start) / 0.45);
     return [{ translateX: cx }, { translateY: cy + dy }, { rotate: angle * cubicOut(x) }, { scale: Math.max(0, 0.35 + 0.65 * easeOut(x)) }];
   });
   const opacity = useDerivedValue(() => clamp01((t.value - start) / 0.1));
-  return <Path path={path} color={color} transform={transform} opacity={opacity} />;
+  return stroke ? <Path path={path} color={color} transform={transform} opacity={opacity} style="stroke" strokeWidth={stroke} strokeJoin="round" /> : <Path path={path} color={color} transform={transform} opacity={opacity} />;
 }
 
 function Sparkle({ t, idle, x, y, s, start, color }: { t: SharedValue<number>; idle: SharedValue<number>; x: number; y: number; s: number; start: number; color: string }) {
@@ -46,9 +46,10 @@ function Sparkle({ t, idle, x, y, s, start, color }: { t: SharedValue<number>; i
 
 /**
  * The welcome flower, flat like Pikmin Bloom's: five round petals spring open one by one from a
- * bud, the golden centre pops in, a few sparkles twinkle, and it sways gently after.
+ * bud, the golden centre pops in, a few sparkles twinkle, and it sways gently after. `edge`: a thin
+ * darker line round the petals, so it stands out on any sky (Home, behind the level badge).
  */
-export function BloomFlower({ size = 160, color, delay = 150 }: { size?: number; color?: string; delay?: number }) {
+export function BloomFlower({ size = 160, color, delay = 150, edge }: { size?: number; color?: string; delay?: number; edge?: boolean }) {
   const { c, reduceMotion } = useTheme();
   const t = useSharedValue(reduceMotion ? 1 : 0);
   const idle = useSharedValue(0);
@@ -84,6 +85,12 @@ export function BloomFlower({ size = 160, color, delay = 150 }: { size?: number;
   return (
     <Canvas style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Group transform={sway} origin={vec(cx, cy)}>
+        {/* The outlines first, all of them, so the fills leave only the flower's outer edge. */}
+        {edge
+          ? Array.from({ length: PETALS }, (_, i) => (
+              <Petal key={`e${i}`} t={t} path={petal} angle={(i / PETALS) * Math.PI * 2} start={0.06 + i * 0.08} cx={cx} cy={cy} color={mixHex(base, '#24180E', white ? 0.5 : 0.42)} stroke={Math.max(2, size * 0.024)} />
+            ))
+          : null}
         {white
           ? Array.from({ length: PETALS }, (_, i) => (
               <Petal key={`u${i}`} t={t} path={petal} angle={(i / PETALS) * Math.PI * 2} start={0.06 + i * 0.08} cx={cx} cy={cy} dy={R * 0.06} color={mixHex(base, '#8A7A5C', 0.35)} />

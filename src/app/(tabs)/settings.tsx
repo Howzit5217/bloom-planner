@@ -25,6 +25,7 @@ import { Icon, type IconName } from '@/ui/Icon';
 import { IconChip } from '@/ui/IconChip';
 import { NumberField } from '@/ui/NumberField';
 import { PillButton } from '@/ui/PillButton';
+import { Reveal } from '@/ui/Reveal';
 import { Screen } from '@/ui/Screen';
 import { Segmented } from '@/ui/Segmented';
 import { Sheet } from '@/ui/Sheet';
@@ -177,7 +178,7 @@ export default function Settings() {
           <>
             <Stepper label={t('Target level')} value={Math.max(minGoal, shownGoal.level)} min={Math.min(minGoal, st.table.maxLevel)} max={st.table.maxLevel} onChange={(v) => setGoalDraft({ level: v, date: shownGoal.date })} size={60} />
             <DateField label={t('Target date')} value={shownGoal.date} onChange={(k) => setGoalDraft({ level: shownGoal.level, date: k })} minimumDate={fromKey(addDaysKey(dash.today, 1))} />
-            {shownDifficulty ? <DifficultyPill d={shownDifficulty} /> : null}
+            {shownDifficulty ? <DifficultyPill d={shownDifficulty} wide /> : null}
             {goalDraft && draftCheck && !draftCheck.ok ? (
               <>
                 <GoalVerdict check={draftCheck} earliest={earliest} onUseDate={(k) => setGoalDraft({ level: goalDraft.level, date: k })} />
@@ -342,8 +343,8 @@ export default function Settings() {
               void scheduleNotifications();
             }}
           />
-          {notif.enabled ? (
-            <>
+          <Reveal open={notif.enabled} gap={14}>
+            <View style={{ gap: 14 }}>
               <LinkRow
                 label={t('Reminder at {time}', {
                   time: fmtClock(notif.hour, notif.minute),
@@ -383,8 +384,8 @@ export default function Settings() {
                   })
                 }
               />
-            </>
-          ) : null}
+            </View>
+          </Reveal>
         </Section>
       ) : null}
 

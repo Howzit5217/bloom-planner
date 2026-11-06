@@ -22,6 +22,7 @@ import { PillButton } from '@/ui/PillButton';
 import { Segmented } from '@/ui/Segmented';
 import { PetalBurst } from '@/ui/skia/PetalBurst';
 import { Stepper } from '@/ui/Stepper';
+import { Reveal } from '@/ui/Reveal';
 import { T } from '@/ui/T';
 import { Toggle } from '@/ui/Toggle';
 import { useT } from '@/i18n';
@@ -279,24 +280,24 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
               <NumberField label={questToGoLabel(quest.kind)} hint={taskText(forReq.task)} value={questLeft} onChange={setQuestLeft} size="lg" max={quest.count} />
             ) : null}
             <Toggle label={t('Leveled Up!')} value={leveled} onChange={setLeveled} hint={leveled ? t('The level the game shows now.') : undefined} />
-            {leveled ? (
+            <Reveal open={leveled} gap={14}>
               <View style={{ gap: 8 }}>
                 <Stepper label={t('New level')} value={newLevel} min={Math.min(maxLevel, baseLevel + 1)} max={maxLevel} onChange={setNewLevel} size={56} />
                 <T v="caption" soft center>
                   {newLevel > 100 ? t('Flowers start again from zero for the new level, and so do steps.') : t('Flowers start again from zero for the new level.')}
                 </T>
               </View>
-            ) : null}
+            </Reveal>
             <Pressable accessibilityRole="button" onPress={() => setMore((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }}>
               <Icon name={more ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
               <T v="smallBold" color={c.leafDeep}>
                 {t('More (optional)')}
               </T>
             </Pressable>
-            {more ? (
+            <Reveal open={more} gap={14}>
               <View style={{ gap: 14 }}>
                 <NumberField label={t('Minutes out planting')} value={minutes} onChange={setMinutes} size="md" hint={t('Helps work out your real planting rate.')} max={1440} />
-                {minutes ? (
+                <Reveal open={!!minutes} gap={14}>
                   <Segmented
                     label={t('Mostly')}
                     value={mode}
@@ -306,7 +307,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
                       { key: 'walk', label: t('Mostly walking') },
                     ]}
                   />
-                ) : null}
+                </Reveal>
                 {/* Matching the game is the whole of the What's Left log; this is for the daily one. */}
                 {leftMode ? null : (
                   <Card variant="deep" style={{ gap: 10 }}>
@@ -334,7 +335,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
                   />
                 </View>
               </View>
-            ) : null}
+            </Reveal>
             {askLevelUp && !leveled ? (
               // The numbers to go went up: usually the game has moved on to the next level.
               <Card variant="deep" style={{ gap: 10 }}>

@@ -2,9 +2,11 @@ import * as Haptics from 'expo-haptics';
 import { useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, RefreshControl, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
-import Animated, { useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { Keyboard, Platform, RefreshControl, TextInput, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
+import Animated, { Easing, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { GestureDetector, useNativeGesture, usePanGesture, useSimultaneousGestures } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
@@ -34,12 +36,14 @@ export function FocusFade({ children }: { children: ReactNode }) {
 }
 
 const PULL_FULL = 110;
+/** While refreshing, a page pulled by hand holds this far down, the seedling growing in the gap. */
+const HOLD = 78;
+/** How far above the keyboard a box being typed in comes to rest. */
+const KEYBOARD_GAP = 48;
 /** Scrolling this many times the horizon's climb tilts the camera all the way down, so the scene moves slower than the cards. */
 const TILT_SCROLL = 1.8;
 /** A pulled page settles back up without overshooting past the top. */
 const SETTLE = { damping: 22, stiffness: 200, mass: 1, overshootClamping: true } as const;
-/** The camera follows the scroll with a little weight, settling without overshoot. */
-const CAMERA = { damping: 30, stiffness: 190, mass: 1, overshootClamping: true } as const;
 /** Where the paper pages' sheet starts, below the safe area: the meadow strip shows above it. */
 const SHEET_TOP = 66;
 /** Home: how far below the status bar the cards fade out as they scroll up under the top. */
@@ -113,19 +117,27 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const growth = useSharedValue(0);
   const shown = useSharedValue(0);
   const [refreshing, setRefreshing] = useState(false);
+  // The same, for the pull's gesture on the UI thread.
+  const busy = useSharedValue(0);
+  const pullY = useSharedValue(0);
 
   const run = async () => {
     setRefreshing(true);
+    busy.value = 1;
     shown.value = withTiming(1, { duration: 150 });
     growth.value = withTiming(7, { duration: 900 });
+    // Pulled by hand, the page holds open while it refreshes, the seedling growing in the gap above.
+    if (Platform.OS !== 'ios') pullY.value = withSpring(HOLD, SETTLE);
     const started = Date.now();
     try {
       await onRefresh?.();
     } finally {
       setTimeout(() => {
         setRefreshing(false);
+        busy.value = 0;
         shown.value = withTiming(0, { duration: 300 });
         growth.value = withTiming(0, { duration: 300 });
+        pullY.value = withSpring(0, SETTLE);
       }, Math.max(0, 1100 - (Date.now() - started)));
     }
   };
@@ -142,23 +154,110 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   // The meadow's flowers sway only while Home is the page in view.
   const inView = useIsFocused();
   const tiltScroll = (frame.cy + 36) * TILT_SCROLL;
+  // Tied straight to the scroll, so it moves exactly as smoothly as the page does: a spring restarted
+  // on every scroll event lagged, then caught up in little steps when events came unevenly. Easing
+  // in and out at the ends keeps the start and the finish soft.
   useAnimatedReaction(
     () => rail.y.value,
     (y) => {
-      tilt.value = withSpring(Math.min(1, Math.max(0, y / tiltScroll)), CAMERA);
+      const k = Math.min(1, Math.max(0, y / tiltScroll));
+      tilt.value = k * k * (3 - 2 * k) * 0.35 + k * 0.65;
     },
   );
-  // The sky's colour behind the status bar while the sky is still up there.
-  const skyFade = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, horizonAt(frame, tilt.value) / (insets.top + 24))) }));
-  // The tall fade comes in over the first scroll, so at rest it never washes over the header.
-  const scrolled = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, rail.y.value / 36)) }));
+  // The fade under the status bar is in the sky's colour while the sky is still up there, the
+  // field's once the camera looks down: one gives way to the other, never both half-showing.
+  const skyShare = useDerivedValue(() => Math.min(1, Math.max(0, horizonAt(frame, tilt.value) / (insets.top + 24))));
+  const skyFade = useAnimatedStyle(() => ({ opacity: skyShare.value }));
+  const fieldFade = useAnimatedStyle(() => ({ opacity: 1 - skyShare.value }));
+  // The fade eases in (and slides down a touch) as soon as the page moves, however fast it's flung,
+  // and out again back at the top; at rest it's not there at all, so nothing lines the sky.
+  const fadeIn = useSharedValue(0);
+  useAnimatedReaction(
+    () => rail.y.value > 4,
+    (moved, before) => {
+      if (moved !== before) fadeIn.value = withTiming(moved ? 1 : 0, { duration: moved ? 260 : 200, easing: Easing.out(Easing.cubic) });
+    },
+  );
+  const scrolled = useAnimatedStyle(() => ({ opacity: fadeIn.value, transform: [{ translateY: (fadeIn.value - 1) * 12 }] }));
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // Typing: the box being typed in scrolls up clear of the keyboard, with room made below the page
+  // so even the last box can rise above it. Only the page in view does this.
+  const [keyboard, setKeyboard] = useState(0);
+  useEffect(() => {
+    if (!inView || Platform.OS === 'web') return;
+    const reveal = (keyboardTop: number) => {
+      const input = TextInput.State.currentlyFocusedInput() as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | null;
+      input?.measureInWindow?.((_x, y, _w, h) => {
+        const over = y + h + KEYBOARD_GAP - keyboardTop;
+        if (over > 0) scrollRef.current?.scrollTo({ y: rail.y.get() + over, animated: true });
+      });
+    };
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+      setKeyboard(e.endCoordinates.height);
+      // Once the room below is laid out, the box moves up.
+      setTimeout(() => reveal(e.endCoordinates.screenY), 60);
+    });
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboard(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [inView, rail, scrollRef]);
   const pullGrows = !!onRefresh && Platform.OS === 'ios';
   // By hand (Android, the web): at the top, a drag down eases the page down as the seedling grows;
-  // let go past the line and it refreshes, short of it and everything springs back.
-  const byHand = !!onRefresh && Platform.OS !== 'ios';
-  const pullY = useSharedValue(0);
+  // let go past the line and it refreshes, short of it and everything springs back. Android follows
+  // the finger with a gesture beside the page's own scrolling (touch events alone were cancelled the
+  // moment the page claimed the drag); the web, where the browser scrolls, with the touches.
+  const viaGesture = !!onRefresh && Platform.OS === 'android';
+  const byHand = !!onRefresh && Platform.OS === 'web';
   const pullFrom = useRef<number | null>(null);
+  const pulling = useSharedValue(0);
+  const startY = useSharedValue(0);
+  const crossed = useSharedValue(0);
+  const tick = () => {
+    Haptics.selectionAsync().catch(() => {});
+  };
+  const pullGesture = usePanGesture({
+    enabled: viaGesture,
+    // Only a drag down starts it, and a sideways swipe never does.
+    activeOffsetY: 12,
+    failOffsetX: [-24, 24],
+    onActivate: (e) => {
+      'worklet';
+      // Only from the very top, and not while a refresh is under way.
+      pulling.set(rail.y.get() <= 0.5 && busy.get() === 0 ? 1 : 0);
+      startY.set(e.absoluteY);
+      crossed.set(0);
+    },
+    onUpdate: (e) => {
+      'worklet';
+      if (!pulling.get()) return;
+      // From where the finger is on the screen: the page moves with it, so its own coordinates would drift.
+      const pull = Math.max(0, (e.absoluteY - startY.get()) * 0.55);
+      const past = pull >= PULL_FULL ? 1 : 0;
+      if (past !== crossed.get()) {
+        crossed.set(past);
+        if (past) scheduleOnRN(tick);
+      }
+      pullY.set(Math.min(pull, PULL_FULL * 1.35));
+      shown.set(Math.min(1, pull / 30));
+      growth.set(Math.min(6.2, (pull / PULL_FULL) * 6.2));
+    },
+    onDeactivate: () => {
+      'worklet';
+      if (!pulling.get()) return;
+      pulling.set(0);
+      if (pullY.get() >= PULL_FULL) {
+        scheduleOnRN(run);
+      } else {
+        pullY.set(withSpring(0, SETTLE));
+        shown.set(withTiming(0, { duration: 200 }));
+        growth.set(withTiming(0, { duration: 200 }));
+      }
+    },
+  });
+  const pageScroll = useNativeGesture({});
+  const pageGesture = useSimultaneousGestures(pullGesture, pageScroll);
   // A light tick as the pull passes the line, so letting go there is felt to refresh.
   const pastLine = useRef(false);
   // The finger's height: on the event in the app, on its first touch on the web.
@@ -192,10 +291,9 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const onTouchEnd = () => {
     if (pullFrom.current == null) return;
     pullFrom.current = null;
-    const pulled = pullY.get();
-    pullY.set(withSpring(0, SETTLE));
-    if (pulled >= PULL_FULL) void run();
+    if (pullY.get() >= PULL_FULL) void run();
     else {
+      pullY.set(withSpring(0, SETTLE));
       shown.set(withTiming(0, { duration: 200 }));
       growth.set(withTiming(0, { duration: 200 }));
     }
@@ -210,16 +308,15 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
     }
   });
 
-  const scroller = (
-    <FocusFade>
-      <Animated.ScrollView
+  const page = (
+    <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        style={byHand ? pulledDown : undefined}
-        overScrollMode={byHand ? 'never' : undefined}
+        style={byHand || viaGesture ? pulledDown : undefined}
+        overScrollMode={byHand || viaGesture ? 'never' : undefined}
         onTouchStart={byHand ? onTouchStart : undefined}
         onTouchMove={byHand ? onTouchMove : undefined}
         onTouchEnd={byHand ? onTouchEnd : undefined}
@@ -229,11 +326,15 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
         onAccessibilityAction={onRefresh ? (e) => void (e.nativeEvent.actionName === 'refresh' && !refreshing && run()) : undefined}
         // iOS: the bounce is the pull; its spinner is see-through, so only the seedling shows.
         refreshControl={pullGrows ? <RefreshControl refreshing={refreshing} onRefresh={run} tintColor="transparent" /> : undefined}
-        contentContainerStyle={{ paddingTop: backdrop === 'paper' ? 14 : insets.top + 12, paddingBottom: TAB_BAR_SPACE + insets.bottom + 24, paddingHorizontal: 16, gap: 16 }}
+        contentContainerStyle={{ paddingTop: backdrop === 'paper' ? 14 : insets.top + 12, paddingBottom: TAB_BAR_SPACE + insets.bottom + 24 + keyboard, paddingHorizontal: 16, gap: 16 }}
       >
         {header}
         {children}
       </Animated.ScrollView>
+  );
+  const scroller = (
+    <FocusFade>
+      {viaGesture ? <GestureDetector gesture={pageGesture}>{page}</GestureDetector> : page}
       <ScrollRail rail={rail} scrollRef={scrollRef} top={backdrop === 'paper' ? 18 : insets.top + 12} bottom={TAB_BAR_SPACE + insets.bottom + 8} />
     </FocusFade>
   );
@@ -250,18 +351,12 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
         </Animated.View>
       ) : null}
       {live ? scroller : null}
-      {/* The clock and battery always sit on the sky or field, never on a card. */}
-      {insets.top > 0 ? (
-        <>
-          <EdgeFade edge="top" color={look.groundFar} height={insets.top + 6} solid={insets.top} />
-          <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 7 }, skyFade]}>
-            <EdgeFade edge="top" color={look.top} height={insets.top + 6} solid={insets.top} />
-          </Animated.View>
-        </>
-      ) : null}
-      {/* Once the page moves, cards scroll up under a taller, eased fade into the sky (or the field). */}
+      {/* Once the page moves, cards scroll up under a tall, eased fade into the sky (or the field),
+          solid behind the clock and battery so they never sit on a card. */}
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
-        <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, fieldFade]}>
+          <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+        </Animated.View>
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, skyFade]}>
           <EdgeFade edge="top" color={look.top} height={insets.top + TOP_FADE} solid={insets.top + 4} />
         </Animated.View>

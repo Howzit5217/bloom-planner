@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, View, type ViewStyle } from 'react-native';
+import { Platform, Pressable, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme/theme';
@@ -70,8 +70,22 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
       onChange(n);
     }
   };
-  const tick = () => {
-    if (dragging.current) Haptics.selectionAsync().catch(() => {});
+  // A tick per level while dragging: a firmer one on every tenth, and a solid stop at either end.
+  const tick = (lv: number) => {
+    if (!dragging.current) return;
+    if (lv <= min || lv >= max) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    else if (lv % 10 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    else Haptics.selectionAsync().catch(() => {});
+  };
+  // A tap on the ruler glides to the number tapped.
+  const jump = (lv: number) => {
+    const n = clamp(lv);
+    if (n === emitted.current) return;
+    Haptics.selectionAsync().catch(() => {});
+    emitted.current = n;
+    if (WEB) glide.current = n;
+    onChange(n);
+    ref.current?.scrollTo({ x: (n - min) * TICK, animated: true });
   };
   const setDragging = (d: boolean) => {
     dragging.current = d;
@@ -123,7 +137,7 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
       if (prev === null || cur === prev) return;
       bob.set(withSequence(withTiming(1.15, { duration: 50 }), withSpring(1, { damping: 12, stiffness: 260 })));
       scheduleOnRN(emit, min + cur);
-      scheduleOnRN(tick);
+      scheduleOnRN(tick, min + cur);
     },
   );
 
@@ -155,7 +169,7 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
             const major = lv % 10 === 0;
             const mid = !major && lv % 5 === 0;
             return (
-              <View key={lv} style={[{ width: TICK, height: H, alignItems: 'center', paddingTop: 12 }, WEB_SNAP_TICK]}>
+              <Pressable key={lv} onPress={() => jump(lv)} style={[{ width: TICK, height: H, alignItems: 'center', paddingTop: 12 }, WEB_SNAP_TICK]}>
                 <View style={{ width: major ? 3 : 2, height: major ? 24 : mid ? 17 : 11, borderRadius: 2, backgroundColor: major ? c.leafDeep : c.inkSoft, opacity: major ? 0.9 : 0.35 }} />
                 {/* A number every five: with the wider spacing, every ten would leave the ruler bare. */}
                 {major || mid ? (
@@ -163,7 +177,7 @@ export function LevelRuler({ value, min, max, onChange }: Props) {
                     {lv}
                   </T>
                 ) : null}
-              </View>
+              </Pressable>
             );
           })}
         </Animated.ScrollView>

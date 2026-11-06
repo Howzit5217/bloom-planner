@@ -4,7 +4,7 @@ import Animated, { ZoomIn } from 'react-native-reanimated';
 import type { Difficulty, PlanDifficulty } from '@/engine/difficulty';
 import { fmtHours } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
-import type { Palette } from '@/theme/tokens';
+import { radius, type Palette } from '@/theme/tokens';
 import { FlowerHead } from '@/ui/skia/FlowerHead';
 import { T } from '@/ui/T';
 import { tk, useT } from '@/i18n';
@@ -36,11 +36,31 @@ export function DifficultyFlower({ difficulty, size = 24, backdrop }: { difficul
   );
 }
 
-/** The plan's flower, its grade, and the time behind it. */
-export function DifficultyPill({ d, onPanel }: { d: PlanDifficulty; onPanel?: boolean }) {
+/**
+ * The plan's flower, its grade, and the time behind it. `wide`: a full-width tile among a form's
+ * fields, shaped like them (Settings, a new goal); otherwise a pill sized to its words.
+ */
+export function DifficultyPill({ d, onPanel, wide }: { d: PlanDifficulty; onPanel?: boolean; wide?: boolean }) {
   const { c } = useTheme();
   const { t } = useT();
   const time = fmtHours(d.hours);
+  if (wide)
+    return (
+      <View accessible style={{ flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 9, paddingLeft: 11, paddingRight: 16, borderRadius: radius.field, backgroundColor: onPanel ? c.panelTrack : c.canvasDeep }}>
+        {/* The flower on a small light tile, like the date field's calendar. */}
+        <View style={{ width: 42, height: 46, borderRadius: 12, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center', boxShadow: `0px 2px 6px 0px ${c.shadow}` }}>
+          <DifficultyFlower difficulty={d.level} size={34} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <T v="bodyBold" color={onPanel ? c.onPanel : undefined}>
+            {t(DIFFICULTY_NAMES[d.level])}
+          </T>
+          <T v="small" soft={!onPanel} color={onPanel ? c.onPanelSoft : undefined}>
+            {t('About {time} on the move a day', { time })}
+          </T>
+        </View>
+      </View>
+    );
   return (
     <View
       accessible

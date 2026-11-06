@@ -136,7 +136,9 @@ export const ja: Dict = {
   "Get the Android App": "Android アプリを入手",
   "Goal": "目標",
   "Goal Reached!": "目標達成！",
+  "Goal by {date}": "目標は{date}まで",
   "Goal reached. Pick the next one: steps, flowers and the time to do them in.": "目標達成。次は歩数、花、期間を選んでください。",
+  "Goal: level {level} by {date}": "目標：{date}までにレベル{level}",
   "Good-Day-to-Ride Nudges": "自転車日和のお知らせ",
   "Grow a Blue Seedling": "青い苗を育てる",
   "Grow a Gray Seedling": "灰色の苗を育てる",
@@ -521,5 +523,4 @@ export const ja: Dict = {
   "{what}: {pct} percent, {n} to go": "{what}：{pct}パーセント、あと{n}",
   "{years} years sampled ({days} days), looked up {date}. Threshold: {preset}.": "{years}年分（{days}日）を分析、{date}取得。基準：{preset}。",
   "{year}. Back to the days": "{year}年。日の表示に戻る",
-  "→ {level} by {date}": "{date}までに → {level}",
 };

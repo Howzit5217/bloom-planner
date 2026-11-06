@@ -136,7 +136,9 @@ export const zhHant: Dict = {
   "Get the Android App": "取得 Android App",
   "Goal": "目標",
   "Goal Reached!": "目標達成！",
+  "Goal by {date}": "目標：{date}前",
   "Goal reached. Pick the next one: steps, flowers and the time to do them in.": "目標達成。選擇下一個：步數、花和完成的時間。",
+  "Goal: level {level} by {date}": "目標：{date}前達到等級 {level}",
   "Good-Day-to-Ride Nudges": "適合騎車的提醒",
   "Grow a Blue Seedling": "培育一株藍色幼苗",
   "Grow a Gray Seedling": "培育一株灰色幼苗",
@@ -521,5 +523,4 @@ export const zhHant: Dict = {
   "{what}: {pct} percent, {n} to go": "{what}：{pct}%，還差 {n}",
   "{years} years sampled ({days} days), looked up {date}. Threshold: {preset}.": "分析了 {years} 年（{days} 天），{date} 查詢。門檻：{preset}。",
   "{year}. Back to the days": "{year} 年。回到日期",
-  "→ {level} by {date}": "在 {date} 前 → {level}",
 };

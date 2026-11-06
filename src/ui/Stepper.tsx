@@ -1,7 +1,9 @@
-import { startTransition, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
+import { Icon } from './Icon';
 import { GameNumber } from './skia/GameNumber';
 import { LevelRuler } from './LevelRuler';
 import { T } from './T';
@@ -42,6 +44,54 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
     startTransition(() => onChange(v));
   };
 
+  // − and + beside the number, one level a tap; held, they keep going, a little faster as they go.
+  const liveRef = useRef(live);
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
+  const hold = useRef<{ timer: ReturnType<typeof setTimeout> | null; steps: number }>({ timer: null, steps: 0 });
+  const step = (d: 1 | -1) => {
+    const next = clamp(liveRef.current + d);
+    if (next === liveRef.current) return false;
+    Haptics.selectionAsync().catch(() => {});
+    liveRef.current = next;
+    slide(next);
+    return true;
+  };
+  const stopHold = () => {
+    if (hold.current.timer) clearTimeout(hold.current.timer);
+    hold.current.timer = null;
+  };
+  const startHold = (d: 1 | -1) => {
+    stopHold();
+    hold.current.steps = 0;
+    const again = () => {
+      hold.current.steps++;
+      hold.current.timer = step(d) ? setTimeout(again, Math.max(45, 170 - hold.current.steps * 12)) : null;
+    };
+    hold.current.timer = setTimeout(again, 420);
+  };
+  useEffect(() => stopHold, []);
+  const stepButton = (d: 1 | -1) => {
+    const off = d > 0 ? live >= max : live <= min;
+    return (
+      <Pressable
+        accessible={false}
+        disabled={off}
+        onPressIn={() => startHold(d)}
+        onPressOut={stopHold}
+        // A tap steps once; a hold has stepped already.
+        onPress={() => {
+          if (hold.current.steps === 0) step(d);
+        }}
+        hitSlop={8}
+        style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? c.leafPale : c.canvasDeep, opacity: off ? 0.35 : 1, transform: [{ scale: pressed ? 0.92 : 1 }] })}
+      >
+        <Icon name={d > 0 ? 'plus' : 'minus'} size={24} color={c.leafDeep} />
+      </Pressable>
+    );
+  };
+
   return (
     <View
       accessible
@@ -52,6 +102,8 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
       onAccessibilityAction={(e) => onChange(clamp(live + (e.nativeEvent.actionName === 'increment' ? 1 : -1)))}
       style={{ gap: 10 }}
     >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+      {stepButton(-1)}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('Type {what}', { what: label })}
@@ -59,7 +111,8 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
           setDraft(String(live));
           setEditing(true);
         }}
-        style={{ alignSelf: 'center', minWidth: size * 2.2, alignItems: 'center', justifyContent: 'center', minHeight: size * 1.15 }}
+        // Wide enough for three digits, so − and + stay put under a finger as 99 turns into 100.
+        style={{ width: size * 2.45, alignItems: 'center', justifyContent: 'center', minHeight: size * 1.15 }}
       >
         {editing ? (
           <TextInput
@@ -80,6 +133,8 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
           <GameNumber value={live} size={size} format={(n) => String(n)} />
         )}
       </Pressable>
+      {stepButton(1)}
+      </View>
       {/* Remount when the range moves, so its positions always match the levels. */}
       <LevelRuler key={`${min}-${max}`} value={live} min={min} max={max} onChange={slide} />
       {hint ? (

@@ -9,12 +9,13 @@ import type { Dashboard } from '@/engine/summary';
 import { cToF } from '@/engine/units';
 import { useApp, useTempF } from '@/store/app';
 import { useTheme } from '@/theme/theme';
-import { DifficultyFlower, DifficultyPill } from '@/features/shared/Difficulty';
+import { DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
 import { QUEST_ICON } from '@/features/shared/quest';
 import { PETALS } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
 import { IconChip } from '@/ui/IconChip';
+import { BloomFlower } from '@/ui/skia/BloomFlower';
 import { FlowerRow } from '@/ui/skia/FlowerRow';
 import { GameNumber } from '@/ui/skia/GameNumber';
 import { LevelBadge } from '@/ui/skia/LevelBadge';
@@ -27,26 +28,44 @@ import { taskText } from '@/i18n/level-text';
 export function HomeHeader({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
   const { t, tn } = useT();
-  const goal = dash.phase === 'maxed' ? t('Level {level}. The very top.', { level: dash.current.level }) : t('→ {level} by {date}', { level: dash.goal.level, date: fmtDate(dash.goal.date) });
+  const maxed = dash.phase === 'maxed';
+  const goalDate = fmtDate(dash.goal.date);
   return (
     <View style={{ alignItems: 'center', gap: 10, paddingTop: 4 }}>
       <View style={{ flexDirection: 'row', gap: 8, alignSelf: 'stretch', justifyContent: 'space-between' }}>
         <Pill icon="calendar-blank" text={`${fmtWeekday(dash.today)}, ${fmtShort(dash.today)}`} />
         <Pill icon="fire" text={dash.streak > 0 ? tn(dash.streak, '{n}-day streak', '{n}-day streak') : t('Start a streak')} tint={c.nectar} />
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('Level {level}. Open the level table.', { level: dash.current.level })} onPress={() => router.push('/levels')} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.95 : 1 }] })}>
-        <LevelBadge level={dash.current.level} size={118} />
-      </Pressable>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.card, borderRadius: 999, paddingLeft: dash.difficulty ? 8 : 18, paddingRight: 18, paddingVertical: 8, boxShadow: `0px 4px 14px 0px ${c.shadow}` }}>
-        {/* The plan's flower: white when it's easy, then yellow, red, and blue for the hardest. */}
-        {dash.difficulty ? <DifficultyFlower difficulty={dash.difficulty.level} size={30} backdrop={c.leafPale} /> : null}
+      {/* The badge on the plan's flower, blooming and swaying as on the welcome page: white when the
+          plan is easy, then yellow, red, and blue for the hardest. */}
+      <View style={{ width: BLOOM, height: BLOOM_H, alignItems: 'center', justifyContent: 'center' }}>
+        {dash.difficulty ? (
+          <View pointerEvents="none" style={{ position: 'absolute', top: (BLOOM_H - BLOOM) / 2, left: 0 }}>
+            <BloomFlower key={dash.difficulty.level} size={BLOOM} color={difficultyColor(c, dash.difficulty.level)} delay={250} edge />
+          </View>
+        ) : null}
+        <Pressable accessibilityRole="button" accessibilityLabel={t('Level {level}. Open the level table.', { level: dash.current.level })} onPress={() => router.push('/levels')} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+          <LevelBadge level={dash.current.level} size={118} />
+        </Pressable>
+      </View>
+      <View
+        accessible
+        accessibilityLabel={maxed ? undefined : t('Goal: level {level} by {date}', { level: dash.goal.level, date: goalDate })}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.card, borderRadius: 999, paddingLeft: maxed ? 18 : 8, paddingRight: 18, paddingVertical: 6, boxShadow: `0px 4px 14px 0px ${c.shadow}` }}
+      >
+        {/* The level you're going for, in its own badge, and when by. */}
+        {maxed ? null : <LevelBadge level={dash.goal.level} size={38} />}
         <T v="h3" color={c.leafDeep}>
-          {goal}
+          {maxed ? t('Level {level}. The very top.', { level: dash.current.level }) : t('Goal by {date}', { date: goalDate })}
         </T>
       </View>
     </View>
   );
 }
+
+/** The plan's flower behind Home's badge: its petals show all round it, clear of the pills and the goal. */
+const BLOOM = 210;
+const BLOOM_H = 172;
 
 function Pill({ icon, text, tint }: { icon: IconName; text: string; tint?: string }) {
   const { c } = useTheme();
@@ -223,8 +242,8 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
           </View>
         ) : null}
         {active && dash.difficulty ? (
-          <View style={{ marginTop: 12 }}>
-            <DifficultyPill d={dash.difficulty} onPanel />
+          <View style={{ marginTop: 10 }}>
+            <DifficultyPill d={dash.difficulty} onPanel wide />
           </View>
         ) : null}
         {active && note ? (

@@ -136,7 +136,9 @@ export const zhHans: Dict = {
   "Get the Android App": "获取 Android App",
   "Goal": "目标",
   "Goal Reached!": "目标达成！",
+  "Goal by {date}": "目标：{date}前",
   "Goal reached. Pick the next one: steps, flowers and the time to do them in.": "目标达成。选择下一个：步数、花和完成的时间。",
+  "Goal: level {level} by {date}": "目标：{date}前达到等级 {level}",
   "Good-Day-to-Ride Nudges": "适合骑车的提醒",
   "Grow a Blue Seedling": "培育一株蓝色幼苗",
   "Grow a Gray Seedling": "培育一株灰色幼苗",
@@ -521,5 +523,4 @@ export const zhHans: Dict = {
   "{what}: {pct} percent, {n} to go": "{what}：{pct}%，还差 {n}",
   "{years} years sampled ({days} days), looked up {date}. Threshold: {preset}.": "分析了 {years} 年（{days} 天），{date} 查询。门槛：{preset}。",
   "{year}. Back to the days": "{year} 年。回到日期",
-  "→ {level} by {date}": "在 {date} 前 → {level}",
 };
