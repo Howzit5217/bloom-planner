@@ -1,5 +1,5 @@
 import { Canvas, Group, Path, rect, Skia, Text, type SkFont, type SkPath } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Text as RNText, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useDerivedValue, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import { fmt } from '@/engine/format';
@@ -23,8 +23,12 @@ interface Props {
 }
 
 const DIGITS = '0123456789';
-/** The places drawn on each digit's wheel: a little over two turns of 0-9 round the usual 0..9. */
-const LOOP = Array.from({ length: 26 }, (_, i) => i - 8);
+/**
+ * The places drawn on each digit's wheel. A roll starts in 0..9 and moves at most nine places either
+ * way (a quick fling can skip that many levels at once), so -9..18, with room for the spring's
+ * overshoot: never past the end of the strip, where the digit would go blank.
+ */
+const LOOP = Array.from({ length: 32 }, (_, i) => i - 11);
 
 interface Layout {
   width: number;
@@ -171,25 +175,39 @@ function DigitSlot({ x, w, digit, dir, l, font, fill, stroke, index, rollIn, out
     // dir only says which way to roll a change of digit; it never starts a roll on its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [digit, index, pos, rollIn]);
-  const transform = useDerivedValue(() => [{ translateY: -(pos.value - LOOP[0]) * l.lineH }]);
+  const lineH = l.lineH;
+  const transform = useDerivedValue(() => [{ translateY: -(pos.value - LOOP[0]) * lineH }]);
   return (
     <Group clip={rect(x - l.sw, 0, w + l.sw * 2, l.height)}>
       <Group transform={transform}>
-        {LOOP.map((k) => {
-          const d = DIGITS[((k % 10) + 10) % 10];
-          const dx = x + (w - font.measureText(d).width) / 2;
-          const y = l.baseline + (k - LOOP[0]) * l.lineH;
-          return (
-            <Group key={k}>
-              {outline ? <GlyphOutline ch={d} x={dx} y={y} font={font} sw={l.sw} stroke={stroke} /> : null}
-              <Text x={dx} y={y} text={d} font={font} color={fill} />
-            </Group>
-          );
-        })}
+        <DigitStrip x={x} w={w} baseline={l.baseline} lineH={lineH} sw={l.sw} font={font} fill={fill} stroke={stroke} outline={outline} />
       </Group>
     </Group>
   );
 }
+
+/**
+ * One digit's wheel of glyphs. It only changes with the number's size or colours, never with the
+ * digit itself (that's the wheel's position), so a change of number doesn't redraw it: a ruler slid
+ * quickly changes the number many times a second.
+ */
+const DigitStrip = memo(function DigitStrip({ x, w, baseline, lineH, sw, font, fill, stroke, outline }: { x: number; w: number; baseline: number; lineH: number; sw: number; font: SkFont; fill: string; stroke: string; outline: boolean }) {
+  return (
+    <>
+      {LOOP.map((k) => {
+        const d = DIGITS[((k % 10) + 10) % 10];
+        const dx = x + (w - font.measureText(d).width) / 2;
+        const y = baseline + (k - LOOP[0]) * lineH;
+        return (
+          <Group key={k}>
+            {outline ? <GlyphOutline ch={d} x={dx} y={y} font={font} sw={sw} stroke={stroke} /> : null}
+            <Text x={dx} y={y} text={d} font={font} color={fill} />
+          </Group>
+        );
+      })}
+    </>
+  );
+});
 
 /** The game's chunky yellow numbers with a brown outline. Digits roll like an odometer. */
 export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = false, outline = true, style, accessibilityLabel }: Props) {

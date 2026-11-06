@@ -254,15 +254,17 @@ export const useApp = create<AppState>((set, get) => ({
     const p = get().profile;
     if (!p) return;
     const profile = { ...p, ...patch };
-    await db.kvSet('profile', profile);
+    // The screen changes at once and the save follows: saved first, a ruler being slid was handed
+    // the value from before for a moment and slid back to it.
     set({ profile });
+    await db.kvSet('profile', profile);
   },
 
   setRates: async (rates) => get().updateProfile({ rates }),
 
   setSeasonRates: async (rates) => {
-    await db.setSeasonRates(rates);
     set({ seasonRates: normaliseSeasons(rates) });
+    await db.setSeasonRates(rates);
   },
 
   setLocationAndClimate: async (location, climate) => {
@@ -291,8 +293,9 @@ export const useApp = create<AppState>((set, get) => ({
 
   updateSettings: async (patch) => {
     const settings = { ...get().settings, ...patch };
-    await db.kvSet('settings', settings);
+    // As with the profile: the screen first (and two changes close together both keep), then the save.
     set({ settings });
+    await db.kvSet('settings', settings);
   },
 
   setRemoteTable: async (json) => {

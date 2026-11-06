@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { startTransition, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
@@ -27,22 +27,36 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  // What the ruler was last slid to shows at once. The page's own work on it (checking a plan,
+  // saving) follows as a background update, and a newer slide replaces one still in progress, so
+  // the number keeps up with the ruler however much the page has to do.
+  const [live, setLive] = useState(value);
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    // Set from elsewhere (typed, or the page's own change): that's what shows.
+    setSeen(value);
+    setLive(value);
+  }
+  const slide = (v: number) => {
+    setLive(v);
+    startTransition(() => onChange(v));
+  };
 
   return (
     <View
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={label}
-      accessibilityValue={{ min, max, now: value, text: t('Level {level}', { level: value }) }}
+      accessibilityValue={{ min, max, now: live, text: t('Level {level}', { level: live }) }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-      onAccessibilityAction={(e) => onChange(clamp(value + (e.nativeEvent.actionName === 'increment' ? 1 : -1)))}
+      onAccessibilityAction={(e) => onChange(clamp(live + (e.nativeEvent.actionName === 'increment' ? 1 : -1)))}
       style={{ gap: 10 }}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('Type {what}', { what: label })}
         onPress={() => {
-          setDraft(String(value));
+          setDraft(String(live));
           setEditing(true);
         }}
         style={{ alignSelf: 'center', minWidth: size * 2.2, alignItems: 'center', justifyContent: 'center', minHeight: size * 1.15 }}
@@ -63,11 +77,11 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
             style={{ fontFamily: font.heading, fontSize: size * 0.8, color: c.leafDeep, textAlign: 'center', minWidth: size * 1.6, padding: 0 }}
           />
         ) : (
-          <GameNumber value={value} size={size} format={(n) => String(n)} />
+          <GameNumber value={live} size={size} format={(n) => String(n)} />
         )}
       </Pressable>
       {/* Remount when the range moves, so its positions always match the levels. */}
-      <LevelRuler key={`${min}-${max}`} value={value} min={min} max={max} onChange={onChange} />
+      <LevelRuler key={`${min}-${max}`} value={live} min={min} max={max} onChange={slide} />
       {hint ? (
         <T v="caption" soft center>
           {t('Slide the ruler, or tap the number to type it.')}
