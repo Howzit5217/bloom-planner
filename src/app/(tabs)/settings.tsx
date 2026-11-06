@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState, type ReactNode } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, useColorScheme, View } from 'react-native';
 import { addDaysKey, fromKey, toKey, type DayKey } from '@/engine/dates';
 import { planDifficulty } from '@/engine/difficulty';
 import { checkGoal } from '@/engine/goalCheck';
@@ -34,6 +34,7 @@ import { Stepper } from '@/ui/Stepper';
 import { T } from '@/ui/T';
 import { fmtClock, TimeWheel } from '@/ui/TimeWheel';
 import { TextField } from '@/ui/TextField';
+import { useThemeSwitch } from '@/ui/ThemeSwitch';
 import { Toggle } from '@/ui/Toggle';
 import { LANGS, tk, useT } from '@/i18n';
 
@@ -86,7 +87,10 @@ function LinkRow({ label, onPress, icon = 'chevron-right' }: { label: string; on
 }
 
 export default function Settings() {
-  const { c } = useTheme();
+  const { c, isDark } = useTheme();
+  const phoneScheme = useColorScheme();
+  const switchTheme = useThemeSwitch();
+  const themeTap = useRef<{ x: number; y: number } | null>(null);
   const { t, tn, lang } = useT();
   const [langSheet, setLangSheet] = useState(false);
   const dash = useDashboard();
@@ -389,17 +393,26 @@ export default function Settings() {
         </Section>
       ) : null}
 
-      <Section title={t('Appearance')} icon="moon-waning-crescent">
-        <Segmented<ThemePref>
-          label={t('Theme')}
-          value={st.settings.theme}
-          onChange={(th) => void st.updateSettings({ theme: th })}
-          options={[
-            { key: 'system', label: t('Match phone') },
-            { key: 'light', label: t('Day') },
-            { key: 'dark', label: t('Night') },
-          ]}
-        />
+      {/* A sun by day and a moon by night, as the app looks right now. */}
+      <Section title={t('Appearance')} icon={isDark ? 'moon-waning-crescent' : 'white-balance-sunny'}>
+        {/* Where the finger was, so the new look opens out from there. */}
+        <View onTouchStart={(e) => (themeTap.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}>
+          <Segmented<ThemePref>
+            label={t('Theme')}
+            value={st.settings.theme}
+            onChange={(th) => {
+              const apply = () => void st.updateSettings({ theme: th });
+              const willBeDark = th === 'system' ? phoneScheme === 'dark' : th === 'dark';
+              if (willBeDark === isDark) apply();
+              else switchTheme(apply, themeTap.current ?? undefined);
+            }}
+            options={[
+              { key: 'system', label: t('Match phone') },
+              { key: 'light', label: t('Day') },
+              { key: 'dark', label: t('Night') },
+            ]}
+          />
+        </View>
         <LinkRow label={`${t('Language')}: ${st.settings.language === 'system' ? `${t('Match phone')} (${LANGS.find((l) => l.code === lang)?.name})` : LANGS.find((l) => l.code === st.settings.language)?.name}`} onPress={() => setLangSheet(true)} icon="translate" />
       </Section>
 

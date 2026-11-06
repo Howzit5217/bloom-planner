@@ -21,15 +21,27 @@ import { Seedling } from './skia/Seedling';
 import { TAB_BAR_SPACE } from './TabBar';
 import { useT } from '@/i18n';
 
+/** Whether the app has shown its first page yet (that one doesn't slide in). */
+let appOpened = false;
+
 /** Tab switch: content cross-fades with an 8px vertical slide. */
 export function FocusFade({ children }: { children: ReactNode }) {
   const focused = useIsFocused();
-  const p = useSharedValue(0);
+  // The page the app opens on is simply there: sliding in after the splash looked like a jump.
+  const [opening] = useState(() => focused && !appOpened);
+  const p = useSharedValue(opening ? 1 : 0);
+  const skip = useRef(opening);
   useEffect(() => {
-    if (focused) {
-      p.value = 0;
-      p.value = withSpring(1, SPRING);
+    appOpened = true;
+  }, []);
+  useEffect(() => {
+    if (!focused) return;
+    if (skip.current) {
+      skip.current = false;
+      return;
     }
+    p.value = 0;
+    p.value = withSpring(1, SPRING);
   }, [focused, p]);
   const a = useAnimatedStyle(() => ({ flex: 1, opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 8 }] }));
   return <Animated.View style={a}>{children}</Animated.View>;

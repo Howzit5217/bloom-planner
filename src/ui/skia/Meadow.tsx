@@ -18,7 +18,7 @@ export const color = (paint: SkPaint, hex: string, alpha = 1) => {
 };
 
 /** A flat, puffy cloud like the game's: three or four round bumps on a flat base, lighter on top. */
-function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, paint: SkPaint, rand: () => number) {
+export function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, paint: SkPaint, rand: () => number) {
   const bumps = 3 + Math.floor(rand() * 2);
   const parts: Array<[number, number, number]> = [];
   for (let i = 0; i < bumps; i++) {
@@ -39,8 +39,9 @@ function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, 
 /**
  * The sky from the top down to the horizon `hz`, `fullW` wide: the gradient, stars and clouds across
  * all of it, and the sun or moon placed over the part the screen shows (`viewW` wide from `left`).
+ * `clouds: false` leaves the clouds out, for a scene that has them drifting live (Home).
  */
-export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW: number, left: number, viewW: number, look: SkyLook) {
+export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW: number, left: number, viewW: number, look: SkyLook, { clouds = true }: { clouds?: boolean } = {}) {
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
   paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, 0), vec(0, hz), [Skia.Color(look.top), Skia.Color(look.mid), Skia.Color(look.horizon)], [0, 0.55, 1], TileMode.Clamp));
@@ -100,14 +101,22 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
       canvas.drawCircle(mx + dx * R, my + dy * R, cr * R, paint);
     }
   }
-  // Clouds drift along the upper sky, sized to the screen.
+  if (!clouds) return;
+  const shade = cloudShade(look);
+  for (const k of cloudsOf(look, rand, hz, fullW, viewW)) cloud(canvas, k.x, k.y, k.s, look.cloudColor, shade, paint, rand);
+}
+
+/** The clouds' shaded underside. */
+export const cloudShade = (look: SkyLook) => mix(look.cloudColor, look.mid, 0.35);
+
+/** Where the clouds go along the upper sky, sized to the screen: as many as the weather has. */
+export function cloudsOf(look: SkyLook, rand: () => number, hz: number, fullW: number, viewW: number): Array<{ x: number; y: number; s: number }> {
   const count = Math.round(look.clouds * Math.max(0.6, fullW / 420));
-  const shade = mix(look.cloudColor, look.mid, 0.35);
-  for (let i = 0; i < count; i++) {
+  return Array.from({ length: count }, () => {
     const s = viewW * (0.07 + rand() * 0.07);
-    const cy = hz * (0.18 + rand() * 0.62);
-    cloud(canvas, rand() * (fullW + s) - s * 0.5, cy, s, look.cloudColor, shade, paint, rand);
-  }
+    const y = hz * (0.18 + rand() * 0.62);
+    return { x: rand() * (fullW + s) - s * 0.5, y, s };
+  });
 }
 
 /**

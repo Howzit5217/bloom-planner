@@ -6,7 +6,7 @@ import { lookKey, type SkyLook } from '@/engine/sky';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
+import { bladeColorOf, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
 import { fallOf, Precipitation } from './Precipitation';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
@@ -26,6 +26,17 @@ interface Scene {
   picture: SkPicture;
   /** The near flowers, each drawn on its own about its base, to sway. */
   live: Array<{ s: Sprig; picture: SkPicture }>;
+  /** The clouds, each drawn on its own, to drift across the sky. */
+  clouds: Drifter[];
+}
+
+interface Drifter {
+  picture: SkPicture;
+  x: number;
+  y: number;
+  s: number;
+  /** Points a second: the bigger (nearer) ones a little faster, all of them faster in a storm. */
+  speed: number;
 }
 
 /**
@@ -74,7 +85,8 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     const depth = f.picH - hz;
     // The field the level camera shows on screen; things there are the size the flat field draws them.
     const rest = f.H - f.cy;
-    drawSky(canvas, rand, hz, f.picW, f.pad, f.W, look);
+    // The clouds aren't in this picture: they drift live over it.
+    drawSky(canvas, rand, hz, f.picW, f.pad, f.W, look, { clouds: false });
 
     const paint = Skia.Paint();
     paint.setAntiAlias(true);
@@ -126,7 +138,22 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     // Rain and snow fall live over the top (Precipitation), not frozen into this picture.
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c, { falling: false });
   }, Skia.XYWHRect(0, 0, f.picW, f.picH));
-  return { picture, live };
+  // The clouds, from their own sequence so the field stays as it was.
+  const cloudRand = rng(seed ^ 0x2545f491);
+  const shade = cloudShade(look);
+  const wind = look.weather === 'storm' ? 2.2 : look.rain ? 1.5 : 1;
+  const clouds = cloudsOf(look, cloudRand, f.cy, f.picW, f.W).map((k): Drifter => {
+    const paint = Skia.Paint();
+    paint.setAntiAlias(true);
+    return {
+      picture: createPicture((cv) => cloud(cv, 0, 0, k.s, look.cloudColor, shade, paint, cloudRand), Skia.XYWHRect(-k.s * 1.3, -k.s * 1.3, k.s * 2.6, k.s * 2)),
+      x: k.x,
+      y: k.y,
+      s: k.s,
+      speed: (2 + (k.s / f.W) * 32) * wind,
+    };
+  });
+  return { picture, live, clouds };
 }
 
 /**
@@ -150,6 +177,23 @@ function SwaySprig({ s, picture, clock, matrix }: { s: Sprig; picture: SkPicture
   return (
     <Group transform={transform}>
       <Picture picture={picture} />
+    </Group>
+  );
+}
+
+/**
+ * A cloud drifting slowly across the sky, in the scene (so it tilts with the camera), coming round
+ * again off the far side.
+ */
+function DriftCloud({ k, clock, span }: { k: Drifter; clock: SharedValue<number>; span: number }) {
+  const lap = span + k.s * 2.6;
+  const transform = useDerivedValue(() => {
+    const at = (((k.x + k.s * 1.3 + (clock.value / 1000) * k.speed) % lap) + lap) % lap;
+    return [{ translateX: at - k.s * 1.3 }, { translateY: k.y }];
+  });
+  return (
+    <Group transform={transform}>
+      <Picture picture={k.picture} />
     </Group>
   );
 }
@@ -196,20 +240,32 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
   const scene = useMemo(() => drawCameraScene(frame, look, c, seed, bloom), [frame, sky, c, seed, bloom]);
   const image = useMemo(() => snapshot(scene.picture, frame), [scene, frame]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
+  // The scene's own time: how long it has been moving, so it carries on from where it was. (The
+  // phone's clock instead made every flower, cloud and raindrop jump the moment it started.)
   const clock = useSharedValue(0);
+  const since = useSharedValue(0);
   const ticker = useFrameCallback((info) => {
-    if (info.timestamp - clock.value >= 33) clock.value = info.timestamp;
+    since.value += Math.min(100, info.timeSincePreviousFrame ?? 0);
+    if (since.value >= 33) {
+      clock.value += since.value;
+      since.value = 0;
+    }
   }, false);
-  // Rain or snow falls over the scene (held still with reduced motion).
+  // Rain or snow falls over the scene, and the clouds drift (held still with reduced motion).
   const fall = fallOf(look);
-  const moving = animate && !reduceMotion && (scene.live.length > 0 || !!fall);
+  const moving = animate && !reduceMotion && (scene.live.length > 0 || !!fall || scene.clouds.length > 0);
   useEffect(() => {
     ticker.setActive(moving);
   }, [moving, ticker]);
   return (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.H }}>
       <Canvas style={{ width: frame.W, height: frame.H }}>
-        <Group matrix={matrix}>{image ? <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : <Picture picture={scene.picture} />}</Group>
+        <Group matrix={matrix}>
+          {image ? <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : <Picture picture={scene.picture} />}
+          {scene.clouds.map((k, i) => (
+            <DriftCloud key={i} k={k} clock={clock} span={frame.picW} />
+          ))}
+        </Group>
         {scene.live.map(({ s, picture }, i) => (
           <SwaySprig key={i} s={s} picture={picture} clock={clock} matrix={matrix} />
         ))}

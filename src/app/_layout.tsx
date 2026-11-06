@@ -5,13 +5,15 @@ import { DefaultTheme, Stack, ThemeProvider as NavigationTheme } from 'expo-rout
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { MAX_APP_WIDTH } from '@/ui/layout';
 import { WorldBackdrop } from '@/ui/Screen';
 import { HomeScreenOnly } from '@/features/shared/HomeScreenOnly';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
+import { preloadGameFont } from '@/ui/skia/gameFont';
+import { ThemeSwitchHost } from '@/ui/ThemeSwitch';
 import { useLifecycle } from '@/hooks/useLifecycle';
 import { useWebAutoUpdate } from '@/hooks/useWebAutoUpdate';
 import { configureNotifications } from '@/services/notifications';
@@ -30,19 +32,26 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ Baloo2_700Bold, Baloo2_800ExtraBold, Nunito_400Regular, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold });
   const ready = useApp((s) => s.ready);
   const hydrate = useApp((s) => s.hydrate);
+  // The drawn numbers' face too, so the first screen opens with its badges and numbers as they'll stay.
+  const [numbers, setNumbers] = useState(false);
   useEffect(() => {
     void hydrate();
+    void preloadGameFont().then(() => setNumbers(true));
   }, [hydrate]);
-  const loaded = (fontsLoaded || !!fontError) && ready;
+  const loaded = (fontsLoaded || !!fontError) && ready && numbers;
   useEffect(() => {
     if (loaded) SplashScreen.hideAsync().catch(() => {});
   }, [loaded]);
   if (!loaded) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+      {/* The real status-bar and screen-edge sizes from the first frame: measured a moment later, the
+          whole page opened too high and then dropped into place. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
-          <Root />
+          <ThemeSwitchHost>
+            <Root />
+          </ThemeSwitchHost>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

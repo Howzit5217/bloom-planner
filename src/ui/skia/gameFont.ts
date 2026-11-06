@@ -32,6 +32,15 @@ function loadFace(): Promise<SkTypeface | null> {
   return pending;
 }
 
+/**
+ * Loads the face ahead of the first screen, so its numbers and badges open already drawn rather than
+ * as plain text that then changes: the splash waits for this (or `ms`, whichever comes first).
+ */
+export function preloadGameFont(ms = 2000): Promise<void> {
+  if (face) return Promise.resolve();
+  return Promise.race([loadFace().then(() => undefined), new Promise<void>((r) => setTimeout(r, ms))]);
+}
+
 /** A Skia font in the game numbers' face at `size`, or null until it has loaded. */
 export function useGameFont(size: number): SkFont | null {
   const [tf, setTf] = useState<SkTypeface | null>(() => face);
