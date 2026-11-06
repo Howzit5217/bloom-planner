@@ -1,7 +1,7 @@
 import bundled from '../../data/bloom-levels.json';
 import { daysBetween } from '../dates';
-import { canKeepAnyway, CHALLENGE_STEPS, checkDifficulty, DIFFICULTIES, difficultyOfSteps, moreChallenge, planDifficulty } from '../difficulty';
-import { checkGoal } from '../goalCheck';
+import { canKeepAnyway, CHALLENGE_STEPS, checkDifficulty, DIFFICULTIES, difficultyOfSteps, moreChallenge, pastPossible, planDifficulty } from '../difficulty';
+import { checkGoal, MAX_STEPS_EVERY_DAY } from '../goalCheck';
 import { makeReq, parseLevelTable } from '../levels';
 import { ALL_RIDEABLE } from './helpers';
 
@@ -58,12 +58,25 @@ const fast = { walkStepsPerHour: 6000, bikeFlowersPerHour: 20000, walkFlowersPer
 
 describe('goals past the limits, and goals too easy', () => {
   it('grades an unrealistic goal extreme, and only that kind can be kept anyway', () => {
-    const tooHard = checkGoal({ ...goalBase, goalLevel: 120, goalKey: '2026-12-23' });
+    const tooHard = checkGoal({ ...goalBase, goalLevel: 100, goalKey: '2027-01-31' });
+    expect(tooHard.problem).toBe('tooManySteps');
+    expect(tooHard.plan?.status === 'ok' && tooHard.plan.avgStepsPerDay).toBeLessThanOrEqual(MAX_STEPS_EVERY_DAY);
+    expect(pastPossible(tooHard)).toBe(false);
     expect(canKeepAnyway(tooHard)).toBe(true);
     expect(checkDifficulty(tooHard, fast)?.level).toBe('extreme');
     const past = checkGoal({ ...goalBase, goalLevel: 90, goalKey: '2026-11-01' });
     expect(canKeepAnyway(past)).toBe(false);
     expect(checkDifficulty(past, fast)).toBeNull();
+  });
+
+  it("can't keep a goal past 120,000 steps on an average day: one day like that, yes; every day, no", () => {
+    const never = checkGoal({ ...goalBase, goalLevel: 120, goalKey: '2026-12-23' });
+    expect(never.problem).toBe('tooManySteps');
+    expect(never.plan?.status === 'ok' && never.plan.avgStepsPerDay).toBeGreaterThan(MAX_STEPS_EVERY_DAY);
+    expect(pastPossible(never)).toBe(true);
+    expect(canKeepAnyway(never)).toBe(false);
+    // Still graded, so the plan shows how extreme it would be.
+    expect(checkDifficulty(never, fast)?.level).toBe('extreme');
   });
 
   it('offers a sooner date and a higher level for an easy goal, each still a steady plan', () => {

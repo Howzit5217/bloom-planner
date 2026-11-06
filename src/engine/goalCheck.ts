@@ -5,6 +5,11 @@ import type { LevelState, ReqFn } from './types';
 
 /** More steps than this in a day is not a reasonable plan, whatever the maths says. */
 export const MAX_STEPS_PER_DAY = 50_000;
+/**
+ * More than this every day, on average, isn't possible at all: a goal like that can't be kept even
+ * on purpose. A single day past it is fine (it has been done); day after day it isn't.
+ */
+export const MAX_STEPS_EVERY_DAY = 120_000;
 /** More riding than this on a riding day is not reasonable either. */
 export const MAX_RIDE_HOURS = 6;
 /** How far ahead to look for the earliest reasonable date. */

@@ -17,7 +17,7 @@ import { recentDays, streak } from './streak';
 import { DIFFICULTIES, difficultyOfPlan, type PlanDifficulty } from './difficulty';
 import { customProgress, type CustomProgress } from './customGoal';
 import { questOf, type Quest } from './quest';
-import { MAX_STEPS_PER_DAY } from './goalCheck';
+import { MAX_STEPS_EVERY_DAY, MAX_STEPS_PER_DAY } from './goalCheck';
 import { timeCost, type TimeCost } from './timecost';
 import type { DayEntry, LevelState, LevelTable, Overrides, Profile, ReqFn, Requirement, ResolvedRates } from './types';
 import type { DayVerdict, ForecastWeights } from './weatherPlan';
@@ -97,7 +97,8 @@ export interface Dashboard {
   recent: Array<{ date: DayKey; logged: boolean }>;
   projected: ProjectedLevel[];
   nextMilestone: ProjectedLevel | null;
-  impossible: { stepsPerDay: number; walkHours: number } | null;
+  /** `everyDay`: even the average day is past what's possible (over 120,000 steps), not just the busiest. */
+  impossible: { stepsPerDay: number; walkHours: number; everyDay: boolean } | null;
   /** How hard the rest of the plan is, at its busiest (only while there's a plan to follow). */
   difficulty: PlanDifficulty | null;
   /**
@@ -178,9 +179,13 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
           : null
       : null;
 
+  // Past what's realistic on the busiest days; or, worse, past what's possible every day (then the
+  // average is what it says).
+  const everyDay = plan.status === 'ok' && plan.avgStepsPerDay > MAX_STEPS_EVERY_DAY;
+  const shownSteps = everyDay ? plan.avgStepsPerDay : peakSteps;
   const impossible =
     phase === 'active' && plan.status === 'ok' && peakSteps > IMPOSSIBLE_STEPS_PER_DAY
-      ? { stepsPerDay: peakSteps, walkHours: peakSteps / rates.walkStepsPerHour }
+      ? { stepsPerDay: shownSteps, walkHours: shownSteps / rates.walkStepsPerHour, everyDay }
       : null;
 
   return {

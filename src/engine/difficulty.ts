@@ -1,5 +1,5 @@
 import { addDaysKey, daysBetween, type DayKey } from './dates';
-import { checkGoal, beyondReason, type GoalCheck, type GoalCheckInput } from './goalCheck';
+import { checkGoal, beyondReason, MAX_STEPS_EVERY_DAY, type GoalCheck, type GoalCheckInput } from './goalCheck';
 import { peakFlowersPerRideDay, peakStepsPerDay, type Plan } from './plan';
 import { timeCost } from './timecost';
 import type { ResolvedRates } from './types';
@@ -76,8 +76,14 @@ export function checkDifficulty(check: GoalCheck | null, rates: DifficultyRates)
   return difficultyOfPlan(check.plan, rates);
 }
 
-/** Whether a goal that isn't realistic can still be kept, if the player insists: it has a plan. */
-export const canKeepAnyway = (check: GoalCheck | null) => !!check && !check.ok && (check.problem === 'tooManySteps' || check.problem === 'tooManyFlowers') && check.plan?.status === 'ok';
+/** A goal past what's realistic whose average day is past what's possible at all (over 120,000 steps). */
+export const pastPossible = (check: GoalCheck | null) => !!check && !check.ok && (check.problem === 'tooManySteps' || check.problem === 'tooManyFlowers') && check.plan?.status === 'ok' && check.plan.avgStepsPerDay > MAX_STEPS_EVERY_DAY;
+
+/**
+ * Whether a goal that isn't realistic can still be kept, if the player insists: it has a plan, and
+ * its average day is still possible (busiest days past 120,000 are fine; every day isn't).
+ */
+export const canKeepAnyway = (check: GoalCheck | null) => !!check && !check.ok && (check.problem === 'tooManySteps' || check.problem === 'tooManyFlowers') && check.plan?.status === 'ok' && !pastPossible(check);
 
 export interface MoreChallenge {
   /** The soonest date for the same level that's still a steady plan (null: none sooner). */

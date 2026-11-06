@@ -73,7 +73,9 @@ export default function Home() {
     });
   // Not for a goal kept on purpose after "Are you sure?", and it can be put away.
   const extremeKey = profile ? keptExtremeKey(profile.goalLevel, profile.goalDate) : '';
-  if (dash.impossible && !dismissed[extremeKey])
+  // Past what's possible every day, it comes back even for a kept goal (put away on its own).
+  const impossibleKey = dash.impossible?.everyDay ? `${extremeKey}-every` : extremeKey;
+  if (dash.impossible && !dismissed[impossibleKey])
     banners.push({
       key: 'impossible',
       node: (
@@ -81,9 +83,13 @@ export default function Home() {
           icon="alert-circle"
           tone="alert"
           title={t('An Honest Heads-Up')}
-          text={t("This needs {steps} steps a day at its busiest. That's about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })}
+          text={
+            dash.impossible.everyDay
+              ? t('This now needs about {steps} steps every day, more than anyone can keep up day after day. A later date would work.', { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000) })
+              : t("This needs {steps} steps a day at its busiest. That's about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })
+          }
           action={{ label: t('Change the goal'), onPress: () => router.push('/settings') }}
-          onDismiss={() => dismiss(extremeKey)}
+          onDismiss={() => dismiss(impossibleKey)}
         />
       ),
     });

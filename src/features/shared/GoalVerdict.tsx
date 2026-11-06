@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import type { DayKey } from '@/engine/dates';
-import { canKeepAnyway, moreChallenge, type MoreChallenge, type PlanDifficulty } from '@/engine/difficulty';
+import { canKeepAnyway, moreChallenge, pastPossible, type MoreChallenge, type PlanDifficulty } from '@/engine/difficulty';
 import { fmt, fmtDate, fmtHours, roundNice } from '@/engine/format';
 import { earliestReasonableDate, MAX_RIDE_HOURS, MAX_STEPS_PER_DAY, type GoalCheck, type GoalCheckInput } from '@/engine/goalCheck';
 import type { ResolvedRates } from '@/engine/types';
@@ -102,6 +102,8 @@ export function GoalVerdict({ check, earliest, onUseDate, onKeep, difficulty }: 
           </T>
         </View>
         <T v="small">{explain(check)}</T>
+        {/* A day like that can happen; every day can't, so there's no keeping this one. */}
+        {pastPossible(check) ? <T v="small">{t("That's about {steps} steps every day. One day like that is possible, but not day after day, so this goal can't be kept.", { steps: fmt(roundNice(check.plan!.avgStepsPerDay)) })}</T> : null}
         {datey ? (
           earliest === undefined ? (
             <T v="small" soft>
