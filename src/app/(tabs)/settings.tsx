@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, View } from 'react-native';
-import { entriesToCsv } from '@/engine/csv';
 import { addDaysKey, fromKey, toKey, type DayKey } from '@/engine/dates';
 import { planDifficulty } from '@/engine/difficulty';
 import { checkGoal } from '@/engine/goalCheck';
@@ -17,7 +16,6 @@ import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
-import { shareTextFile } from '@/services/shareFile';
 import { useApp, useDashboard, type LogMode, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { Banner } from '@/ui/Banner';
@@ -93,7 +91,6 @@ export default function Settings() {
   const dash = useDashboard();
   const st = useApp();
   const profile = st.profile;
-  const [confirmReset, setConfirmReset] = useState(false);
   const [timeSheet, setTimeSheet] = useState(false);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
   const [checking, setChecking] = useState<string | null>(null);
@@ -146,7 +143,6 @@ export default function Settings() {
   const minGoal = dash.current.level + 1;
   const notif = st.settings.notifications;
   const dev = st.settings.dev;
-  const overrides = Object.values(st.overrides).sort((a, b) => a.level - b.level);
   const obs = dash.observed;
   const bikes = dash.rates.bikes;
   // When the level data was looked up, as a date like the rest of the app shows.
@@ -157,7 +153,6 @@ export default function Settings() {
     setTimeDraft({ hour: notif.hour, minute: notif.minute });
     setTimeSheet(true);
   };
-  const exportCsv = () => shareTextFile(`bloom-planner-log-${dash.today}.csv`, entriesToCsv(st.entries), 'text/csv', t('Export your log'));
 
   return (
     <Screen>
@@ -328,34 +323,6 @@ export default function Settings() {
         ) : null}
       </Section>
 
-      <Section title={t('Your Corrections')} icon="pencil-circle">
-        {overrides.length === 0 ? (
-          <T v="small" soft>
-            {t('None yet. Tap any level in Levels to correct it with what your game shows.')}
-          </T>
-        ) : (
-          overrides.map((o) => {
-            const row = st.table.byLevel[o.level];
-            return (
-              <View key={o.level} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <T v="bodyBold">{t('Level {level}', { level: o.level })}</T>
-                  <T v="caption" soft>
-                    {t('{steps} steps · {flowers} flowers (bundled {bSteps} / {bFlowers})', {
-                      steps: fmt(o.steps ?? row.steps),
-                      flowers: fmt(o.flowers ?? row.flowers),
-                      bSteps: fmt(row.steps),
-                      bFlowers: fmt(row.flowers),
-                    })}
-                  </T>
-                </View>
-                <PillButton label={t('Remove')} size="sm" variant="ghost" onPress={() => void st.removeOverride(o.level)} />
-              </View>
-            );
-          })
-        )}
-      </Section>
-
       {/* A web page cannot remind anyone at 8pm, so the web version has no reminders. */}
       {!IS_WEB ? (
         <Section title={t('Reminders')} icon="bell">
@@ -421,7 +388,7 @@ export default function Settings() {
         </Section>
       ) : null}
 
-      <Section title={t('Appearance')} icon="theme-light-dark">
+      <Section title={t('Appearance')} icon="moon-waning-crescent">
         <Segmented<ThemePref>
           label={t('Theme')}
           value={st.settings.theme}
@@ -433,22 +400,6 @@ export default function Settings() {
           ]}
         />
         <LinkRow label={`${t('Language')}: ${st.settings.language === 'system' ? `${t('Match phone')} (${LANGS.find((l) => l.code === lang)?.name})` : LANGS.find((l) => l.code === st.settings.language)?.name}`} onPress={() => setLangSheet(true)} icon="translate" />
-      </Section>
-
-      <Section title={t('Your Data')} icon="database">
-        <PillButton label={t('Export log as CSV')} variant="secondary" icon="file-delimited" size="md" onPress={() => void exportCsv()} disabled={st.entries.length === 0} />
-        {!confirmReset ? (
-          <PillButton label={t('Reset everything')} variant="ghost" icon="delete" size="md" onPress={() => setConfirmReset(true)} />
-        ) : (
-          <Card variant="deep" style={{ gap: 10 }}>
-            <T v="bodyBold">{t('Delete your log, goal, corrections and settings?')}</T>
-            <T v="small" soft>
-              {t("This can't be undone. Export your log first if you want to keep it.")}
-            </T>
-            <PillButton label={t('Yes, delete everything')} variant="danger" size="md" onPress={() => void st.resetEverything()} />
-            <PillButton label={t('No, keep everything')} variant="ghost" size="md" onPress={() => setConfirmReset(false)} />
-          </Card>
-        )}
       </Section>
 
       {/* The web version is always the newest, and its level data refreshes by itself. */}

@@ -7,6 +7,7 @@ import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { bladeColorOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
+import { fallOf, Precipitation } from './Precipitation';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
 import { rng } from './shapes';
@@ -122,7 +123,8 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     }));
 
     drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.1), look.fog ? 400 : 60), look.fog ? 0.85 : 0.55, look);
-    drawWeather(canvas, rand, f.picW, f.picH, hz, look, c);
+    // Rain and snow fall live over the top (Precipitation), not frozen into this picture.
+    drawWeather(canvas, rand, f.picW, f.picH, hz, look, c, { falling: false });
   }, Skia.XYWHRect(0, 0, f.picW, f.picH));
   return { picture, live };
 }
@@ -198,10 +200,12 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
   const ticker = useFrameCallback((info) => {
     if (info.timestamp - clock.value >= 33) clock.value = info.timestamp;
   }, false);
-  const sway = animate && !reduceMotion && scene.live.length > 0;
+  // Rain or snow falls over the scene (held still with reduced motion).
+  const fall = fallOf(look);
+  const moving = animate && !reduceMotion && (scene.live.length > 0 || !!fall);
   useEffect(() => {
-    ticker.setActive(sway);
-  }, [sway, ticker]);
+    ticker.setActive(moving);
+  }, [moving, ticker]);
   return (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.H }}>
       <Canvas style={{ width: frame.W, height: frame.H }}>
@@ -209,6 +213,7 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
         {scene.live.map(({ s, picture }, i) => (
           <SwaySprig key={i} s={s} picture={picture} clock={clock} matrix={matrix} />
         ))}
+        {fall ? <Precipitation kind={fall} width={frame.W} height={frame.H} clock={clock} /> : null}
       </Canvas>
     </View>
   );

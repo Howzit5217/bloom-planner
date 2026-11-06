@@ -1,0 +1,113 @@
+import { createPicture, Group, PaintStyle, Picture, Skia, StrokeCap, type SkPicture } from '@shopify/react-native-skia';
+import { useMemo } from 'react';
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import { rng } from './random';
+
+/**
+ * Rain or snow falling over the scene, live. Each sheet is one picture of drops (drawn once) that
+ * slides down and wraps round, so a frame is a few picture draws, however many drops there are.
+ * Far sheets fall slower, thinner and fainter than near ones, which gives the fall some depth.
+ */
+
+interface Sheet {
+  /** Points a millisecond. */
+  speed: number;
+  /** Drops per square point. */
+  per: number;
+  /** Rain: streak length and width. Snow: flake radius. */
+  len: number;
+  width: number;
+  alpha: number;
+  /** Snow only: how far a sheet drifts side to side, and how slowly. */
+  drift?: number;
+  driftMs?: number;
+}
+
+// At about 30 frames a second a drop moves about its own length a frame, so it reads as a fall.
+const RAIN: Sheet[] = [
+  { speed: 0.42, per: 1 / 5200, len: 11, width: 1.1, alpha: 0.2 },
+  { speed: 0.62, per: 1 / 6800, len: 16, width: 1.4, alpha: 0.3 },
+  { speed: 0.85, per: 1 / 11000, len: 23, width: 1.8, alpha: 0.42 },
+];
+/** A storm's rain: more of it, a little faster. */
+const STORM = RAIN.map((s) => ({ ...s, speed: s.speed * 1.2, per: s.per * 1.7 }));
+const SNOW: Sheet[] = [
+  { speed: 0.022, per: 1 / 4200, len: 1.2, width: 0, alpha: 0.55, drift: 10, driftMs: 5200 },
+  { speed: 0.035, per: 1 / 6000, len: 1.9, width: 0, alpha: 0.7, drift: 14, driftMs: 6800 },
+  { speed: 0.05, per: 1 / 9000, len: 2.7, width: 0, alpha: 0.85, drift: 18, driftMs: 8600 },
+];
+/** Rain leans: across this much for every point it falls (snow falls straight, and drifts). */
+const RAIN_SLANT = 0.26;
+
+export type Fall = 'rain' | 'storm' | 'snow';
+
+/** One sheet's drops over a w x h tile; the tile repeats top to bottom with no seam. */
+function drawSheet(kind: Fall, s: Sheet, w: number, h: number, seed: number): SkPicture {
+  const rand = rng(seed);
+  const n = Math.round(w * h * s.per);
+  return createPicture(
+    (canvas) => {
+      const paint = Skia.Paint();
+      paint.setAntiAlias(true);
+      paint.setColor(Skia.Color(kind === 'snow' ? '#FFFFFF' : '#E4ECFF'));
+      paint.setAlphaf(s.alpha);
+      if (kind !== 'snow') {
+        paint.setStyle(PaintStyle.Stroke);
+        paint.setStrokeCap(StrokeCap.Round);
+        paint.setStrokeWidth(s.width);
+      }
+      for (let i = 0; i < n; i++) {
+        const x = rand() * w;
+        const y = rand() * h;
+        // Drawn twice where it crosses the tile's bottom, so the next tile carries it on.
+        for (const dy of y + s.len > h ? [0, -h] : [0]) {
+          if (kind === 'snow') canvas.drawCircle(x, y + dy, s.len * (0.7 + rand() * 0.6), paint);
+          else canvas.drawLine(x, y + dy, x, y + dy + s.len, paint);
+        }
+      }
+    },
+    Skia.XYWHRect(0, -s.len, w, h + s.len * 2),
+  );
+}
+
+function FallingSheet({ picture, s, h, clock, slant, phase }: { picture: SkPicture; s: Sheet; h: number; clock: SharedValue<number>; slant: number; phase: number }) {
+  // Falling straight down in the tile's own space; the slant turns it into a slanting fall.
+  const transform = useDerivedValue(() => {
+    const t = clock.value;
+    const off = (t * s.speed + phase * h) % h;
+    const sway = s.drift ? Math.sin((t / (s.driftMs ?? 6000) + phase) * Math.PI * 2) * s.drift : 0;
+    return [{ translateX: sway }, { translateY: off }];
+  });
+  return (
+    <Group matrix={[1, -slant, 0, 0, 1, 0, 0, 0, 1]}>
+      <Group transform={transform}>
+        <Picture picture={picture} />
+        <Group transform={[{ translateY: -h }]}>
+          <Picture picture={picture} />
+        </Group>
+      </Group>
+    </Group>
+  );
+}
+
+/**
+ * Rain, a storm's heavier rain, or snow over a `width` x `height` view, moving with `clock` (a
+ * time in milliseconds; held still, the drops hang where they are, as for reduced motion).
+ */
+export function Precipitation({ kind, width, height, clock }: { kind: Fall; width: number; height: number; clock: SharedValue<number> }) {
+  const sheets = kind === 'snow' ? SNOW : kind === 'storm' ? STORM : RAIN;
+  const slant = kind === 'snow' ? 0 : RAIN_SLANT;
+  // Wide enough that, leaning, the drops still reach both edges (and snow's drift too).
+  const tileW = width + slant * height + 40;
+  const pictures = useMemo(() => sheets.map((s, i) => drawSheet(kind, s, tileW, height, 7919 * (i + 1))), [kind, sheets, tileW, height]);
+  return (
+    <Group transform={[{ translateX: -20 }]}>
+      {sheets.map((s, i) => (
+        <FallingSheet key={i} picture={pictures[i]} s={s} h={height} clock={clock} slant={slant} phase={i * 0.37} />
+      ))}
+    </Group>
+  );
+}
+
+/** What falls from a sky look, if anything. */
+export const fallOf = (look: { rain: boolean; snow: boolean; weather: string }): Fall | null => (look.snow ? 'snow' : look.rain ? (look.weather === 'storm' ? 'storm' : 'rain') : null);

@@ -271,6 +271,20 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
       : walk
         ? t('About {walk}.', { walk })
         : t('Nothing left to do.');
+  // On foot (no bike, or not riding): only walking outside plants the flowers, and it counts steps
+  // too; whatever steps are still to go after that come on top, indoors with a treadmill.
+  const foot = tc.footDay;
+  const outside = foot.outside > 0.01 ? t('{time} walking outside', { time: fmtHours(foot.outside) }) : null;
+  const onFoot =
+    foot.total <= 0.01
+      ? t('Nothing left to do.')
+      : !outside
+        ? t('About {walk}.', { walk: walk ?? fmtHours(foot.total) })
+        : foot.moreSteps <= 0.01
+          ? t('About {walk}, for the steps and the flowers together.', { walk: outside })
+          : tc.walkWhere === 'indoor'
+            ? t('About {walk} for the flowers, plus {more} for the steps.', { walk: outside, more: t('{time} walking indoors', { time: fmtHours(foot.moreSteps) }) })
+            : t('About {walk} for the flowers, plus {more} more for the steps.', { walk: outside, more: fmtHours(foot.moreSteps) });
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -280,11 +294,10 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
       {dash.rates.bikes ? (
         <>
           <Row icon="bike" title={today ? t('If You Ride Today') : t('If You Ride Tomorrow')} text={ride} />
-          <Row icon={tc.walkWhere === 'indoor' ? 'walk' : 'pine-tree'} title={t("If You Don't")} text={walk ? t('About {walk}.', { walk }) : t('Nothing left to do.')} />
+          <Row icon={outside || tc.walkWhere === 'outdoor' ? 'pine-tree' : 'walk'} title={t("If You Don't")} text={onFoot} />
         </>
       ) : (
-        // Walking only: the same walk earns the steps and plants the flowers.
-        <Row icon={tc.walkWhere === 'indoor' ? 'walk' : 'pine-tree'} title={t('On Foot')} text={walk ? t('About {walk}, for the steps and the flowers together.', { walk }) : t('Nothing left to do.')} />
+        <Row icon={outside || tc.walkWhere === 'outdoor' ? 'pine-tree' : 'walk'} title={t('On Foot')} text={onFoot} />
       )}
       {tc.implausible ? (
         <View style={{ marginTop: 8, backgroundColor: c.alertPale, borderRadius: 14, padding: 12 }}>

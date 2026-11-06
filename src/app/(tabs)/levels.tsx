@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { FlatList, Pressable, View } from 'react-native';
+import { useMemo } from 'react';
+import { FlatList, View } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fmt } from '@/engine/format';
@@ -10,21 +10,17 @@ import { QUEST_ICON } from '@/features/shared/quest';
 import { useApp, useDashboard } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
-import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
-import { NumberField } from '@/ui/NumberField';
 import { useAppWidth } from '@/ui/layout';
-import { PillButton } from '@/ui/PillButton';
 import { FocusFade, PaperSheet } from '@/ui/Screen';
 import { ScrollRail, useScrollRail } from '@/ui/ScrollRail';
 import { ScrollText } from '@/ui/ScrollText';
-import { Sheet } from '@/ui/Sheet';
 import { FlowerAccent } from '@/ui/skia/FlowerAccent';
 import { LevelBadge } from '@/ui/skia/LevelBadge';
 import { T } from '@/ui/T';
 import { TAB_BAR_SPACE } from '@/ui/TabBar';
 import { useT } from '@/i18n';
-import { noteText, taskText } from '@/i18n/level-text';
+import { taskText } from '@/i18n/level-text';
 
 /** A tile: padding above and below, an objective per line, the note under them, and the gap to the next. */
 const PAD = 14;
@@ -44,14 +40,13 @@ export default function Levels() {
   const { t, lang } = useT();
   const insets = useSafeAreaInsets();
   const table = useApp((s) => s.table);
-  const overrides = useApp((s) => s.overrides);
   const dash = useDashboard();
-  const [editing, setEditing] = useState<number | null>(null);
   const rail = useScrollRail();
   const scrollRef = useAnimatedRef<FlatList<LevelRow>>();
   const onScroll = useAnimatedScrollHandler((e) => rail.track(e));
   const rows = useMemo(() => Array.from({ length: table.maxLevel }, (_, i) => table.byLevel[i + 1]), [table]);
-  const req = useMemo(() => makeReq(table, overrides), [table, overrides]);
+  // Every level as the game has it.
+  const req = useMemo(() => makeReq(table, {}), [table]);
   const current = dash?.current.level ?? 1;
   // Each tile is as tall as its objectives; the list still knows where every one sits.
   const layout = useMemo(() => {
@@ -96,16 +91,15 @@ export default function Levels() {
             setTimeout(() => scrollRef.current?.scrollToIndex({ index: Math.max(0, current - 2), animated: true, viewOffset: 0 }), 350);
           }}
           onScrollToIndexFailed={() => {}}
-          renderItem={({ item }: { item: LevelRow }) => <LevelRowView row={item} r={req(item.level)!} current={current} onPress={() => setEditing(item.level)} />}
+          renderItem={({ item }: { item: LevelRow }) => <LevelRowView row={item} r={req(item.level)!} current={current} />}
         />
         <ScrollRail rail={rail} scrollRef={scrollRef} top={18} bottom={TAB_BAR_SPACE + insets.bottom + 8} />
       </FocusFade>
-      <OverrideSheet level={editing} onClose={() => setEditing(null)} />
     </PaperSheet>
   );
 }
 
-function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirement; current: number; onPress: () => void }) {
+function LevelRowView({ row, r, current }: { row: LevelRow; r: Requirement; current: number }) {
   const { c } = useTheme();
   const { t } = useT();
   const isCurrent = row.level === current;
@@ -131,13 +125,10 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
   // A small phone: a smaller badge leaves the objectives more room.
   const narrow = useAppWidth() < 360;
   return (
-    <Pressable
-      accessibilityRole="button"
+    <View
+      accessible
       accessibilityLabel={label}
-      accessibilityHint={t('Correct this level')}
-      onPress={onPress}
-      disabled={row.level <= 2}
-      style={({ pressed }) => ({
+      style={{
         height: tileHeight(shape),
         marginBottom: GAP,
         borderRadius: radius.card,
@@ -147,9 +138,8 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
         alignItems: 'center',
         gap: 12,
         backgroundColor: tile,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
         boxShadow: `0px 3px 12px 0px ${c.shadow}`,
-      })}
+      }}
     >
       {/* Every level wears its rank badge, in its metal: the ones reached and the ones still to come. */}
       <View style={{ width: narrow ? BADGE - 6 : BADGE, height: BADGE, alignItems: 'center', justifyContent: 'center' }}>
@@ -173,78 +163,6 @@ function LevelRowView({ row, r, current, onPress }: { row: LevelRow; r: Requirem
           <Icon name="check-bold" size={16} color="#FFFFFF" />
         </View>
       ) : null}
-    </Pressable>
-  );
-}
-
-function OverrideSheet({ level, onClose }: { level: number | null; onClose: () => void }) {
-  const table = useApp((s) => s.table);
-  const overrides = useApp((s) => s.overrides);
-  const save = useApp((s) => s.saveOverride);
-  const remove = useApp((s) => s.removeOverride);
-  const { t } = useT();
-  const [steps, setSteps] = useState<number | null>(null);
-  const [flowers, setFlowers] = useState<number | null>(null);
-  const [lastLevel, setLastLevel] = useState<number | null>(null);
-  const row = level ? table.byLevel[level] : null;
-  const o = level ? overrides[level] : undefined;
-  if (level !== lastLevel) {
-    setLastLevel(level);
-    if (row) {
-      setSteps(o?.steps ?? row.steps);
-      setFlowers(o?.flowers ?? row.flowers);
-    }
-  }
-  return (
-    <Sheet visible={!!row} onClose={onClose} title={row ? t('Level {level}', { level: row.level }) : ''}>
-      {row ? (
-        <>
-          <T v="body">
-            {t('What it takes to reach {level}, while you\'re at {prev}. Your profile shows it under "Next steps to level up".', { level: row.level, prev: row.level - 1 })}
-          </T>
-          {noteText(row.note, row.source) ? (
-            <Card variant="deep">
-              <T v="small">{noteText(row.note, row.source)}</T>
-            </Card>
-          ) : null}
-          <T v="caption" soft>
-            {row.stepsMode === 'perLevel'
-              ? t('From level 101 the game asks you to "Walk X steps" at this level, so extra steps from the level before do not count.')
-              : t('Up to level 100 the game asks for a lifetime total ({n} steps), so extra steps carry over.', { n: fmt(row.cumulativeSteps ?? 0) })}
-          </T>
-          <NumberField label={t('Steps')} value={steps} onChange={setSteps} />
-          <NumberField label={t('Flowers')} value={flowers} onChange={setFlowers} />
-          <PillButton
-            label={t('Use what the game shows')}
-            icon="check"
-            disabled={steps == null}
-            onPress={async () => {
-              await save({
-                level: row.level,
-                steps: steps != null && steps !== row.steps ? steps : null,
-                flowers: flowers != null && flowers !== row.flowers ? flowers : null,
-                recordedAt: new Date().toISOString(),
-              });
-              if ((steps == null || steps === row.steps) && (flowers == null || flowers === row.flowers)) await remove(row.level);
-              onClose();
-            }}
-          />
-          {o ? (
-            <PillButton
-              label={t('Back to the bundled numbers')}
-              variant="ghost"
-              onPress={async () => {
-                await remove(row.level);
-                onClose();
-              }}
-            />
-          ) : null}
-          <T v="caption" soft>
-            {t('The bundled level file is never changed. Your corrections are kept separately and listed in Settings.')}{' '}
-            {t('Bundled: {steps} steps, {flowers} flowers ({source}).', { steps: fmt(row.steps), flowers: fmt(row.flowers), source: row.source === 'game' ? t('checked in game') : row.source === 'estimated' ? t('estimate') : t('wiki') })}
-          </T>
-        </>
-      ) : null}
-    </Sheet>
+    </View>
   );
 }

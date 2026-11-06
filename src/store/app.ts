@@ -7,10 +7,10 @@ import { useForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
 import { makeReq, overridesKey, parseLevelTable } from '@/engine/levels';
 import { replayLog } from '@/engine/progress';
-import { DEFAULT_RHYTHM, makeRhythm, type RhythmPrefs } from '@/engine/rhythm';
+import { DEFAULT_RHYTHM, easyDaysOf, makeRhythm, type RhythmPrefs } from '@/engine/rhythm';
 import { computeDashboard, type Dashboard } from '@/engine/summary';
 import { usesF, type TempUnit } from '@/engine/units';
-import type { DayEntry, LevelOverride, LevelTable, Overrides, PlayLocation, Profile, Rates, SeasonRate, ThresholdPreset } from '@/engine/types';
+import type { DayEntry, LevelTable, Overrides, PlayLocation, Profile, Rates, SeasonRate, ThresholdPreset } from '@/engine/types';
 import * as db from '@/storage/db';
 import type { LangPref } from '@/i18n';
 
@@ -118,6 +118,7 @@ interface AppState {
   entries: DayEntry[];
   /** Bumped on every log change, for memo keys. */
   entriesRev: number;
+  /** Always empty: the app uses the game's own level numbers (level corrections are gone). */
   overrides: Overrides;
   seasonRates: SeasonRate[];
   location: PlayLocation | null;
@@ -134,8 +135,6 @@ interface AppState {
   deleteEntry: (date: DayKey) => Promise<void>;
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   setRates: (rates: Rates) => Promise<void>;
-  saveOverride: (o: LevelOverride) => Promise<void>;
-  removeOverride: (level: number) => Promise<void>;
   setSeasonRates: (rates: SeasonRate[]) => Promise<void>;
   setLocationAndClimate: (location: PlayLocation | null, climate: ClimateCache | null) => Promise<void>;
   setPreset: (preset: ThresholdPreset) => Promise<void>;
@@ -175,10 +174,9 @@ export const useApp = create<AppState>((set, get) => ({
 
   hydrate: async () => {
     try {
-      const [profile, entries, overrides, seasons, location, climate, settings, remote] = await Promise.all([
+      const [profile, entries, seasons, location, climate, settings, remote] = await Promise.all([
         db.kvGet<Profile>('profile'),
         db.getEntries(),
-        db.getOverrides(),
         db.getSeasonRates(),
         db.kvGet<PlayLocation>('location'),
         db.kvGet<ClimateCache>('climate'),
@@ -191,7 +189,9 @@ export const useApp = create<AppState>((set, get) => ({
         profile,
         entries,
         entriesRev: get().entriesRev + 1,
-        overrides,
+        // Levels are always the game's own numbers: corrections are no longer part of the app, and
+        // any saved before are left unused.
+        overrides: {},
         seasonRates: normaliseSeasons(seasons),
         location,
         climate,
@@ -202,7 +202,11 @@ export const useApp = create<AppState>((set, get) => ({
           updates: { ...DEFAULT_SETTINGS.updates, ...(settings?.updates ?? {}) },
           dev: { ...DEFAULT_SETTINGS.dev, ...(settings?.dev ?? {}) },
           limits: limitsFrom(settings),
-          plan: { ...DEFAULT_SETTINGS.plan, ...(settings?.plan ?? {}) },
+          plan: (() => {
+            // At most two easy days a week (a pick saved before the limit keeps its first two).
+            const plan = { ...DEFAULT_SETTINGS.plan, ...(settings?.plan ?? {}) };
+            return { ...plan, easyDays: easyDaysOf(plan) };
+          })(),
           dismissed: settings?.dismissed ?? {},
         },
         table: pickTable(remote),
@@ -255,18 +259,6 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setRates: async (rates) => get().updateProfile({ rates }),
-
-  saveOverride: async (o) => {
-    await db.upsertOverride(o);
-    set({ overrides: { ...get().overrides, [o.level]: o } });
-  },
-
-  removeOverride: async (level) => {
-    await db.deleteOverride(level);
-    const next = { ...get().overrides };
-    delete next[level];
-    set({ overrides: next });
-  },
 
   setSeasonRates: async (rates) => {
     await db.setSeasonRates(rates);

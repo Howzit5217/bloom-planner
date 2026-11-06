@@ -15,6 +15,22 @@ export interface RhythmPrefs {
 /** Wednesday and Sunday: a breather mid-week and one at the weekend. */
 export const DEFAULT_RHYTHM: RhythmPrefs = { vary: true, easyDays: [0, 3] };
 
+/** A week has at most this many easy days. */
+export const MAX_EASY_DAYS = 2;
+
+/**
+ * The week's easy days as the plan uses them: real weekdays, each once, and no more than
+ * MAX_EASY_DAYS (a choice saved before the limit keeps its first two).
+ */
+export function easyDaysOf(prefs: RhythmPrefs | null | undefined): Weekday[] {
+  const p = prefs ?? DEFAULT_RHYTHM;
+  const out: Weekday[] = [];
+  for (const d of p.easyDays) {
+    if (Number.isInteger(d) && d >= 0 && d <= 6 && !out.includes(d) && out.length < MAX_EASY_DAYS) out.push(d);
+  }
+  return out;
+}
+
 /** An easy day asks for this share of an ordinary one. */
 export const EASY_SHARE = 0.6;
 /** How far a day may wobble either way from its share, by its date. */
@@ -33,9 +49,8 @@ function dateNoise(d: Date): number {
 export function makeRhythm(prefs: RhythmPrefs | null | undefined): ((d: Date) => number) | undefined {
   const p = prefs ?? DEFAULT_RHYTHM;
   if (!p.vary) return undefined;
-  const easy = new Set<number>(p.easyDays.filter((d) => d >= 0 && d <= 6));
-  // Every day easy is the same as none: an even week, wobbling.
-  const varied = easy.size > 0 && easy.size < 7;
+  const easy = new Set<number>(easyDaysOf(p));
+  const varied = easy.size > 0;
   const full = varied ? (7 - easy.size * EASY_SHARE) / (7 - easy.size) : 1;
   return (d: Date) => {
     const share = varied ? (easy.has(d.getDay()) ? EASY_SHARE : full) : 1;
@@ -46,5 +61,5 @@ export function makeRhythm(prefs: RhythmPrefs | null | undefined): ((d: Date) =>
 /** Whether a date is one of the week's easy days. */
 export const isEasyDay = (prefs: RhythmPrefs | null | undefined, d: Date) => {
   const p = prefs ?? DEFAULT_RHYTHM;
-  return p.vary && p.easyDays.length < 7 && p.easyDays.includes(d.getDay() as Weekday);
+  return p.vary && easyDaysOf(p).includes(d.getDay() as Weekday);
 };

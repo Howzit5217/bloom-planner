@@ -131,6 +131,24 @@ describe('time cost (§7.4)', () => {
     expect(c.walkWhere).toBe('indoor');
     expect(c.implausible).toBe(false);
   });
+  it('a day on foot walks outside for the flowers, then any steps still to go', () => {
+    // 12,600 flowers at 6,000 an hour is 2.1 hours outside; that walk counts 12,600 steps too,
+    // leaving 7,400 of 20,000: about 1.23 hours more.
+    const c = timeCost(20000, 12600, rates);
+    expect(c.footDay.outside).toBeCloseTo(2.1);
+    expect(c.footDay.moreSteps).toBeCloseTo(7400 / 6000);
+    expect(c.footDay.total).toBeCloseTo(20000 / 6000);
+    // When the flowers take longer than the steps, the walk for them covers every step.
+    const long = timeCost(6000, 18000, rates);
+    expect(long.footDay.outside).toBeCloseTo(3);
+    expect(long.footDay.moreSteps).toBe(0);
+    // No flowers to plant: just the steps.
+    expect(timeCost(12000, 0, rates).footDay).toEqual({ outside: 0, moreSteps: 2, total: 2 });
+    // Without a bike, the day's walking is the day on foot.
+    const noBike = resolveRates({ walkStepsPerHour: 6000, bikeFlowersPerHour: 20000, walkFlowersPerHour: 6000, treadmillAvailable: false, bikes: false });
+    expect(timeCost(6000, 18000, noBike).walkHours).toBeCloseTo(3);
+    expect(timeCost(6000, 18000, noBike).bikeHours).toBe(0);
+  });
   it('flags more than 6 hours a day', () => {
     expect(timeCost(37000, 0, rates).implausible).toBe(true);
     expect(timeCost(20000, 60000, rates).implausible).toBe(true);

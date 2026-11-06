@@ -1,6 +1,6 @@
 import { addDaysKey, fromKey } from '../dates';
 import { buildPlan, plannedForDay } from '../plan';
-import { DEFAULT_RHYTHM, EASY_SHARE, isEasyDay, makeRhythm } from '../rhythm';
+import { DEFAULT_RHYTHM, EASY_SHARE, MAX_EASY_DAYS, easyDaysOf, isEasyDay, makeRhythm } from '../rhythm';
 import { cToF, fmtTemp, fToC, usesF } from '../units';
 import { ALL_RIDEABLE, reqOf, table } from './helpers';
 
@@ -26,12 +26,24 @@ describe("the week's rhythm", () => {
     expect(rhythm(fromKey('2026-11-05'))).toBe(rhythm(fromKey('2026-11-05')));
   });
 
-  it('can be turned off, and treats every day easy as none', () => {
+  it('can be turned off, and an empty pick is an even week', () => {
     expect(makeRhythm({ vary: false, easyDays: [0] })).toBeUndefined();
-    const even = makeRhythm({ vary: true, easyDays: [0, 1, 2, 3, 4, 5, 6] })!;
+    const even = makeRhythm({ vary: true, easyDays: [] })!;
     for (const d of days) expect(Math.abs(even(d) - 1)).toBeLessThan(0.08);
     expect(isEasyDay(DEFAULT_RHYTHM, fromKey('2026-11-08'))).toBe(true);
     expect(isEasyDay(DEFAULT_RHYTHM, fromKey('2026-11-09'))).toBe(false);
+  });
+
+  it('has at most two easy days a week: a longer pick saved before keeps its first two', () => {
+    expect(MAX_EASY_DAYS).toBe(2);
+    expect(easyDaysOf({ vary: true, easyDays: [5, 1, 3, 0] })).toEqual([5, 1]);
+    expect(easyDaysOf({ vary: true, easyDays: [2, 2, 6] })).toEqual([2, 6]);
+    const capped = makeRhythm({ vary: true, easyDays: [5, 1, 3, 0, 2, 4, 6] })!;
+    const two = makeRhythm({ vary: true, easyDays: [5, 1] })!;
+    for (const d of days) expect(capped(d)).toBe(two(d));
+    // Friday and Monday are easy; Wednesday (third in the old pick) is not.
+    expect(isEasyDay({ vary: true, easyDays: [5, 1, 3] }, fromKey('2026-11-04'))).toBe(false);
+    expect(isEasyDay({ vary: true, easyDays: [5, 1, 3] }, fromKey('2026-11-06'))).toBe(true);
   });
 
   it('shapes the plan: lighter easy days, and still there on time', () => {

@@ -211,8 +211,12 @@ export function drawHaze(canvas: SkCanvas, w: number, hz: number, haze: number, 
   canvas.drawRect(Skia.XYWHRect(0, hz, w, haze), paint);
 }
 
-/** Fog, rain or snow over the scene, fireflies at night, and the dark theme's dimming by day. */
-export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: number, hz: number, look: SkyLook, c: Palette) {
+/**
+ * Fog, rain or snow over the scene, fireflies at night, and the dark theme's dimming by day.
+ * `falling: false` leaves out the rain and snow, for a scene that has them falling live
+ * (Precipitation) or is too small for them: drawn into a still picture they only hang there.
+ */
+export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: number, hz: number, look: SkyLook, c: Palette, { falling = true }: { falling?: boolean } = {}) {
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
   const groundH = Math.max(1, h - hz);
@@ -220,7 +224,7 @@ export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: 
     color(paint, '#E9EDF2', 0.22);
     canvas.drawRect(Skia.XYWHRect(0, 0, w, h), paint);
   }
-  if (look.rain) {
+  if (look.rain && falling) {
     const drop = Skia.Paint();
     drop.setAntiAlias(true);
     drop.setStyle(PaintStyle.Stroke);
@@ -233,7 +237,7 @@ export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: 
       canvas.drawLine(x, y, x - 3, y + 11, drop);
     }
   }
-  if (look.snow) {
+  if (look.snow && falling) {
     for (let i = 0; i < Math.round((w * h) / 2500); i++) {
       color(paint, '#FFFFFF', 0.6 + rand() * 0.35);
       canvas.drawCircle(rand() * w, rand() * h, 1.2 + rand() * 2, paint);
@@ -315,7 +319,8 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
     // horizon at the top edge) meets a separately drawn sky there, so its haze is fuller.
     const own = horizon <= 0;
     drawHaze(canvas, w, hz, Math.min(groundH * (look.fog ? 0.45 : own ? 0.12 : 0.08), look.fog ? 400 : own ? 110 : 70), look.fog ? 0.85 : own ? 0.8 : 0.45, look);
-    drawWeather(canvas, rand, w, h, hz, look, c);
+    // This is a still strip above a page: rain or snow would only hang in it (Home has it falling).
+    drawWeather(canvas, rand, w, h, hz, look, c, { falling: false });
   }, Skia.XYWHRect(0, 0, w, h));
 }
 
