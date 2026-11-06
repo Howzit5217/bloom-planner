@@ -38,7 +38,8 @@ export const DEFAULT_LIMITS: TempLimits = { hot: 35, cold: 2 };
  */
 export const walkFallback = (indoor: boolean) => (indoor ? 0.75 : 0.4);
 
-export type DayVerdict = 'good' | 'hot' | 'wet' | 'snow' | 'storm' | 'wind' | 'cold' | 'dark';
+/** 'wet': a downpour (or, riding, more rain than the preset allows); 'rain': walking, rain likely to come. */
+export type DayVerdict = 'good' | 'hot' | 'wet' | 'rain' | 'snow' | 'storm' | 'wind' | 'cold' | 'dark';
 
 export interface ForecastWeights {
   walk: DayWeights;
@@ -51,15 +52,53 @@ export interface ForecastWeights {
 
 const feels = (d: ForecastWeatherDay) => d.feelsMax ?? d.tmax;
 
-/** A day for walking: too hot or too cold (feels-like), a downpour, heavy snow or a storm cuts it down. */
+/** Less rain than this (mm) in a day doesn't change a walking day. */
+export const DRY_MM = 1;
+/** Rain this likely (%) or more makes it a rainy day. */
+export const LIKELY_RAIN = 40;
+/** More than this (mm) is a downpour. */
+const DOWNPOUR_MM = 15;
+
+/** The forecast's chance of its rain, 0 to 1 (a forecast without one counts the rain as coming). */
+const rainChance = (d: ForecastWeatherDay) => (d.precipChance == null ? 1 : Math.min(1, Math.max(0, d.precipChance / 100)));
+
+/**
+ * How much of a normal walking day rain leaves, if it comes: a shower trims it, steady rain takes
+ * more, a downpour leaves only what's left on any bad day (errands, or a treadmill).
+ */
+export function rainShare(mm: number, indoor: boolean): number {
+  const floor = walkFallback(indoor);
+  if (mm < DRY_MM) return 1;
+  if (mm <= 5) return 1 - (1 - floor) * 0.35;
+  if (mm <= DOWNPOUR_MM) return 1 - (1 - floor) * 0.7;
+  return floor;
+}
+
+/**
+ * A day for walking: a storm, heavy snow, a downpour, too hot or too cold (feels-like), or rain that's
+ * likely to come cuts it down.
+ */
 export function walkVerdict(d: ForecastWeatherDay, limits: TempLimits): DayVerdict {
   if ((d.code ?? 0) >= 95) return 'storm';
   if ((d.snow ?? 0) > 3) return 'snow';
-  if ((d.precip ?? 0) > 15) return 'wet';
+  if ((d.precip ?? 0) > DOWNPOUR_MM) return 'wet';
   const f = feels(d);
   if (f != null && f > limits.hot) return 'hot';
   if (f != null && f < limits.cold) return 'cold';
+  if ((d.precip ?? 0) >= DRY_MM && rainChance(d) * 100 >= LIKELY_RAIN) return 'rain';
   return 'good';
+}
+
+/**
+ * A walking day's weight: the rain's share of a normal day, counted for its chance (a 40% chance of a
+ * downpour takes 40% of what a certain one would), or the fallback on a stormy, snowy, hot or cold
+ * day. The plan gives a lighter day less to do and the others the difference, so the steps still
+ * get done by the goal date without asking the impossible of a wet day.
+ */
+export function walkWeight(d: ForecastWeatherDay, limits: TempLimits, indoor: boolean): number {
+  const v = walkVerdict(d, limits);
+  if (v !== 'good' && v !== 'rain' && v !== 'wet') return walkFallback(indoor);
+  return 1 - (1 - rainShare(d.precip ?? 0, indoor)) * rainChance(d);
 }
 
 /** A day for riding: the weather preset (rain, snow, wind, daylight) plus the hot and cold limits. */
@@ -77,7 +116,8 @@ export function rideVerdict(d: ForecastWeatherDay, th: Thresholds, limits: TempL
 
 /**
  * Weights for the forecast's days. Riding: 1 on a good day, 0 on a bad one, except rain that may not
- * come (under a 50% chance) is half a day. Walking: 1, or the fallback share on a hot, cold or wet day.
+ * come (under a 50% chance) is half a day. Walking: see walkWeight (less for rain, by how much and how
+ * likely; the fallback share on a stormy, snowy, hot or cold day).
  * Days from `from` on only (earlier ones are already logged).
  */
 export function forecastWeights(days: ForecastWeatherDay[], th: Thresholds, limits: TempLimits, indoor: boolean, from: string): ForecastWeights {
@@ -90,7 +130,7 @@ export function forecastWeights(days: ForecastWeatherDay[], th: Thresholds, limi
     day[d.date] = d;
     const w = walkVerdict(d, limits);
     const r = rideVerdict(d, th, limits);
-    walk[d.date] = w === 'good' ? 1 : walkFallback(indoor);
+    walk[d.date] = walkWeight(d, limits, indoor);
     ride[d.date] = r === 'good' ? 1 : r === 'wet' && (d.precipChance ?? 100) < 50 ? 0.5 : 0;
     why[d.date] = { walk: w, ride: r };
   }

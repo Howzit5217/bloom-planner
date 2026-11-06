@@ -168,3 +168,23 @@ export function overridesKey(o: Overrides): string {
     .map((l) => `${l}:${o[l].steps ?? ''}:${o[l].flowers ?? ''}`)
     .join('|');
 }
+
+/** The game's last level: past the table's own last one, levels show as still to come. */
+export const GAME_MAX_LEVEL = 150;
+/** A guess (the user's, 2026-11-06) at the last level's steps; the flowers keep the table's own growth. */
+export const FINAL_STEPS_GUESS = 500_000;
+
+/**
+ * A guess at a level the game doesn't have yet (past the table, up to 150): steps on a smooth curve
+ * from the table's last level to about 500,000 at 150, flowers on the table's own growth pattern
+ * (or the last level's when it has none). null for a level the table has, or past 150.
+ */
+export function estimateLevel(table: LevelTable, level: number): { steps: number; flowers: number } | null {
+  if (level <= table.maxLevel || level > GAME_MAX_LEVEL) return null;
+  const last = table.byLevel[table.maxLevel];
+  if (!last) return null;
+  const span = GAME_MAX_LEVEL - table.maxLevel;
+  const steps = floor100(last.steps * Math.pow(FINAL_STEPS_GUESS / last.steps, (level - table.maxLevel) / span));
+  const flowers = extrapolate(level, table.extrapolation, table.byLevel)?.flowers ?? last.flowers;
+  return { steps: Math.max(last.steps, steps), flowers: Math.max(last.flowers, flowers) };
+}

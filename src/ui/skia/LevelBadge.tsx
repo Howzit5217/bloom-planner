@@ -23,12 +23,13 @@ export interface Metal {
 
 const GOLD_RIM: Metal['rim'] = ['#FFF86A', '#FCEB3C', '#FBEA2A'];
 
-/** The game's badge metals: bronze, a cool blue-tinted silver, lemon gold, and orange-red in a gold rim. */
+/** The game's badge metals: bronze, a cool blue-tinted silver, lemon gold, orange-red in a gold rim, and green in a gold rim (150). */
 export const METALS: Record<BadgeTier, Metal> = {
   bronze: { rim: ['#FCC77E', '#F3A469', '#F6AE74'], face: ['#D2732F', '#D3925A'], deep: '#87451F', shine: '#FFE6C6' },
   silver: { rim: ['#E9F4FD', '#C3D6EE', '#CFDEFA'], face: ['#869BB6', '#B3C3D3'], deep: '#566F86', shine: '#FFFFFF' },
   gold: { rim: GOLD_RIM, face: ['#F2BE12', '#FBDE3A'], deep: '#A56E12', shine: '#FFFBD2' },
   top: { rim: GOLD_RIM, face: ['#DC5426', '#EC6631'], deep: '#9A361A', edge: '#A56E12', shine: '#FFDCC0' },
+  peak: { rim: GOLD_RIM, face: ['#5FCF4A', '#43C873'], deep: '#2A7330', edge: '#A56E12', shine: '#E6FFD8' },
 };
 
 /** The badge: the hexagon's rim in its metal round a face, standing on a darker edge; "Lv" and the number. */

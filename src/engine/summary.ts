@@ -14,7 +14,7 @@ import { initialState, replayLog, type ReplayResult } from './progress';
 import { flowerDays, observedRates, resolveRates, type ObservedRates } from './rates';
 import { standing, type Standing } from './standing';
 import { recentDays, streak } from './streak';
-import { DIFFICULTIES, difficultyOfPlan, type PlanDifficulty } from './difficulty';
+import { DIFFICULTIES, difficultyOfPlan, planDifficulty, type Difficulty, type PlanDifficulty } from './difficulty';
 import { customProgress, type CustomProgress } from './customGoal';
 import { questOf, type Quest } from './quest';
 import { MAX_STEPS_EVERY_DAY, MAX_STEPS_PER_DAY } from './goalCheck';
@@ -94,7 +94,11 @@ export interface Dashboard {
   rates: ResolvedRates;
   observed: ObservedRates;
   streak: number;
-  recent: Array<{ date: DayKey; logged: boolean }>;
+  /**
+   * The last two weeks, oldest first: whether each day was logged, whether it hit what the plan asked
+   * of it that day (null when there was nothing to ask), and how hard the day as logged was.
+   */
+  recent: Array<{ date: DayKey; logged: boolean; hit: boolean | null; did: Difficulty | null }>;
   projected: ProjectedLevel[];
   nextMilestone: ProjectedLevel | null;
   /** `everyDay`: even the average day is past what's possible (over 120,000 steps), not just the busiest. */
@@ -248,7 +252,22 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     rates,
     observed: observedRates(entries, rates),
     streak: streak(entries, today),
-    recent: recentDays(entries, today, 14),
+    recent: (() => {
+      // Each logged day against its own target: the plan from where that day started.
+      const before = new Map(replay.days.map((d) => [d.date, d] as const));
+      return recentDays(entries, today, 14).map(({ date, logged }) => {
+        const day = before.get(date);
+        if (!logged || !day) return { date, logged, hit: null, did: null };
+        const e = day.entry;
+        const did = planDifficulty({ steps: e.steps, flowers: e.flowers }, { steps: e.steps, flowers: e.flowers }, rates).level;
+        const p = buildPlan({ start: day.before, startKey: date, goalKey: profile.goalDate, goalLevel, seasonRates, req, ...days });
+        if (p.status !== 'ok') return { date, logged, hit: null, did };
+        const want = plannedForDay(p, 0);
+        // A whisker short (the rounding on screen) still counts.
+        const hit = e.steps >= want.steps * 0.98 && e.flowers >= want.expectedFlowers * 0.98;
+        return { date, logged, hit, did };
+      });
+    })(),
     projected,
     nextMilestone: projected[0] ?? null,
     impossible,

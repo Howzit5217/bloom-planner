@@ -9,9 +9,9 @@ import type { Dashboard } from '@/engine/summary';
 import { cToF } from '@/engine/units';
 import { useApp, useTempF } from '@/store/app';
 import { useTheme } from '@/theme/theme';
+import { DIFFICULTIES, type Difficulty } from '@/engine/difficulty';
 import { DIFFICULTY_NAMES, DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
 import { QUEST_ICON } from '@/features/shared/quest';
-import { PETALS } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
 import { IconChip } from '@/ui/IconChip';
@@ -19,6 +19,7 @@ import { BloomFlower } from '@/ui/skia/BloomFlower';
 import { FlowerRow } from '@/ui/skia/FlowerRow';
 import { GameNumber } from '@/ui/skia/GameNumber';
 import { LevelBadge } from '@/ui/skia/LevelBadge';
+import { mixHex } from '@/ui/skia/shapes';
 import { Ring } from '@/ui/skia/Ring';
 import { T } from '@/ui/T';
 import { useT } from '@/i18n';
@@ -353,7 +354,21 @@ function Row({ icon, title, text }: { icon: IconName; title: string; text: strin
 export function StreakCard({ dash }: { dash: Dashboard }) {
   const { c } = useTheme();
   const { t, tn } = useT();
-  const colors = PETALS(c);
+  // A day that hit its target wears the plan's own flower; one that fell short, the grade of the day
+  // as it went, never the plan's (so the hits stand out), and on an easy plan a faded white.
+  const plan = dash.difficulty?.level ?? null;
+  const rank = (d: Difficulty) => DIFFICULTIES.indexOf(d);
+  const faded = mixHex(c.petalWhite, c.inkSoft, 0.55);
+  const flowerOf = (d: Dashboard['recent'][number]): string | null => {
+    if (!d.logged) return null;
+    if (d.hit && plan) return difficultyColor(c, plan);
+    if (!d.did) return faded;
+    if (!plan || d.hit == null) return difficultyColor(c, d.did);
+    const below = rank(d.did) >= rank(plan) ? DIFFICULTIES[rank(plan) - 1] : d.did;
+    return below ? difficultyColor(c, below) : faded;
+  };
+  const logged = dash.recent.filter((d) => d.logged).length;
+  const hits = dash.recent.filter((d) => d.hit).length;
   return (
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -363,9 +378,14 @@ export function StreakCard({ dash }: { dash: Dashboard }) {
         </T>
       </View>
       <FlowerRow
-        accessibilityLabel={t('Logged {n} of the last {total} days', { n: dash.recent.filter((d) => d.logged).length, total: dash.recent.length })}
-        items={dash.recent.map((d, i) => (d.logged ? (colors[i % colors.length] === c.petalWhite ? c.petalPurple : colors[i % colors.length]) : null))}
+        accessibilityLabel={`${t('Logged {n} of the last {total} days', { n: logged, total: dash.recent.length })} ${t('Hit the target on {n} of them.', { n: hits })}`}
+        items={dash.recent.map(flowerOf)}
       />
+      {plan && logged > 0 ? (
+        <T v="caption" soft style={{ marginTop: 8 }}>
+          {t("Flowers in your plan's color are days you hit the target. Other colors show how big the day was.")}
+        </T>
+      ) : null}
     </Card>
   );
 }
@@ -377,6 +397,7 @@ function dayIcon(d: Dashboard['week'][number], bikes: boolean): IconName {
   if (v === 'storm') return 'weather-lightning-rainy';
   if (v === 'snow') return 'weather-snowy';
   if (v === 'wet') return 'weather-pouring';
+  if (v === 'rain') return 'weather-rainy';
   if (v === 'wind') return 'weather-windy';
   if (v === 'cold') return 'snowflake';
   if ((d.code ?? 0) >= 51) return 'weather-rainy';

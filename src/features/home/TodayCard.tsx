@@ -168,8 +168,10 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
       ? { icon: 'thermometer-high', text: t('Too hot for a long walk today, so the plan asks for less.') }
       : wt.walk === 'cold'
         ? { icon: 'snowflake', text: t('Too cold for a long walk today, so the plan asks for less.') }
-        : wt.walk !== 'good'
-          ? { icon: 'weather-pouring', text: t('Rough weather today, so the plan asks for less walking.') }
+        : wt.walk === 'rain'
+          ? { icon: 'weather-rainy', text: t('Rain is on the way today, so it asks for less walking. The other days make up the difference.') }
+          : wt.walk !== 'good'
+            ? { icon: 'weather-pouring', text: t('Rough weather today, so the plan asks for less walking.') }
           : rideBad
             ? { icon: wt.ride === 'hot' ? 'thermometer-high' : wt.ride === 'cold' ? 'snowflake' : 'weather-rainy', text: t('Not a riding day: the flowers move to better days.') }
             : null;

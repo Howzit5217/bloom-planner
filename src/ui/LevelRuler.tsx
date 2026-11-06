@@ -208,7 +208,8 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
         const major = lv % 10 === 0;
         const mid = !major && lv % 5 === 0;
         return (
-          <Pressable key={lv} onPress={() => api.jump(lv)} style={[{ width: TICK, height: H, alignItems: 'center', paddingTop: 12 }, WEB_SNAP_TICK]}>
+          // Not a stop for the keyboard: a focused tick made the browser scroll the ruler to it, away from the number.
+          <Pressable key={lv} tabIndex={-1} onPress={() => api.jump(lv)} style={[{ width: TICK, height: H, alignItems: 'center', paddingTop: 12 }, WEB_SNAP_TICK]}>
             <View style={{ width: major ? 3 : 2, height: major ? 24 : mid ? 17 : 11, borderRadius: 2, backgroundColor: major ? c.leafDeep : c.inkSoft, opacity: major ? 0.9 : 0.35 }} />
             {/* A number every five: with the wider spacing, every ten would leave the ruler bare. */}
             {major || mid ? (
@@ -237,6 +238,8 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
           onScroll={onScroll}
           scrollEventThrottle={16}
           showsHorizontalScrollIndicator={false}
+          // The number is the keyboard's way in (tap to type): the ruler is no stop for Tab, which took focus mid-glide and stopped it.
+          tabIndex={-1}
           snapToOffsets={offsets}
           decelerationRate="fast"
           style={WEB_SNAP}

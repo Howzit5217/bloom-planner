@@ -49,3 +49,18 @@ describe('ahead or behind (§7.6)', () => {
     expect(behind.pace.stepsPerDay).toBeGreaterThan(onPace.pace.stepsPerDay);
   });
 });
+
+describe('the streak flowers', () => {
+  it('marks each logged day hit or short of what the plan asked of it that day', () => {
+    // On the plan, then short, then not logged, then well over.
+    const entries = [entry('2026-11-05', 1000, 100), entry('2026-11-06', 400, 30), entry('2026-11-08', 2000, 200)];
+    const d = run(entries, '2026-11-08');
+    const byDate = Object.fromEntries(d.recent.map((r) => [r.date, r]));
+    expect(byDate['2026-11-05'].hit).toBe(true);
+    expect(byDate['2026-11-06'].hit).toBe(false);
+    expect(byDate['2026-11-07']).toEqual({ date: '2026-11-07', logged: false, hit: null, did: null });
+    expect(byDate['2026-11-08'].hit).toBe(true);
+    // How hard the day as logged was: 400 steps is an easy day.
+    expect(byDate['2026-11-06'].did).toBe('easy');
+  });
+});
