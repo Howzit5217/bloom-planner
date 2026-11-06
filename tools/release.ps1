@@ -10,12 +10,16 @@ param(
     [switch]$Install,
     # Carry on with a release whose "Version X" commit is already pushed (GitHub failed to start or finish the
     # build): -Version X -NotesFile ... -Resume builds what is on main now and publishes it as X.
-    [switch]$Resume
+    [switch]$Resume,
+    # Sign and publish a build that already finished on GitHub, when this script stopped while it ran (the PC
+    # slept, the watch was cut off): -Version X -NotesFile ... -RunId N. Nothing is pushed or built again.
+    [string]$RunId
 )
 # Publishes Bloom Planner for Android in one command:
 #   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Version 1.1.0 -NotesFile C:\path\notes.txt
 #   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Beta [-Install]
 #   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Version 1.1.0 -NotesFile C:\path\notes.txt -Resume
+#   powershell -ExecutionPolicy Bypass -File tools\release.ps1 -Version 1.1.0 -NotesFile C:\path\notes.txt -RunId 123
 # Steps: bump app.json (and package.json) and push; build on GitHub Actions (release.yml, with the variant);
 # sign the APK here with the release key (unless the repository has the signing secrets, then CI signs and
 # publishes it); create the GitHub release. Needs `gh` signed in, and the key and its properties file in
@@ -50,6 +54,7 @@ try {
     $current = $Matches[1]
     if ($app -notmatch '"beta":\s*(\d+)') { throw 'No extra.beta in app.json' }
     $betaNumber = [int]$Matches[1]
+    if ($RunId) { $Resume = $true }
     if ($Resume) {
         if ($Beta) { throw 'Resume is for releases: give -Version (the one app.json already has).' }
         if ($current -ne $Version) { throw "app.json is at $current, not $Version, so there is nothing to resume." }
@@ -75,11 +80,20 @@ try {
         Run git @('add', 'app.json', 'package.json')
         Run git @('commit', '-m', $message)
     }
+    $variant = if ($Beta) { 'beta' } else { 'release' }
+    if ($RunId) {
+        # 2. The build that already finished: it must have succeeded, and the release points at what it built.
+        $done = gh run view $RunId -R $repo --json status,conclusion,headSha,event | ConvertFrom-Json
+        if ($done.status -ne 'completed' -or $done.conclusion -ne 'success') { throw "Run $RunId hasn't finished successfully ($($done.status) $($done.conclusion))." }
+        if ($done.event -ne 'workflow_dispatch') { throw "Run $RunId isn't a release build started by this script." }
+        $sha = $done.headSha
+        $runId = $RunId
+        Write-Host "Publishing $shown from the build that finished on GitHub (run $runId)..."
+    } else {
     Run git @('push', 'origin', 'main')
     $sha = (git rev-parse HEAD).Trim()
 
     # 2. The build on GitHub Actions.
-    $variant = if ($Beta) { 'beta' } else { 'release' }
     # GitHub sometimes answers a moment of trouble with HTTP 500: try a few times.
     $started = $false
     for ($try = 1; $try -le 4 -and -not $started; $try++) {
@@ -97,6 +111,7 @@ try {
     if (-not $runId) { throw 'The build did not start on GitHub.' }
     Write-Host "Building $shown on GitHub (run $runId)..."
     Run gh @('run', 'watch', "$runId", '-R', $repo, '--exit-status')
+    }
 
     # 3. Signed by CI already (the repository has the signing secrets), or signed here with the release key.
     $out = Join-Path $env:TEMP "bloom-release-$tag"
