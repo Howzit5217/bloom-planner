@@ -3,16 +3,16 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, useColorScheme, View } from 'react-native';
 import { addDaysKey, fromKey, toKey, type DayKey } from '@/engine/dates';
-import { planDifficulty } from '@/engine/difficulty';
+import { checkDifficulty } from '@/engine/difficulty';
 import { checkGoal } from '@/engine/goalCheck';
 import { fmt, fmtDate } from '@/engine/format';
 import { DEFAULT_RATES, RATE_KEYS, type RateKey } from '@/engine/rates';
 import type { ThresholdPreset } from '@/engine/types';
-import { DifficultyPill } from '@/features/shared/Difficulty';
+import { DifficultyPill, keptExtremeKey } from '@/features/shared/Difficulty';
 import { EasyDays } from '@/features/shared/EasyDays';
 import { WeatherLimits } from '@/features/shared/WeatherLimits';
 import { CustomGoalForm } from '@/features/home/NewGoal';
-import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
+import { EasyVerdict, GoalVerdict, useEarliestDate, useMoreChallenge } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { requestPermission } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
@@ -128,22 +128,34 @@ export default function Settings() {
       : null;
   const earliest = useEarliestDate(goalBase && goalDraft && draftCheck && !draftCheck.ok ? { ...goalBase, goalLevel: goalDraft.level } : null);
   const draftOk = !!draftCheck?.ok;
+  // How hard the draft would be (EXTREME past what's realistic). A too-easy one waits, like an
+  // unrealistic one, for a bigger challenge or a tap on "Keep this goal".
+  const draftDifficulty = dash && goalDraft ? checkDifficulty(draftCheck, dash.rates) : null;
+  const draftEasy = draftOk && draftDifficulty?.level === 'easy';
+  const more = useMoreChallenge(goalBase && goalDraft && draftEasy ? { ...goalBase, goalLevel: goalDraft.level, goalKey: goalDraft.date } : null, dash?.rates, st.table.maxLevel);
   const saveGoal = st.updateProfile;
   useEffect(() => {
-    if (!goalDraft || !draftOk) return;
+    if (!goalDraft || !draftOk || draftEasy) return;
     const timer = setTimeout(() => {
       void saveGoal({ goalLevel: goalDraft.level, goalDate: goalDraft.date });
       setGoalDraft(null);
     }, 350);
     return () => clearTimeout(timer);
-  }, [goalDraft, draftOk, saveGoal]);
+  }, [goalDraft, draftOk, draftEasy, saveGoal]);
+  // The draft as it is, past what's realistic or too easy: the player's call.
+  const keepDraft = (extreme: boolean) => {
+    if (!goalDraft) return;
+    if (extreme) void st.updateSettings({ dismissed: { ...st.settings.dismissed, [keptExtremeKey(goalDraft.level, goalDraft.date)]: true } });
+    void saveGoal({ goalLevel: goalDraft.level, goalDate: goalDraft.date });
+    setGoalDraft(null);
+  };
   if (!profile || !dash) return null;
   const shownGoal = goalDraft ?? {
     level: profile.goalLevel,
     date: profile.goalDate,
   };
   // How hard the goal on show is: the draft while you're changing it, otherwise the saved plan.
-  const shownDifficulty = goalDraft ? (draftCheck?.ok && draftCheck.plan?.status === 'ok' ? planDifficulty(draftCheck.stepsPerDay, draftCheck.flowersPerRideDay, dash.rates) : null) : dash.difficulty;
+  const shownDifficulty = goalDraft ? draftDifficulty : dash.difficulty;
 
   const minGoal = dash.current.level + 1;
   const notif = st.settings.notifications;
@@ -183,9 +195,13 @@ export default function Settings() {
             <Stepper label={t('Target level')} value={Math.max(minGoal, shownGoal.level)} min={Math.min(minGoal, st.table.maxLevel)} max={st.table.maxLevel} onChange={(v) => setGoalDraft({ level: v, date: shownGoal.date })} size={60} />
             <DateField label={t('Target date')} value={shownGoal.date} onChange={(k) => setGoalDraft({ level: shownGoal.level, date: k })} minimumDate={fromKey(addDaysKey(dash.today, 1))} />
             {shownDifficulty ? <DifficultyPill d={shownDifficulty} wide /> : null}
-            {goalDraft && draftCheck && !draftCheck.ok ? (
+            {goalDraft && draftCheck && (!draftCheck.ok || (draftEasy && draftDifficulty)) ? (
               <>
-                <GoalVerdict check={draftCheck} earliest={earliest} onUseDate={(k) => setGoalDraft({ level: goalDraft.level, date: k })} />
+                {draftCheck.ok && draftDifficulty ? (
+                  <EasyVerdict difficulty={draftDifficulty} more={more} onUseDate={(k) => setGoalDraft({ level: goalDraft.level, date: k })} onUseLevel={(level) => setGoalDraft({ level, date: goalDraft.date })} onKeep={() => keepDraft(false)} />
+                ) : (
+                  <GoalVerdict check={draftCheck} earliest={earliest} onUseDate={(k) => setGoalDraft({ level: goalDraft.level, date: k })} onKeep={() => keepDraft(true)} difficulty={draftDifficulty} />
+                )}
                 <T v="caption" soft>
                   {t('Your saved goal stays level {level} by {date} until you pick one that works.', { level: profile.goalLevel, date: fmtDate(profile.goalDate) })}
                 </T>

@@ -2,7 +2,7 @@ import { Canvas, Circle, Group, Path, vec, type SkPath, type Transforms3d } from
 import { useEffect, useMemo } from 'react';
 import { Easing, useDerivedValue, useSharedValue, withDelay, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/theme/theme';
-import { CENTRE_COLOR, CENTRE_R, mixHex, petalShape, sparklePath } from './shapes';
+import { CENTRE_COLOR, CENTRE_R, mixHex, petalShape } from './shapes';
 
 const PETALS = 5;
 const BLOOM_MS = 1400;
@@ -33,20 +33,9 @@ function Petal({ t, path, angle, start, cx, cy, color, dy = 0, stroke }: { t: Sh
   return stroke ? <Path path={path} color={color} transform={transform} opacity={opacity} style="stroke" strokeWidth={stroke} strokeJoin="round" /> : <Path path={path} color={color} transform={transform} opacity={opacity} />;
 }
 
-function Sparkle({ t, idle, x, y, s, start, color }: { t: SharedValue<number>; idle: SharedValue<number>; x: number; y: number; s: number; start: number; color: string }) {
-  const path = useMemo(() => sparklePath(s), [s]);
-  const transform = useDerivedValue((): Transforms3d => {
-    const k = easeOut(clamp01((t.value - start) / 0.22));
-    const twinkle = 0.85 + 0.15 * Math.sin((idle.value + start) * Math.PI * 2);
-    return [{ translateX: x }, { translateY: y }, { scale: Math.max(0, k) * twinkle }, { rotate: (1 - clamp01((t.value - start) / 0.3)) * 0.8 }];
-  });
-  const opacity = useDerivedValue(() => clamp01((t.value - start) / 0.1) * (0.55 + 0.45 * Math.sin((idle.value + start) * Math.PI * 2 + 1.2) ** 2));
-  return <Path path={path} color={color} transform={transform} opacity={opacity} />;
-}
-
 /**
  * The welcome flower, flat like Pikmin Bloom's: five round petals spring open one by one from a
- * bud, the golden centre pops in, a few sparkles twinkle, and it sways gently after. `edge`: a thin
+ * bud, the golden centre pops in, and it sways gently after (no sparkles round it). `edge`: a thin
  * darker line round the petals, so it stands out on any sky (Home, behind the level badge).
  */
 export function BloomFlower({ size = 160, color, delay = 150, edge }: { size?: number; color?: string; delay?: number; edge?: boolean }) {
@@ -75,13 +64,6 @@ export function BloomFlower({ size = 160, color, delay = 150, edge }: { size?: n
   const centre = useDerivedValue((): Transforms3d => [{ translateX: cx }, { translateY: cy }, { scale: Math.max(0, easeOut(clamp01((t.value - 0.5) / 0.4))) }]);
   const sway = useDerivedValue((): Transforms3d => [{ rotate: Math.sin(idle.value * Math.PI * 2) * 0.035 }, { scale: 1 + Math.sin(idle.value * Math.PI * 4 + 1) * 0.01 }]);
 
-  const sparkles = [
-    { a: -0.55, d: 0.43, s: 0.04, start: 0.72 },
-    { a: 0.95, d: 0.42, s: 0.03, start: 0.8 },
-    { a: 2.35, d: 0.43, s: 0.036, start: 0.86 },
-    { a: 3.95, d: 0.41, s: 0.026, start: 0.92 },
-  ];
-
   return (
     <Canvas style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Group transform={sway} origin={vec(cx, cy)}>
@@ -103,9 +85,6 @@ export function BloomFlower({ size = 160, color, delay = 150, edge }: { size?: n
           <Circle cx={0} cy={0} r={R * CENTRE_R} color={CENTRE_COLOR} />
         </Group>
       </Group>
-      {sparkles.map((s, i) => (
-        <Sparkle key={i} t={t} idle={idle} x={cx + Math.cos(s.a) * size * s.d} y={cy + Math.sin(s.a) * size * s.d} s={size * s.s} start={s.start} color={c.gameYellow} />
-      ))}
     </Canvas>
   );
 }

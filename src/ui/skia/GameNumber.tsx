@@ -7,6 +7,7 @@ import { useTheme } from '@/theme/theme';
 import { font as fonts } from '@/theme/tokens';
 import { nextOnLoop, turnsOff } from './digitLoop';
 import { useGameFont } from './gameFont';
+import { inkRun } from './inkLayout';
 
 interface Props {
   value: number;
@@ -18,6 +19,16 @@ interface Props {
   rollIn?: boolean;
   /** Brown outline + drop shadow (the game look). Off for plain ink numbers. */
   outline?: boolean;
+  /**
+   * Digits roll like an odometer (the default). Off, a new number simply shows: for one that follows
+   * a finger, where a roll would still be catching up after the finger stops.
+   */
+  roll?: boolean;
+  /**
+   * Text as wide as the number can get: the number keeps that width as it changes, centred in it. A
+   * drawing that changes size (22 to 9 to -10) can be left showing an old number for a while.
+   */
+  room?: string;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }
@@ -196,7 +207,8 @@ const DigitStrip = memo(function DigitStrip({ x, w, baseline, lineH, sw, font, f
     <>
       {LOOP.map((k) => {
         const d = DIGITS[((k % 10) + 10) % 10];
-        const dx = x + (w - font.measureText(d).width) / 2;
+        const b = font.measureText(d);
+        const dx = x + (w - b.width) / 2 - b.x;
         const y = baseline + (k - LOOP[0]) * lineH;
         return (
           <Group key={k}>
@@ -210,7 +222,7 @@ const DigitStrip = memo(function DigitStrip({ x, w, baseline, lineH, sw, font, f
 });
 
 /** The game's chunky yellow numbers with a brown outline. Digits roll like an odometer. */
-export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = false, outline = true, style, accessibilityLabel }: Props) {
+export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = false, outline = true, roll = true, room, style, accessibilityLabel }: Props) {
   const { c } = useTheme();
   const font = useGameFont(size);
   const text = format(value);
@@ -218,6 +230,10 @@ export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = f
   const [moved, setMoved] = useState({ value, dir: 0 as -1 | 0 | 1 });
   if (value !== moved.value) setMoved({ value, dir: value > moved.value ? 1 : -1 });
   const l = useMemo(() => (font ? layout(font, text, size) : null), [font, text, size]);
+  const roomW = useMemo(() => (font && room ? layout(font, room, size).width : 0), [font, room, size]);
+  // Not rolling: each digit only as wide as its ink, centred where the number looks centred.
+  const run = useMemo(() => (font && l && !roll ? inkRun(text, font, l.sw * 0.35) : null), [font, l, roll, text]);
+  const roomRun = useMemo(() => (font && l && !roll && room ? inkRun(room, font, l.sw * 0.35).width : 0), [font, l, roll, room]);
   const f = fill ?? c.gameYellow;
   const s = stroke ?? c.gameOutline;
   // Until the drawn face has loaded (or if it can't), the number still shows, in the same face as text.
@@ -227,21 +243,43 @@ export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = f
         <RNText style={{ fontFamily: fonts.heading, fontSize: size, lineHeight: size * 1.2, color: f, textShadowColor: s, textShadowRadius: Math.max(2, size * 0.06), textShadowOffset: { width: 0, height: Math.max(1, size * 0.04) } }}>{text}</RNText>
       </View>
     );
+  if (run) {
+    // Room for the outline and its drop either side, and for the shift to where it looks centred.
+    const pad = l.sw * 1.6 + Math.abs(run.centre - run.width / 2);
+    const width = Math.max(run.width, roomRun) + pad * 2;
+    const x0 = width / 2 - run.centre;
+    return (
+      <View accessible accessibilityRole="text" accessibilityLabel={accessibilityLabel ?? text} style={style}>
+        <Canvas style={{ width, height: l.height }}>
+          {/* Every outline before any fill, so they run together behind the digits. */}
+          {outline ? run.glyphs.map((g, i) => <GlyphOutline key={`o${i}`} ch={g.ch} x={x0 + g.x} y={l.baseline} font={font} sw={l.sw} stroke={s} />) : null}
+          {run.glyphs.map((g, i) => (
+            <Text key={`f${i}`} x={x0 + g.x} y={l.baseline} text={g.ch} font={font} color={f} />
+          ))}
+        </Canvas>
+      </View>
+    );
+  }
   let digitIndex = 0;
   return (
     <View accessible accessibilityRole="text" accessibilityLabel={accessibilityLabel ?? text} style={style}>
-      <Canvas style={{ width: l.width, height: l.height }}>
+      <Canvas style={{ width: Math.max(l.width, roomW), height: l.height }}>
+        <Group transform={[{ translateX: Math.max(0, roomW - l.width) / 2 }]}>
         {l.slots.map((slot) => {
-          if (slot.digit != null) {
+          if (slot.digit != null && roll) {
             return <DigitSlot key={slot.key} x={slot.x} w={slot.w} digit={slot.digit} dir={moved.dir} l={l} font={font} fill={f} stroke={s} index={digitIndex++} rollIn={rollIn} outline={outline} />;
           }
+          // By its ink: a digit in the middle of its slot, as on the rolling wheel; anything else at its start.
+          const b = font.measureText(slot.ch);
+          const gx = slot.digit != null ? slot.x + (slot.w - b.width) / 2 - b.x : slot.x + l.sw * 0.1 - b.x;
           return (
             <Group key={slot.key}>
-              {outline ? <GlyphOutline ch={slot.ch} x={slot.x} y={l.baseline} font={font} sw={l.sw} stroke={s} /> : null}
-              <Text x={slot.x} y={l.baseline} text={slot.ch} font={font} color={f} />
+              {outline ? <GlyphOutline ch={slot.ch} x={gx} y={l.baseline} font={font} sw={l.sw} stroke={s} /> : null}
+              <Text x={gx} y={l.baseline} text={slot.ch} font={font} color={f} />
             </Group>
           );
         })}
+        </Group>
       </Canvas>
     </View>
   );

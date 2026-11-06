@@ -5,6 +5,7 @@ import { Platform, View } from 'react-native';
 import { fmt, fmtHours } from '@/engine/format';
 import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, showsWeekCard, StreakCard, TimeCard, WeekCard } from '@/features/home/Cards';
 import { CustomGoalCard, NewGoalCard, showsCustomGoal, showsNewGoal } from '@/features/home/NewGoal';
+import { keptExtremeKey } from '@/features/shared/Difficulty';
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { updateLabel } from '@/features/shared/UpdatePrompt';
@@ -23,6 +24,7 @@ export default function Home() {
   const { t } = useT();
   const dash = useDashboard();
   const settings = useApp((s) => s.settings);
+  const profile = useApp((s) => s.profile);
   const updateSettings = useApp((s) => s.updateSettings);
   const saveEntry = useApp((s) => s.saveEntry);
   const refreshToday = useApp((s) => s.refreshToday);
@@ -69,7 +71,9 @@ export default function Home() {
         />
       ),
     });
-  if (dash.impossible)
+  // Not for a goal kept on purpose after "Are you sure?", and it can be put away.
+  const extremeKey = profile ? keptExtremeKey(profile.goalLevel, profile.goalDate) : '';
+  if (dash.impossible && !dismissed[extremeKey])
     banners.push({
       key: 'impossible',
       node: (
@@ -79,6 +83,7 @@ export default function Home() {
           title={t('An Honest Heads-Up')}
           text={t("This needs {steps} steps a day at its busiest. That's about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })}
           action={{ label: t('Change the goal'), onPress: () => router.push('/settings') }}
+          onDismiss={() => dismiss(extremeKey)}
         />
       ),
     });

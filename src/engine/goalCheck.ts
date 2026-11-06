@@ -46,6 +46,17 @@ export interface GoalCheck {
   plan: Plan | null;
 }
 
+/**
+ * Which realistic limit a day's targets go past, if any: too many steps, or more flowers than a
+ * day's riding (or, without a bike, walking) can plant.
+ */
+export function beyondReason(stepsPerDay: number, flowersPerRideDay: number, rates: { bikes: boolean; bikeFlowersPerHour: number; walkFlowersPerHour?: number }): 'tooManySteps' | 'tooManyFlowers' | null {
+  const rate = rates.bikes ? rates.bikeFlowersPerHour : (rates.walkFlowersPerHour ?? DEFAULT_RATES.walkFlowersPerHour);
+  if (stepsPerDay > MAX_STEPS_PER_DAY) return 'tooManySteps';
+  if (flowersPerRideDay > MAX_RIDE_HOURS * Math.max(1, rate)) return 'tooManyFlowers';
+  return null;
+}
+
 export function checkGoal(input: GoalCheckInput): GoalCheck {
   const bikes = input.bikes !== false;
   const rate = bikes ? input.bikeFlowersPerHour : (input.walkFlowersPerHour ?? DEFAULT_RATES.walkFlowersPerHour);
@@ -66,7 +77,7 @@ export function checkGoal(input: GoalCheckInput): GoalCheck {
   if (plan.status === 'noRideDays') return { ok: false, problem: 'noRideDays', plan, ...base, stepsPerDay: plan.avgStepsPerDay, flowersPerRideDay: Infinity };
   const stepsPerDay = peakStepsPerDay(plan);
   const flowersPerRideDay = peakFlowersPerRideDay(plan);
-  const problem: GoalProblem | null = stepsPerDay > MAX_STEPS_PER_DAY ? 'tooManySteps' : flowersPerRideDay > maxFlowers ? 'tooManyFlowers' : null;
+  const problem: GoalProblem | null = beyondReason(stepsPerDay, flowersPerRideDay, { bikes, bikeFlowersPerHour: input.bikeFlowersPerHour, walkFlowersPerHour: input.walkFlowersPerHour });
   return { ok: problem == null, problem, plan, stepsPerDay, flowersPerRideDay, maxFlowersPerRideDay: maxFlowers, bikes };
 }
 

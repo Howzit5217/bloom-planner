@@ -11,13 +11,13 @@ import { addDaysKey, fromKey, todayKey, type DayKey } from '@/engine/dates';
 import { fmt, fmtDate } from '@/engine/format';
 import { makeReq } from '@/engine/levels';
 import { progressFromInput } from '@/engine/onboarding';
-import { planDifficulty, type PlanDifficulty } from '@/engine/difficulty';
+import { canKeepAnyway, checkDifficulty, type PlanDifficulty } from '@/engine/difficulty';
 import { checkGoal } from '@/engine/goalCheck';
 import { DEFAULT_RATES, type RateKey } from '@/engine/rates';
 import type { PlayLocation, Profile, SeasonRate } from '@/engine/types';
-import { DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
+import { DifficultyPill, difficultyColor, keptExtremeKey } from '@/features/shared/Difficulty';
 import { EasyDays } from '@/features/shared/EasyDays';
-import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
+import { EasyVerdict, GoalVerdict, useEarliestDate, useMoreChallenge } from '@/features/shared/GoalVerdict';
 import { MonthBars } from '@/features/shared/MonthBars';
 import { PlaceFinder, type ClimateResult } from '@/features/shared/PlaceFinder';
 import { SeasonSliders } from '@/features/shared/SeasonSliders';
@@ -109,6 +109,8 @@ export function Wizard() {
   const [showToday, setShowToday] = useState(false);
   const [goalLevel, setGoalLevel] = useState(2);
   const [goalDate, setGoalDate] = useState<DayKey | null>(null);
+  // The goal (level and date) kept as it is after a verdict: past what's realistic, or too easy.
+  const [kept, setKept] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<RateKey, RateDraft>>(() => ({
     walkStepsPerHour: { value: DEFAULT_RATES.walkStepsPerHour, unknown: false },
     bikeFlowersPerHour: { value: DEFAULT_RATES.bikeFlowersPerHour, unknown: false },
@@ -158,11 +160,18 @@ export function Wizard() {
     walkFlowersPerHour: rates.walkFlowersPerHour.unknown ? DEFAULT_RATES.walkFlowersPerHour : (rates.walkFlowersPerHour.value ?? DEFAULT_RATES.walkFlowersPerHour),
   };
   const check = goalDate ? checkGoal({ ...goalBase, goalKey: goalDate }) : null;
-  const preview = check?.ok ? check.plan : null;
   // How hard the plan is, at your walking and biking rates (typical ones until you've said).
   const walkRate = rates.walkStepsPerHour.unknown ? DEFAULT_RATES.walkStepsPerHour : (rates.walkStepsPerHour.value ?? DEFAULT_RATES.walkStepsPerHour);
-  const difficulty: PlanDifficulty | null =
-    check?.ok && preview?.status === 'ok' ? planDifficulty(check.stepsPerDay, check.flowersPerRideDay, { walkStepsPerHour: walkRate, bikeFlowersPerHour: goalBase.bikeFlowersPerHour, walkFlowersPerHour: goalBase.walkFlowersPerHour, treadmillAvailable: false, bikes }) : null;
+  const diffRates = { walkStepsPerHour: walkRate, bikeFlowersPerHour: goalBase.bikeFlowersPerHour, walkFlowersPerHour: goalBase.walkFlowersPerHour, treadmillAvailable: false, bikes };
+  const goalId = goalDate ? `${goalLevel}|${goalDate}` : null;
+  const keptNow = kept != null && kept === goalId;
+  // Past what's realistic but kept anyway, after "Are you sure?": an EXTREME plan.
+  const extremeKept = keptNow && canKeepAnyway(check);
+  const accepted = !!check?.ok || extremeKept;
+  const difficulty: PlanDifficulty | null = accepted ? checkDifficulty(check, diffRates) : null;
+  // A white-flower plan: the last page suggests a bigger challenge, unless it's kept as it is.
+  const tooEasy = !!check?.ok && difficulty?.level === 'easy' && !keptNow;
+  const more = useMoreChallenge(step === STEPS - 1 && tooEasy && goalDate ? { ...goalBase, goalKey: goalDate } : null, diffRates, table.maxLevel);
   const earliest = useEarliestDate(check && !check.ok ? goalBase : null);
 
   const go = (n: number) => {
@@ -213,7 +222,7 @@ export function Wizard() {
       case 2:
         return tutorial || (stepsVal != null && (!needFlowers || flowersVal != null) && !stepsErr && !flowersErr);
       case 3:
-        return !!check?.ok;
+        return accepted;
       case 4:
         return WALK_RATES.every(rateOk) && treadmill != null;
       case 5:
@@ -224,7 +233,7 @@ export function Wizard() {
   })();
 
   const finish = async () => {
-    if (!goalDate || saving || !check?.ok) return;
+    if (!goalDate || saving || !accepted || tooEasy) return;
     setSaving(true);
     const profile: Profile = {
       currentLevel: level,
@@ -250,7 +259,9 @@ export function Wizard() {
     };
     const s = seasons ?? { rates: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, rideable: 1, source: 'default' as const })), location: null, climate: null };
     // The choices from setup, in place before the first plan is made from them.
-    await useApp.getState().updateSettings({ logMode: logShown, temp: tempUnit, plan: rhythm, limits });
+    // An EXTREME goal kept on purpose: Home doesn't warn about it again.
+    const dismissed = extremeKept ? { dismissed: { ...useApp.getState().settings.dismissed, [keptExtremeKey(goalLevel, goalDate)]: true } } : {};
+    await useApp.getState().updateSettings({ logMode: logShown, temp: tempUnit, plan: rhythm, limits, ...dismissed });
     await complete({ profile, seasonRates: s.rates, location: s.location, climate: s.climate });
     // The place's months were worked out with the usual limits: again with these.
     if (limits.hot !== DEFAULT_LIMITS.hot || limits.cold !== DEFAULT_LIMITS.cold) await useApp.getState().setLimits(limits);
@@ -429,7 +440,8 @@ export function Wizard() {
             <DateField label={t('Target date')} value={goalDate} onChange={setGoalDate} minimumDate={fromKey(addDaysKey(today, 1))} />
             {/* Only a goal that can't be done says so here; how hard the plan is shows on the last page,
                 once your own pace is in. */}
-            {check && !check.ok ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} /> : null}
+            {check && !check.ok && !extremeKept ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} onKeep={() => setKept(goalId)} difficulty={checkDifficulty(check, diffRates)} /> : null}
+            {extremeKept && difficulty ? <DifficultyPill d={difficulty} wide /> : null}
           </View>
         );
       case 4:
@@ -518,8 +530,9 @@ export function Wizard() {
       default:
         return (
           <View style={{ gap: 18 }}>
-            <Done level={level} goalLevel={goalLevel} goalDate={goalDate} blocked={!!check && !check.ok} difficulty={difficulty} />
-            {check && !check.ok ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} /> : null}
+            <Done level={level} goalLevel={goalLevel} goalDate={goalDate} blocked={(!!check && !accepted) || tooEasy} difficulty={difficulty} />
+            {check && !check.ok && !extremeKept ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} onKeep={() => setKept(goalId)} difficulty={checkDifficulty(check, diffRates)} /> : null}
+            {tooEasy && difficulty ? <EasyVerdict difficulty={difficulty} more={more} onUseDate={setGoalDate} onUseLevel={setGoalLevel} onKeep={() => setKept(goalId)} /> : null}
           </View>
         );
     }
@@ -623,7 +636,7 @@ export function Wizard() {
           {step > 0 || primary ? (
             <View style={{ flexDirection: 'row', gap: 12 }}>
               {step > 0 ? <BackTile label={t('Back')} onPress={back} /> : null}
-              {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 8 && !check?.ok)} /> : null}
+              {primary ? <PillButton style={{ flex: 1 }} label={primary.label} onPress={primary.onPress} disabled={!canNext || saving || (step === 8 && (!accepted || tooEasy))} /> : null}
             </View>
           ) : null}
           <FlowerSteps step={step} count={STEPS} />

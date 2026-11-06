@@ -13,11 +13,11 @@ import { useT } from '@/i18n';
 function TempLimit({ label, celsius, f, range, onChange }: { label: string; celsius: number; f: boolean; range: [number, number]; onChange: (celsius: number) => void }) {
   const { t } = useT();
   const shown = Math.round(f ? cToF(celsius) : celsius);
-  const [lo, hi] = f ? [Math.round(cToF(range[0])), Math.round(cToF(range[1]))] : range;
+  const [lo, hi] = range.map((v) => Math.round(f ? cToF(v) : v));
   return (
     <View style={{ gap: 8 }}>
       <T v="smallBold">{label}</T>
-      <Stepper label={label} value={shown} min={lo} max={hi} onChange={(v) => onChange(f ? Math.round(fToC(v) * 10) / 10 : v)} size={52} />
+      <Stepper label={label} value={shown} min={lo} max={hi} onChange={(v) => onChange(f ? Math.round(fToC(v) * 10) / 10 : v)} size={52} valueText={(n) => `${n}°${f ? 'F' : 'C'}`} />
       <T v="caption" soft center>
         {t('Feels like {t} ({other})', { t: fmtTemp(celsius, f), other: fmtTemp(celsius, !f) })}
       </T>
@@ -47,9 +47,10 @@ export function WeatherLimits({ unit, onUnit, limits, onLimits }: { unit: TempUn
           ]}
         />
       </View>
-      {/* Kept at least 5 degrees apart, so there are always days in between. */}
+      {/* Kept at least 5 degrees apart, so there are always days in between. Cold goes down to -10°F
+          (-23°C), inside the weather history's -25°C floor. */}
       <TempLimit label={t('Too hot above')} celsius={limits.hot} f={f} range={[20, 46]} onChange={(v) => onLimits({ ...limits, hot: Math.max(v, limits.cold + 5) })} />
-      <TempLimit label={t('Too cold below')} celsius={limits.cold} f={f} range={[-15, 20]} onChange={(v) => onLimits({ ...limits, cold: Math.min(v, limits.hot - 5) })} />
+      <TempLimit label={t('Too cold below')} celsius={limits.cold} f={f} range={[fToC(-10), 20]} onChange={(v) => onLimits({ ...limits, cold: Math.min(v, limits.hot - 5) })} />
     </View>
   );
 }

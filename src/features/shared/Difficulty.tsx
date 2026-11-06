@@ -15,11 +15,18 @@ export const DIFFICULTY_NAMES: Record<Difficulty, string> = {
   steady: tk('Steady Plan'),
   hard: tk('Hard Plan'),
   veryHard: tk('Very Hard Plan'),
+  extreme: tk('EXTREME Plan'),
 };
 
-/** A plan's flower: white when it's easy, then yellow, red, and blue for the hardest. */
+/**
+ * The settings key that says this EXTREME goal was kept on purpose (after "Are you sure?"), so
+ * Home doesn't warn about it again.
+ */
+export const keptExtremeKey = (level: number, date: string) => `extreme-${level}-${date}`;
+
+/** A plan's flower: white when it's easy, then yellow, red, blue, and deep purple past what's realistic. */
 export function difficultyColor(c: Palette, d: Difficulty): string {
-  return { easy: c.petalWhite, steady: c.petalYellow, hard: c.petalRed, veryHard: c.petalBlue }[d];
+  return { easy: c.petalWhite, steady: c.petalYellow, hard: c.petalRed, veryHard: c.petalBlue, extreme: c.petalExtreme }[d];
 }
 
 /** The plan's flower on its own, small; on a round backing when it sits on a white card. */

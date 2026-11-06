@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import { addDaysKey, fromKey, type DayKey } from '@/engine/dates';
-import { planDifficulty } from '@/engine/difficulty';
+import { checkDifficulty } from '@/engine/difficulty';
 import { fmt, fmtDate, roundNice } from '@/engine/format';
 import { checkGoal } from '@/engine/goalCheck';
 import type { Dashboard } from '@/engine/summary';
-import { DifficultyPill } from '@/features/shared/Difficulty';
-import { GoalVerdict, useEarliestDate } from '@/features/shared/GoalVerdict';
+import { DifficultyPill, keptExtremeKey } from '@/features/shared/Difficulty';
+import { EasyVerdict, GoalVerdict, useEarliestDate, useMoreChallenge } from '@/features/shared/GoalVerdict';
 import { useApp } from '@/store/app';
 import { useTheme } from '@/theme/theme';
 import { Card } from '@/ui/Card';
@@ -68,6 +68,8 @@ function LevelGoalForm({ dash }: { dash: Dashboard }) {
   const maxLevel = useApp((s) => s.table.maxLevel);
   const seasonRates = useApp((s) => s.seasonRates);
   const updateProfile = useApp((s) => s.updateProfile);
+  const updateSettings = useApp((s) => s.updateSettings);
+  const dismissed = useApp((s) => s.settings.dismissed);
   const [level, setLevel] = useState(Math.min(maxLevel, dash.current.level + 1));
   const [date, setDate] = useState<DayKey>(addDaysKey(dash.today, 30));
   const base = {
@@ -81,14 +83,22 @@ function LevelGoalForm({ dash }: { dash: Dashboard }) {
   };
   const check = checkGoal({ ...base, goalLevel: level, goalKey: date });
   const earliest = useEarliestDate(check.ok ? null : { ...base, goalLevel: level });
-  const difficulty = check.ok && check.plan?.status === 'ok' ? planDifficulty(check.stepsPerDay, check.flowersPerRideDay, dash.rates) : null;
+  // EXTREME past what's realistic; a too-easy one offers a bigger challenge first.
+  const difficulty = checkDifficulty(check, dash.rates);
+  const easy = check.ok && difficulty?.level === 'easy';
+  const more = useMoreChallenge(easy ? { ...base, goalLevel: level, goalKey: date } : null, dash.rates, maxLevel);
+  const save = (extreme: boolean) => {
+    if (extreme) void updateSettings({ dismissed: { ...dismissed, [keptExtremeKey(level, date)]: true } });
+    void updateProfile({ goalLevel: level, goalDate: date });
+  };
   return (
     <>
       <Stepper label={t('Target level')} value={level} min={Math.min(maxLevel, dash.current.level + 1)} max={maxLevel} onChange={setLevel} size={56} />
       <DateField label={t('Target date')} value={date} onChange={setDate} minimumDate={fromKey(addDaysKey(dash.today, 1))} />
       {difficulty ? <DifficultyPill d={difficulty} wide /> : null}
-      {check.ok ? null : <GoalVerdict check={check} earliest={earliest} onUseDate={setDate} />}
-      <PillButton label={t('Set this goal')} icon="flag-checkered" disabled={!check.ok} onPress={() => void updateProfile({ goalLevel: level, goalDate: date })} />
+      {check.ok ? null : <GoalVerdict check={check} earliest={earliest} onUseDate={setDate} onKeep={() => save(true)} difficulty={difficulty} />}
+      {easy && difficulty ? <EasyVerdict difficulty={difficulty} more={more} onUseDate={setDate} onUseLevel={setLevel} onKeep={() => save(false)} /> : null}
+      <PillButton label={t('Set this goal')} icon="flag-checkered" disabled={!check.ok || easy} onPress={() => save(false)} />
     </>
   );
 }

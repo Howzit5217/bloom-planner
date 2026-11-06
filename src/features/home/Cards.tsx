@@ -9,7 +9,7 @@ import type { Dashboard } from '@/engine/summary';
 import { cToF } from '@/engine/units';
 import { useApp, useTempF } from '@/store/app';
 import { useTheme } from '@/theme/theme';
-import { DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
+import { DIFFICULTY_NAMES, DifficultyPill, difficultyColor } from '@/features/shared/Difficulty';
 import { QUEST_ICON } from '@/features/shared/quest';
 import { PETALS } from '@/theme/tokens';
 import { Card } from '@/ui/Card';
@@ -244,6 +244,14 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
         {active && dash.difficulty ? (
           <View style={{ marginTop: 10 }}>
             <DifficultyPill d={dash.difficulty} onPanel wide />
+            {/* The grade moves with how the days go: harder behind, easier ahead. */}
+            {dash.difficultyShift ? (
+              <T v="caption" color={c.onPanelSoft} style={{ marginTop: 6 }}>
+                {dash.difficultyShift.way === 'harder'
+                  ? t('It started as a {plan}. Falling behind made the days left busier.', { plan: t(DIFFICULTY_NAMES[dash.difficultyShift.from.level]) })
+                  : t('It started as a {plan}. Being ahead made the days left lighter.', { plan: t(DIFFICULTY_NAMES[dash.difficultyShift.from.level]) })}
+              </T>
+            ) : null}
           </View>
         ) : null}
         {active && note ? (

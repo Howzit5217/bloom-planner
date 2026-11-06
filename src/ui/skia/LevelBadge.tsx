@@ -1,9 +1,10 @@
-import { Canvas, PaintStyle, Picture, Skia, StrokeJoin, TileMode, vec, createPicture, type SkCanvas, type SkFont } from '@shopify/react-native-skia';
+import { Canvas, PaintStyle, Picture, Skia, StrokeJoin, TileMode, vec, createPicture, type SkCanvas, type SkFont, type SkPaint } from '@shopify/react-native-skia';
 import { useMemo } from 'react';
 import { Image, PixelRatio, Platform, Text, View } from 'react-native';
 import { badgeTier, type BadgeTier } from '@/engine/badge';
 import { font as fonts } from '@/theme/tokens';
 import { useGameFont } from './gameFont';
+import { inkGap, inkRun } from './inkLayout';
 import { hexPath } from './shapes';
 import { t } from '@/i18n';
 
@@ -49,8 +50,18 @@ function drawBadge(canvas: SkCanvas, level: number, size: number, big: SkFont | 
   paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, size * 0.12), vec(0, size * 0.88), m.face.map((h) => Skia.Color(h)), null, TileMode.Clamp));
   canvas.drawPath(inner, paint);
   paint.setShader(null);
-  const letter = (text: string, font: SkFont, y: number, fill: string, edge: string, outline: number, drop: boolean) => {
-    const x = cx - font.measureText(text).width / 2;
+  // "Lv" as the face sets it; the number glyph by glyph, each digit only as wide as its ink (a 1
+  // narrower than an 8), centred where it looks centred rather than by its box.
+  const letter = (text: string, font: SkFont, y: number, fill: string, edge: string, outline: number, drop: boolean, byInk: boolean) => {
+    let glyphs: Array<{ ch: string; x: number }>;
+    if (byInk) {
+      const run = inkRun(text, font, inkGap(font));
+      glyphs = run.glyphs.map((g) => ({ ch: g.ch, x: cx - run.centre + g.x }));
+    } else {
+      const b = font.measureText(text);
+      glyphs = [{ ch: text, x: cx - (b.x + b.width / 2) }];
+    }
+    const each = (paint: SkPaint, dy = 0) => glyphs.forEach((g) => canvas.drawText(g.ch, g.x, y + dy, paint, font));
     const stroke = Skia.Paint();
     stroke.setAntiAlias(true);
     stroke.setStyle(PaintStyle.Stroke);
@@ -59,17 +70,18 @@ function drawBadge(canvas: SkCanvas, level: number, size: number, big: SkFont | 
     if (drop) {
       // A soft drop under the number, so it stands off the face.
       stroke.setColor(Skia.Color('rgba(0,0,0,0.2)'));
-      canvas.drawText(text, x, y + outline * 0.28, stroke, font);
+      each(stroke, outline * 0.28);
     }
+    // Every outline before any fill, so one digit's edge never crosses the next one's face.
     stroke.setColor(Skia.Color(edge));
-    canvas.drawText(text, x, y, stroke, font);
+    each(stroke);
     const paintFill = Skia.Paint();
     paintFill.setAntiAlias(true);
     paintFill.setColor(Skia.Color(fill));
-    canvas.drawText(text, x, y, paintFill, font);
+    each(paintFill);
   };
-  if (small) letter('Lv', small, size * 0.37, m.deep, m.shine, sw * 1.8, false);
-  if (big) letter(String(level), big, size * 0.7, '#FFFFFF', m.deep, sw * 2.4, true);
+  if (small) letter('Lv', small, size * 0.37, m.deep, m.shine, sw * 1.8, false, false);
+  if (big) letter(String(level), big, size * 0.7, '#FFFFFF', m.deep, sw * 2.4, true, true);
   canvas.restore();
 }
 

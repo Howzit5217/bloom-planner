@@ -14,7 +14,7 @@ import { initialState, replayLog, type ReplayResult } from './progress';
 import { flowerDays, observedRates, resolveRates, type ObservedRates } from './rates';
 import { standing, type Standing } from './standing';
 import { recentDays, streak } from './streak';
-import { planDifficulty, type PlanDifficulty } from './difficulty';
+import { DIFFICULTIES, difficultyOfPlan, type PlanDifficulty } from './difficulty';
 import { customProgress, type CustomProgress } from './customGoal';
 import { questOf, type Quest } from './quest';
 import { MAX_STEPS_PER_DAY } from './goalCheck';
@@ -100,6 +100,11 @@ export interface Dashboard {
   impossible: { stepsPerDay: number; walkHours: number } | null;
   /** How hard the rest of the plan is, at its busiest (only while there's a plan to follow). */
   difficulty: PlanDifficulty | null;
+  /**
+   * When it's a different grade from the plan as set (followed from the start): harder from falling
+   * behind, or easier from being ahead. Only when the standing says so, not a change of weather.
+   */
+  difficultyShift: { from: PlanDifficulty; way: 'harder' | 'easier' } | null;
 }
 
 const ring = (done: number, need: number): RingData => ({
@@ -156,6 +161,22 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
   if (current.level >= table.maxLevel) phase = 'maxed';
   else if (current.level >= goalLevel) phase = 'goalReached';
   else if (daysBetween(today, profile.goalDate) < 0 || (loggedToday && today === profile.goalDate)) phase = 'datePassed';
+
+  // How hard the days left are, and how hard the plan as set was: falling behind piles the rest onto
+  // the days left (a harder grade), being ahead lightens them (an easier one).
+  const difficulty = phase === 'active' && plan.status === 'ok' ? difficultyOfPlan(plan, rates) : null;
+  const asSet = baseline.status === 'ok' ? difficultyOfPlan(baseline, rates) : null;
+  const rank = (d: PlanDifficulty) => DIFFICULTIES.indexOf(d.level);
+  const difficultyShift =
+    difficulty && asSet && rank(difficulty) !== rank(asSet)
+      ? rank(difficulty) > rank(asSet)
+        ? stand.verdict === 'behind'
+          ? { from: asSet, way: 'harder' as const }
+          : null
+        : stand.verdict === 'ahead'
+          ? { from: asSet, way: 'easier' as const }
+          : null
+      : null;
 
   const impossible =
     phase === 'active' && plan.status === 'ok' && peakSteps > IMPOSSIBLE_STEPS_PER_DAY
@@ -226,6 +247,7 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     projected,
     nextMilestone: projected[0] ?? null,
     impossible,
-    difficulty: phase === 'active' && plan.status === 'ok' ? planDifficulty(peakSteps, peakFlowersPerRideDay(plan), rates) : null,
+    difficulty,
+    difficultyShift,
   };
 }

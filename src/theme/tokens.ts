@@ -25,6 +25,8 @@ export interface Palette {
   petalBlue: string;
   petalWhite: string;
   petalPurple: string;
+  /** The extreme plan's flower: deep purple, like a Purple Pikmin. */
+  petalExtreme: string;
   nectar: string;
   alert: string;
   alertPale: string;
@@ -69,6 +71,7 @@ export const light: Palette = {
   petalBlue: '#5B9BD5',
   petalWhite: '#FFFFFF',
   petalPurple: '#9B7CC4',
+  petalExtreme: '#5B2D8E',
   nectar: '#F6A623',
   alert: '#D9644A',
   alertPale: '#FBE3DA',
@@ -113,6 +116,7 @@ export const dark: Palette = {
   petalBlue: '#6A99C6',
   petalWhite: '#EDE8DF',
   petalPurple: '#988AB6',
+  petalExtreme: '#7148A6',
   nectar: '#E3A440',
   alert: '#E58067',
   alertPale: '#4A2C22',

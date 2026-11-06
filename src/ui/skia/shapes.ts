@@ -127,19 +127,6 @@ export function hexPath(cx: number, cy: number, r: number, round = 0): SkPath {
   return b.close().build();
 }
 
-/** A four-point sparkle centred on (0,0). */
-export function sparklePath(s: number): SkPath {
-  const k = s * 0.16;
-  return Skia.PathBuilder.Make()
-    .moveTo(0, -s)
-    .quadTo(k, -k, s, 0)
-    .quadTo(k, k, 0, s)
-    .quadTo(-k, k, -s, 0)
-    .quadTo(-k, -k, 0, -s)
-    .close()
-    .build();
-}
-
 /** Mix two #RRGGBB colours: t = 0 is a, t = 1 is b. */
 export function mixHex(a: string, b: string, t: number): string {
   const p = (h: string) => {

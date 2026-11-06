@@ -139,7 +139,7 @@ export function Celebration({ level, title, subtitle, onDone }: Props) {
           <T v="h2" center color={c.leafDeep}>
             {title}
           </T>
-          <GameNumber value={level} size={96} format={(n) => String(n)} />
+          <GameNumber value={level} size={96} format={(n) => String(n)} roll={false} />
           <T v="bodyBold" center soft>
             {subtitle}
           </T>
