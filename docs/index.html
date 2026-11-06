@@ -8,6 +8,12 @@
 <meta name="theme-color" content="#FBF7EC">
 <link rel="icon" href="favicon.png">
 <link rel="apple-touch-icon" href="icon.png">
+<script>
+  // Added to a home screen from this page instead of the planner's: the icon goes on to the planner.
+  if ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true) {
+    window.location.replace('app/');
+  }
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -88,6 +94,28 @@
   .steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
   .steps li { counter-increment: s; display: flex; gap: 14px; align-items: flex-start; background: var(--card); border-radius: 22px; padding: 16px 18px; box-shadow: 0 3px 12px var(--shadow); }
   .steps li::before { content: counter(s); flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--leaf-pale); color: var(--leaf-deep); font: 800 20px/36px 'Baloo 2', sans-serif; text-align: center; }
+  .lead { margin: 0 0 16px; color: var(--ink-soft); }
+  .open-row { display: flex; flex-wrap: wrap; gap: 12px; }
+  /* Each device's steps fold away under its own row; the one for this device starts open. */
+  .how { display: grid; gap: 12px; margin-top: 20px; }
+  .how details { background: var(--card); border-radius: 22px; box-shadow: 0 3px 12px var(--shadow); }
+  .how summary { list-style: none; display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 12px 18px; cursor: pointer; border-radius: 22px; -webkit-tap-highlight-color: transparent; }
+  .how summary::-webkit-details-marker { display: none; }
+  .how summary:focus-visible { outline: 3px solid var(--leaf); outline-offset: 3px; }
+  .how summary .chip { flex: none; }
+  .how .what { flex: 1; font: 800 20px/1.2 'Baloo 2', Nunito, sans-serif; }
+  .how .what small { display: block; font: 600 14px/1.3 Nunito, system-ui, sans-serif; color: var(--ink-soft); margin-top: 2px; }
+  .how .turn { flex: none; font-size: 28px; line-height: 1; color: var(--leaf-deep); transition: transform .2s ease; }
+  .how details[open] .turn { transform: rotate(180deg); }
+  .how .body { padding: 2px 18px 20px; }
+  .mini { counter-reset: m; list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .mini li { counter-increment: m; display: flex; gap: 12px; align-items: flex-start; }
+  .mini li::before { content: counter(m); flex: none; width: 30px; height: 30px; border-radius: 10px; background: var(--leaf-pale); color: var(--leaf-deep); font: 800 17px/30px 'Baloo 2', sans-serif; text-align: center; }
+  .how .note { margin: 14px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--canvas-deep); font-size: 15px; color: var(--ink-soft); }
+  .fixes { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .fixes li { padding: 12px 14px; border-radius: 16px; background: var(--canvas-deep); color: var(--ink-soft); font-size: 15px; }
+  .fixes strong:first-child { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px; }
+  @media (prefers-reduced-motion: reduce) { .how .turn { transition: none; } }
   .grades { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
   .grade { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 8px; border-radius: 999px; background: rgba(16,52,20,0.45); font-weight: 700; }
   .grade svg { width: 26px; height: 26px; }
@@ -175,11 +203,84 @@
 
     <section id="web">
       <h2>Web App for Phones and Computers</h2>
-      <ol class="steps">
-        <li><span>Open <a href="app/" class="web-app-link">the web app</a> in <strong>Chrome</strong> on Android or <strong>Safari</strong> on iPhone. A link opened inside another app (a message, an email) shows a built-in browser with no Add to Home Screen, so open it in Chrome or Safari first.</span></li>
-        <li><span>Add it to the home screen. On iPhone, tap Share <span class="share mdi mdi-export-variant" aria-label="Share"></span> and then <strong>Add to Home Screen</strong>. On Android, tap the menu <span class="share mdi mdi-dots-vertical" aria-label="Menu"></span> and then <strong>Add to Home screen</strong> or <strong>Install app</strong>. On a computer, choose <strong>Install</strong> (Chrome, Edge) or <strong>Add to Dock</strong> (Safari).</span></li>
-        <li><span>Open it from the new icon. It runs full screen with its own icon, and only from there, so your log stays in one place.</span></li>
-      </ol>
+      <p class="lead">Add it to your home screen and it opens full screen with its own icon, just like an app.</p>
+      <div class="open-row">
+        <a class="btn primary web-app-link" id="open-web-app" href="app/">
+          <span class="mdi mdi-open-in-app" aria-hidden="true"></span>
+          <span id="open-web-app-label">Open the Web App</span>
+        </a>
+      </div>
+      <p class="fine" id="open-hint">It opens in the right browser for adding it to your home screen. Then follow the steps for your device below.</p>
+
+      <div class="how">
+        <details id="how-iphone">
+          <summary>
+            <span class="chip"><span class="mdi mdi-apple"></span></span>
+            <span class="what">iPhone and iPad<small>Safari, Chrome or Edge</small></span>
+            <span class="mdi mdi-chevron-down turn" aria-hidden="true"></span>
+          </summary>
+          <div class="body">
+            <ol class="mini">
+              <li><span>Tap the green button above, so the planner opens in Safari.</span></li>
+              <li><span>Tap Share <span class="share mdi mdi-export-variant" aria-label="Share"></span>. It's in the toolbar at the bottom of the screen, or at the top on iPad. If you only see <span class="share mdi mdi-dots-horizontal" aria-label="More"></span>, tap that first, then <strong>Share</strong>.</span></li>
+              <li><span>Scroll down the list and tap <strong>Add to Home Screen</strong>. Not in the list? Tap <strong>Edit Actions</strong> at the very bottom and add it.</span></li>
+              <li><span>If you see <strong>Open as Web App</strong>, leave it on. Then tap <strong>Add</strong> in the top corner.</span></li>
+              <li><span>Open Bloom Planner from its new icon on your Home Screen.</span></li>
+            </ol>
+            <p class="note">In Chrome or Edge on iPhone it's the same: tap Share <span class="share mdi mdi-export-variant" aria-label="Share"></span> next to the address bar, then <strong>Add to Home Screen</strong>.</p>
+          </div>
+        </details>
+
+        <details id="how-android">
+          <summary>
+            <span class="chip"><span class="mdi mdi-android"></span></span>
+            <span class="what">Android<small>Chrome or Samsung Internet</small></span>
+            <span class="mdi mdi-chevron-down turn" aria-hidden="true"></span>
+          </summary>
+          <div class="body">
+            <ol class="mini">
+              <li><span>Tap the green button above, so the planner opens in Chrome.</span></li>
+              <li><span>Tap the menu <span class="share mdi mdi-dots-vertical" aria-label="Menu"></span> in the top right corner.</span></li>
+              <li><span>Tap <strong>Add to Home screen</strong>, or <strong>Install app</strong> if that's what you see.</span></li>
+              <li><span>Tap <strong>Install</strong> (or <strong>Add</strong>). If Android asks where it goes, tap <strong>Add automatically</strong>, or hold and drag the icon onto your screen.</span></li>
+              <li><span>Open Bloom Planner from its new icon.</span></li>
+            </ol>
+            <p class="note">In Samsung Internet: tap the menu <span class="share mdi mdi-menu" aria-label="Menu"></span> at the bottom, then <strong>Add page to</strong> and <strong>Home screen</strong>. The <a href="#android">Android app</a> also sends evening reminders.</p>
+          </div>
+        </details>
+
+        <details id="how-computer">
+          <summary>
+            <span class="chip"><span class="mdi mdi-monitor"></span></span>
+            <span class="what">Computer<small>Chrome, Edge or Safari</small></span>
+            <span class="mdi mdi-chevron-down turn" aria-hidden="true"></span>
+          </summary>
+          <div class="body">
+            <ol class="mini">
+              <li><span>Click the green <strong>Open the Web App</strong> button above.</span></li>
+              <li><span><strong>Chrome or Edge:</strong> click the install icon <span class="share mdi mdi-monitor-arrow-down" aria-label="Install"></span> at the right end of the address bar, then <strong>Install</strong>.</span></li>
+              <li><span><strong>Safari on a Mac:</strong> choose <strong>File</strong>, then <strong>Add to Dock</strong>.</span></li>
+              <li><span>Open Bloom Planner from its new icon, in your Start menu, Dock or apps.</span></li>
+            </ol>
+            <p class="note">No install icon? In Chrome, open the menu <span class="share mdi mdi-dots-vertical" aria-label="Menu"></span>, then <strong>Cast, save, and share</strong> and <strong>Install page as app</strong>. In Edge, open the menu <span class="share mdi mdi-dots-horizontal" aria-label="Menu"></span>, then <strong>Apps</strong> and <strong>Install this site as an app</strong>. Firefox can't install web apps, so use one of the others there.</p>
+          </div>
+        </details>
+
+        <details id="how-help">
+          <summary>
+            <span class="chip"><span class="mdi mdi-help"></span></span>
+            <span class="what">Something Not Working?<small>The usual fixes</small></span>
+            <span class="mdi mdi-chevron-down turn" aria-hidden="true"></span>
+          </summary>
+          <div class="body">
+            <ul class="fixes">
+              <li><strong>No Add to Home Screen option.</strong> The page is probably open in another app's built-in browser, from a message, an email or a social app. Tap the green button above to move it to Safari or Chrome, or use that app's menu to open the page in your browser.</li>
+              <li><strong>The icon opens this page.</strong> It takes you on to the planner by itself. For an icon that goes straight there, remove it and add it again from the planner itself.</li>
+              <li><strong>My log is missing.</strong> On iPhone, the Home Screen icon and Safari each keep their own copy. Always open the planner from its icon, and your log stays in one place.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
       <p class="fine" style="margin-top: 14px">The web app has everything except evening reminders, which only the Android app can send.</p>
     </section>
   </div>
@@ -362,13 +463,36 @@
     })
     .catch(function () {});
 
-  // On Android, the web app opens in Chrome itself: other apps' built-in browsers can't add it to
-  // the home screen. Without Chrome, the browser just opens it where it is.
+  // The web app links go where it can be added to the home screen, and this device's steps open.
+  // Android: Chrome itself (other apps' built-in browsers can't add it; without Chrome it just opens
+  // where it is). iPhone: Safari, when this page is inside another app's built-in browser (iOS 17
+  // and later hand the link over; older ones open it in place).
   (function () {
-    if (!/Android/.test(navigator.userAgent)) return;
+    var ua = navigator.userAgent;
     var url = new URL('app/', window.location.href).href;
-    var intent = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
-    document.querySelectorAll('.web-app-link').forEach(function (a) { a.href = intent; });
+    var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    var android = /Android/.test(ua);
+    var label = document.getElementById('open-web-app-label');
+    var hint = document.getElementById('open-hint');
+    var href = null;
+    if (android) {
+      href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
+      label.textContent = 'Open in Chrome';
+      hint.textContent = 'It opens in Chrome, where Install app and Add to Home screen are. Then follow the steps below.';
+    } else if (ios) {
+      // Safari, Chrome and Edge can all add it; another app's built-in browser can't.
+      var browser = /Safari\//.test(ua) && !/FBAN|FBAV|Instagram|Line\/|GSA\/|LinkedInApp|Snapchat|Twitter|musical_ly|TikTok/.test(ua);
+      if (!browser) {
+        href = 'x-safari-' + url;
+        label.textContent = 'Open in Safari';
+        hint.textContent = "This page is inside another app, which can't add it to your Home Screen. The button moves it to Safari. If nothing happens, use this app's menu to open the page in Safari.";
+      } else {
+        hint.textContent = 'Then follow the steps for iPhone and iPad below.';
+      }
+    }
+    if (href) document.querySelectorAll('.web-app-link').forEach(function (a) { a.href = href; });
+    var mine = document.getElementById(android ? 'how-android' : ios ? 'how-iphone' : 'how-computer');
+    if (mine) mine.open = true;
   })();
 
   // The scroll rail: drag the darker part (or tap the line to jump there).
