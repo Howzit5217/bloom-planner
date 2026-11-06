@@ -90,16 +90,19 @@ export function PaperSheet({ children }: { children: ReactNode }) {
   // Wider than the app, the meadow behind the whole window shows above the sheet instead.
   const wide = useWide();
   const live = useLive();
+  // Out of sight on the web, nothing at all, not even the empty sheet: the page stays behind the
+  // others, and on a wide screen Home is see-through, so its sheet showed through Home.
+  if (!live) return <View style={{ flex: 1 }} />;
   return (
     <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : c.canvas }}>
       <SkyStatusBar />
-      {wide || !live ? null : (
+      {wide ? null : (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
           <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} />
         </View>
       )}
       <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>
-        {live ? children : null}
+        {children}
         <EdgeFade edge="top" color={c.canvas} height={16} />
       </View>
     </View>
@@ -352,17 +355,19 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   );
 
   if (backdrop === 'paper') return <PaperSheet>{scroller}</PaperSheet>;
+  // Out of sight on the web, nothing at all (see PaperSheet): not its fades either.
+  if (!live) return <View style={{ flex: 1 }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
       <SkyStatusBar />
-      {wide || !live ? null : <CameraMeadow frame={frame} tilt={tilt} animate={inView} />}
-      {onRefresh && live ? (
+      {wide ? null : <CameraMeadow frame={frame} tilt={tilt} animate={inView} />}
+      {onRefresh ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 2, left: 0, right: 0, alignItems: 'center', zIndex: 2 }, sprout]}>
           <Seedling growth={growth} size={70} />
         </Animated.View>
       ) : null}
-      {live ? scroller : null}
+      {scroller}
       {/* Once the page moves, cards scroll up under a tall, eased fade into the sky (or the field),
           solid behind the clock and battery so they never sit on a card. */}
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
