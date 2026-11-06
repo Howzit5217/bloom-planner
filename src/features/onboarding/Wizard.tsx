@@ -7,8 +7,8 @@ import { DEFAULT_MANUAL_RATES, type ClimateCache, type TempLimits } from '@/engi
 import { DEFAULT_RHYTHM, type RhythmPrefs } from '@/engine/rhythm';
 import type { TempUnit } from '@/engine/units';
 import { DEFAULT_LIMITS } from '@/engine/weatherPlan';
-import { addDaysKey, daysBetween, fromKey, todayKey, type DayKey } from '@/engine/dates';
-import { fmt, fmtDate, roundNice } from '@/engine/format';
+import { addDaysKey, fromKey, todayKey, type DayKey } from '@/engine/dates';
+import { fmt, fmtDate } from '@/engine/format';
 import { makeReq } from '@/engine/levels';
 import { progressFromInput } from '@/engine/onboarding';
 import { planDifficulty, type PlanDifficulty } from '@/engine/difficulty';
@@ -86,7 +86,7 @@ const BIKE_RATES: RateQuestion[] = [{ key: 'bikeFlowersPerHour', label: tk('Flow
 
 export function Wizard() {
   const { c, reduceMotion } = useTheme();
-  const { t, tn } = useT();
+  const { t } = useT();
   const insets = useSafeAreaInsets();
   const width = useAppWidth();
   const complete = useApp((s) => s.completeOnboarding);
@@ -144,7 +144,6 @@ export function Wizard() {
   const stepsErr = stepsVal != null && stepsVal > next.steps && !stepsOverOk ? t("That's more than this level needs ({n}).", { n: fmt(next.steps) }) : null;
   const flowersErr = flowersVal != null && flowersVal > next.flowers ? t("That's more than this level needs ({n}).", { n: fmt(next.flowers) }) : null;
 
-  const goalDays = goalDate ? daysBetween(today, goalDate) : 0;
   // Is the goal reasonable? Before the weather is known, every day counts as a riding day; the
   // last page checks again with the real months and biking rate.
   const goalBase = {
@@ -427,26 +426,9 @@ export function Wizard() {
               <Stepper label={t('Target level')} value={goalLevel} min={level + 1} max={table.maxLevel} onChange={setGoalLevel} />
             </View>
             <DateField label={t('Target date')} value={goalDate} onChange={setGoalDate} minimumDate={fromKey(addDaysKey(today, 1))} />
+            {/* Only a goal that can't be done says so here; how hard the plan is shows on the last page,
+                once your own pace is in. */}
             {check && !check.ok ? <GoalVerdict check={check} earliest={earliest} onUseDate={setGoalDate} /> : null}
-            {check?.ok ? (
-              <Card variant="panel">
-                <T v="h3" color={c.onPanel}>
-                  {t("That's {levels} in {days}.", { levels: tn(goalLevel - level, '{n} level', '{n} levels'), days: tn(goalDays, '{n} day', '{n} days', { n: fmt(goalDays) }) })}
-                </T>
-                {preview && preview.status === 'ok' ? (
-                  <T v="small" color={c.onPanelSoft} style={{ marginTop: 4 }}>
-                    {preview.remaining.flowers > 0
-                      ? t('Roughly {steps} steps a day and {flowers} flowers per riding day, before weather.', { steps: fmt(roundNice(preview.avgStepsPerDay)), flowers: fmt(roundNice(preview.avgFlowersPerRideDay)) })
-                      : t('Roughly {steps} steps a day, before weather.', { steps: fmt(roundNice(preview.avgStepsPerDay)) })}
-                  </T>
-                ) : null}
-                {difficulty ? (
-                  <View style={{ marginTop: 12 }}>
-                    <DifficultyPill d={difficulty} onPanel />
-                  </View>
-                ) : null}
-              </Card>
-            ) : null}
           </View>
         );
       case 4:
@@ -736,7 +718,6 @@ function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: str
 }
 
 function Done({ level, goalLevel, goalDate, blocked, difficulty }: { level: number; goalLevel: number; goalDate: DayKey | null; blocked: boolean; difficulty: PlanDifficulty | null }) {
-  const width = useAppWidth();
   const { c } = useTheme();
   const { t } = useT();
   return (
@@ -759,11 +740,6 @@ function Done({ level, goalLevel, goalDate, blocked, difficulty }: { level: numb
           <DifficultyPill d={difficulty} />
         </Animated.View>
       ) : null}
-      <Animated.View entering={FadeInUp.delay(860).duration(420)}>
-        <T v="body" center style={{ maxWidth: Math.min(360, width - 48) }}>
-          {t('Log your steps and flowers each evening.')}
-        </T>
-      </Animated.View>
     </View>
   );
 }

@@ -52,7 +52,7 @@ export function DifficultyPill({ d, onPanel }: { d: PlanDifficulty; onPanel?: bo
           {t(DIFFICULTY_NAMES[d.level])}
         </T>
         <T v="caption" color={onPanel ? c.onPanelSoft : c.inkSoft}>
-          {d.riding ? t('About {time} on the move on a riding day', { time }) : t('About {time} on the move a day', { time })}
+          {t('About {time} on the move a day', { time })}
         </T>
       </View>
     </View>

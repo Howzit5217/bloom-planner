@@ -8,55 +8,68 @@ import { hexPath } from './shapes';
 import { t } from '@/i18n';
 
 export interface Metal {
-  /** The rim, light to dark. */
+  /** The rim, top to bottom: bright, a little deeper, then bright again along the bottom edge. */
   rim: [string, string, string];
-  /** The centre, top to bottom. */
+  /** The face inside it, top to bottom: deeper under the rim, lighter lower down. */
   face: [string, string];
-  /** Behind the rim, and the outline round the lettering. */
+  /** The outline round the number, and "Lv" itself; the edge underneath too, unless `edge`. */
   deep: string;
+  /** The edge underneath, where it isn't the deep colour (a gold rim round another face). */
+  edge?: string;
+  /** The light edge round "Lv". */
+  shine: string;
 }
 
+const GOLD_RIM: Metal['rim'] = ['#FFF86A', '#FCEB3C', '#FBEA2A'];
+
+/** The game's badge metals: bronze, a cool blue-tinted silver, lemon gold, and orange-red in a gold rim. */
 export const METALS: Record<BadgeTier, Metal> = {
-  bronze: { rim: ['#F6C79A', '#D08A52', '#9A5A2B'], face: ['#D9925A', '#F3BE8C'], deep: '#7E4720' },
-  silver: { rim: ['#FBFCFD', '#C9D0D7', '#8C969F'], face: ['#C3CBD3', '#EEF2F5'], deep: '#66707A' },
-  gold: { rim: ['#FFE07A', '#F2B530', '#B8740C'], face: ['#F2B530', '#FFE07A'], deep: '#9A5F08' },
-  top: { rim: ['#FFE07A', '#F2B530', '#B8740C'], face: ['#D8413A', '#F26E5B'], deep: '#8E2A1F' },
+  bronze: { rim: ['#FCC77E', '#F3A469', '#F6AE74'], face: ['#D2732F', '#D3925A'], deep: '#87451F', shine: '#FFE6C6' },
+  silver: { rim: ['#E9F4FD', '#C3D6EE', '#CFDEFA'], face: ['#869BB6', '#B3C3D3'], deep: '#566F86', shine: '#FFFFFF' },
+  gold: { rim: GOLD_RIM, face: ['#F2BE12', '#FBDE3A'], deep: '#A56E12', shine: '#FFFBD2' },
+  top: { rim: GOLD_RIM, face: ['#DC5426', '#EC6631'], deep: '#9A361A', edge: '#A56E12', shine: '#FFDCC0' },
 };
 
-/** The badge: a hexagon in its metal, "Lv" over the number, white lettering outlined in the deep colour. */
+/** The badge: the hexagon's rim in its metal round a face, standing on a darker edge; "Lv" and the number. */
 function drawBadge(canvas: SkCanvas, level: number, size: number, big: SkFont | null, small: SkFont | null) {
   const m = METALS[badgeTier(level)];
   const cx = size / 2;
   const outer = hexPath(cx, cx, size * 0.48, size * 0.08);
-  const inner = hexPath(cx, cx, size * 0.4, size * 0.065);
+  const inner = hexPath(cx, cx, size * 0.39, size * 0.062);
   const sw = size * 0.035;
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
-  paint.setColor(Skia.Color(m.deep));
+  // The edge it stands on.
+  paint.setColor(Skia.Color(m.edge ?? m.deep));
   canvas.drawPath(outer, paint);
   canvas.save();
   canvas.translate(0, -size * 0.025);
-  paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, 0), vec(0, size), m.rim.map((h) => Skia.Color(h)), null, TileMode.Clamp));
+  paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, size * 0.02), vec(0, size * 0.98), m.rim.map((h) => Skia.Color(h)), null, TileMode.Clamp));
   canvas.drawPath(outer, paint);
-  paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, size * 0.1), vec(0, size * 0.9), m.face.map((h) => Skia.Color(h)), null, TileMode.Clamp));
+  paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, size * 0.12), vec(0, size * 0.88), m.face.map((h) => Skia.Color(h)), null, TileMode.Clamp));
   canvas.drawPath(inner, paint);
   paint.setShader(null);
-  const letter = (text: string, font: SkFont, y: number, outline: number) => {
+  const letter = (text: string, font: SkFont, y: number, fill: string, edge: string, outline: number, drop: boolean) => {
     const x = cx - font.measureText(text).width / 2;
     const stroke = Skia.Paint();
     stroke.setAntiAlias(true);
     stroke.setStyle(PaintStyle.Stroke);
     stroke.setStrokeWidth(outline);
     stroke.setStrokeJoin(StrokeJoin.Round);
-    stroke.setColor(Skia.Color(m.deep));
+    if (drop) {
+      // A soft drop under the number, so it stands off the face.
+      stroke.setColor(Skia.Color('rgba(0,0,0,0.2)'));
+      canvas.drawText(text, x, y + outline * 0.28, stroke, font);
+    }
+    stroke.setColor(Skia.Color(edge));
     canvas.drawText(text, x, y, stroke, font);
-    const fill = Skia.Paint();
-    fill.setAntiAlias(true);
-    fill.setColor(Skia.Color('#FFFFFF'));
-    canvas.drawText(text, x, y, fill, font);
+    const paintFill = Skia.Paint();
+    paintFill.setAntiAlias(true);
+    paintFill.setColor(Skia.Color(fill));
+    canvas.drawText(text, x, y, paintFill, font);
   };
-  if (small) letter('Lv', small, size * 0.37, sw * 2);
-  if (big) letter(String(level), big, size * 0.7, sw * 2.4);
+  if (small) letter('Lv', small, size * 0.37, m.deep, m.shine, sw * 1.8, false);
+  if (big) letter(String(level), big, size * 0.7, '#FFFFFF', m.deep, sw * 2.4, true);
   canvas.restore();
 }
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { FlatList, View } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,6 +48,14 @@ export default function Levels() {
   // Every level as the game has it.
   const req = useMemo(() => makeReq(table, {}), [table]);
   const current = dash?.current.level ?? 1;
+  const start = Math.min(rows.length - 1, Math.max(0, current - 2));
+  // After a level-up the list moves to the new level at once, the same way.
+  const shownFor = useRef(current);
+  useEffect(() => {
+    if (shownFor.current === current) return;
+    shownFor.current = current;
+    scrollRef.current?.scrollToIndex({ index: start, animated: false });
+  }, [current, start, scrollRef]);
   // Each tile is as tall as its objectives; the list still knows where every one sits.
   const layout = useMemo(() => {
     let at = 0;
@@ -86,10 +94,8 @@ export default function Levels() {
           initialNumToRender={20}
           windowSize={9}
           getItemLayout={(_, index) => ({ ...layout[index], index })}
-          onLayout={() => {
-            // Scroll to the current level on mount.
-            setTimeout(() => scrollRef.current?.scrollToIndex({ index: Math.max(0, current - 2), animated: true, viewOffset: 0 }), 350);
-          }}
+          // Opens already at your level (the one before it just above), not at the top scrolling down.
+          initialScrollIndex={start}
           onScrollToIndexFailed={() => {}}
           renderItem={({ item }: { item: LevelRow }) => <LevelRowView row={item} r={req(item.level)!} current={current} />}
         />
