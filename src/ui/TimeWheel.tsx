@@ -7,6 +7,7 @@ import { uses12HourClock } from '@/engine/calendar';
 import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
 import { T } from './T';
+import { useGlide } from './glide';
 import { t } from '@/i18n';
 
 const ITEM = 50;
@@ -75,6 +76,8 @@ interface WheelProps {
 function Wheel({ label, items, index, width, onIndex }: WheelProps) {
   const ref = useAnimatedRef<Animated.ScrollView>();
   const y = useSharedValue(index * ITEM);
+  // A tap or a screen reader's step glides there at the app's own pace, whatever the device's animation speed.
+  const slide = useGlide(ref, false);
   const last = useRef(index);
   const placed = useRef(false);
   // Only the first position goes in as a prop: Android re-applies contentOffset on every render.
@@ -93,7 +96,7 @@ function Wheel({ label, items, index, width, onIndex }: WheelProps) {
   };
   const jump = (i: number) => {
     const t = clamp(i);
-    ref.current?.scrollTo({ y: t * ITEM, animated: true });
+    slide.go(t * ITEM, y.get());
     if (t !== last.current) {
       last.current = t;
       onIndex(t);
@@ -103,6 +106,9 @@ function Wheel({ label, items, index, width, onIndex }: WheelProps) {
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       y.value = e.contentOffset.y;
+    },
+    onBeginDrag: () => {
+      slide.stop();
     },
     onEndDrag: (e) => {
       // No fling: settle now. With a fling, wait for the momentum to end.

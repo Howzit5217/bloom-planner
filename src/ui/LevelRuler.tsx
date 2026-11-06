@@ -6,6 +6,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
 import { clearOf } from './color';
+import { useGlide } from './glide';
 import { T } from './T';
 
 /** Room per number: wide enough that a drag moves calmly, a number at a time. */
@@ -41,6 +42,8 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
   const { c } = useTheme();
   const ref = useAnimatedRef<Animated.ScrollView>();
   const x = useSharedValue((value - min) * TICK);
+  // Gliding to a number runs at the app's own pace, whatever the device's animation speed.
+  const slide = useGlide(ref, true);
   const [width, setWidth] = useState(0);
   // Only the first position goes in as a prop: Android re-applies contentOffset on every render.
   const [startX] = useState(() => (value - min) * TICK);
@@ -134,7 +137,7 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
         Haptics.selectionAsync().catch(() => {});
         if (WEB) glide.current = n;
         rest(n);
-        ref.current?.scrollTo({ x: (n - min) * TICK, animated: true });
+        slide.go((n - min) * TICK, x.get());
       },
       setDragging: (d: boolean) => {
         dragging.current = d;
@@ -143,11 +146,11 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
       // the number it rests on.
       settle: (at: number) => {
         const i = Math.max(0, Math.min(max - min, Math.round(at / TICK)));
-        if (Math.abs(at - i * TICK) > 0.5) ref.current?.scrollTo({ x: i * TICK, animated: true });
+        if (Math.abs(at - i * TICK) > 0.5) slide.go(i * TICK, at);
         rest(min + i);
       },
     };
-  }, [min, max, ref]);
+  }, [min, max, slide, x]);
 
   // Once laid out, sit on the value: the web ignores contentOffset, so it would open at the start.
   useEffect(() => {
@@ -162,16 +165,18 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
     emitted.current = value;
     settled.current = value;
     if (WEB) glide.current = value;
-    ref.current?.scrollTo({ x: (value - min) * TICK, animated: true });
-  }, [value, min, ref]);
+    slide.go((value - min) * TICK, x.get());
+  }, [value, min, slide, x]);
 
   const { emit, tick, settle, setDragging } = api;
   const onScroll = useAnimatedScrollHandler(
     {
       onScroll: (e) => {
-        x.value = e.contentOffset.x;
+        x.set(e.contentOffset.x);
       },
       onBeginDrag: () => {
+        // A finger takes over from any glide.
+        slide.stop();
         scheduleOnRN(setDragging, true);
       },
       onMomentumEnd: (e) => {

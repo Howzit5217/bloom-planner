@@ -32,6 +32,10 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ Baloo2_700Bold, Baloo2_800ExtraBold, Nunito_400Regular, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold });
   const ready = useApp((s) => s.ready);
   const hydrate = useApp((s) => s.hydrate);
+  // The screen's density: it changes with the phone's display size (Samsung's "Minimum width") or the
+  // browser's zoom. The app is drawn afresh then: the drawings kept their old size in pixels and showed
+  // cut off (the flower behind the level badge only a corner) until something else redrew them.
+  const { scale } = useWindowDimensions();
   // The drawn numbers' face too, so the first screen opens with its badges and numbers as they'll stay.
   const [numbers, setNumbers] = useState(false);
   useEffect(() => {
@@ -50,7 +54,7 @@ export default function RootLayout() {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
           <ThemeSwitchHost>
-            <Root />
+            <Root key={scale} />
           </ThemeSwitchHost>
         </ThemeProvider>
       </SafeAreaProvider>

@@ -64,7 +64,7 @@ export function PillButton({ label, onPress, variant = 'primary', icon, disabled
         })}
       >
         {icon ? <Icon name={icon} size={size === 'lg' ? 22 : 19} color={fg} /> : null}
-        <T style={{ fontFamily: font.heading, fontSize: size === 'lg' ? 20 : 17, lineHeight: size === 'lg' ? 26 : 22, color: fg }}>{label}</T>
+        <T style={{ fontFamily: font.heading, fontSize: size === 'lg' ? 20 : 17, lineHeight: size === 'lg' ? 26 : 22, color: fg, textAlign: 'center', flexShrink: 1 }}>{label}</T>
       </Pressable>
     </Animated.View>
   );

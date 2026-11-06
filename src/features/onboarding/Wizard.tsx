@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight, FadeInUp, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_MANUAL_RATES, type ClimateCache, type TempLimits } from '@/engine/climate';
@@ -55,6 +55,9 @@ const STEPS = 9;
 const sidePage = (step: number) => step >= 1 && step <= 7;
 /** Space above each page's content, inside the scroller. */
 const BODY_TOP = 12;
+/** The page's own space under its content, and the welcome's under its words. */
+const BODY_BOTTOM = 28;
+const WELCOME_PAD = 24;
 
 function Title({ children, sub }: { children: string; sub?: string }) {
   return (
@@ -107,6 +110,8 @@ export function Wizard() {
   const [todaySteps, setTodaySteps] = useState<number | null>(null);
   const [todayFlowers, setTodayFlowers] = useState<number | null>(null);
   const [showToday, setShowToday] = useState(false);
+  // Where the welcome's words end, down the page's area, so its flowers only take the room they leave.
+  const [welcomeEnd, setWelcomeEnd] = useState(0);
   const [goalLevel, setGoalLevel] = useState(2);
   const [goalDate, setGoalDate] = useState<DayKey | null>(null);
   // The goal (level and date) kept as it is after a verdict: past what's realistic, or too easy.
@@ -271,18 +276,20 @@ export function Wizard() {
     switch (step) {
       case 0:
         return (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 24, gap: 14 }}>
-            <BloomFlower size={Math.min(260, width * 0.64)} />
-            <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(900).duration(480)}>
-              <T v="display" center color={c.leafDeep}>
-                {t('Bloom Planner')}
-              </T>
-            </Animated.View>
-            <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(1080).duration(480)}>
-              <T v="body" center style={{ maxWidth: 340 }}>
-                {t("Enter your level and your goal. Every day you'll see whether you're on pace, and exactly what it'll take.")}
-              </T>
-            </Animated.View>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: WELCOME_PAD }}>
+            <View style={{ alignItems: 'center', gap: 14 }} onLayout={(e) => setWelcomeEnd(BODY_TOP + e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+              <BloomFlower size={Math.min(260, width * 0.64)} />
+              <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(900).duration(480)}>
+                <T v="display" center color={c.leafDeep}>
+                  {t('Bloom Planner')}
+                </T>
+              </Animated.View>
+              <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(1080).duration(480)}>
+                <T v="body" center style={{ maxWidth: 340 }}>
+                  {t("Enter your level and your goal. Every day you'll see whether you're on pace, and exactly what it'll take.")}
+                </T>
+              </Animated.View>
+            </View>
           </View>
         );
       case 1:
@@ -556,11 +563,19 @@ export function Wizard() {
       hide.remove();
     };
   }, []);
-  // The page's area and the whole screen as they are with the keyboard down: a sudden shrink of more
-  // than a keyboard's worth is the keyboard (on some phones the window shrinks before it says so).
+  // The page's area and the whole screen as they are with the keyboard down: while typing, a sudden
+  // shrink of more than a keyboard's worth is the keyboard (on some phones the window shrinks before it
+  // says so). Otherwise it's the window itself changing size (resized, or the display size changed),
+  // and the page follows it: held at the old size, the flowers stood over the buttons.
   const [restBox, setRestBox] = useState({ y: 0, h: 0 });
   const [rootH, setRootH] = useState(0);
-  const atRest = (prev: number, h: number) => prev === 0 || (!keyboardUp && h > prev - 120);
+  const typing = () => {
+    if (keyboardUp) return true;
+    // The app and the web name the focused-box lookup differently.
+    const state = TextInput.State as { currentlyFocusedInput?: () => unknown; currentlyFocusedField?: () => unknown };
+    return (state.currentlyFocusedInput?.() ?? state.currentlyFocusedField?.() ?? null) != null;
+  };
+  const atRest = (prev: number, h: number) => prev === 0 || h > prev - 120 || !typing();
   // The room a page leaves below its content (the welcome fills the screen, so it has its own).
   const [bodyH, setBodyH] = useState({ step: -1, h: 0 });
   const room = step !== 0 && bodyH.step === step && restBox.h > 0 ? restBox.h - BODY_TOP - bodyH.h - 10 : -1;
@@ -579,8 +594,12 @@ export function Wizard() {
     const id = setTimeout(() => setSprigRoom({ step, h: roomFor }), 450);
     return () => clearTimeout(id);
   }, [keyboardUp, roomFor, sprigMin, sprigRoom, step]);
-  const sprigH = step === 0 ? 130 : sprigRoom.step === step ? sprigRoom.h : 0;
-  const sprigsFit = step === 0 || (sprigH >= sprigMin && room >= sprigH - 6);
+  // The welcome's flowers: up to 130 tall, in the space its words leave below them, or none when that's
+  // too little, so they never stand over the words.
+  const welcomeBelow = restBox.h > 0 && welcomeEnd > 0 ? restBox.h - welcomeEnd - 8 : -1;
+  const welcomeSprig = welcomeBelow >= 90 ? Math.min(130, Math.floor(welcomeBelow)) : 0;
+  const sprigH = step === 0 ? welcomeSprig : sprigRoom.step === step ? sprigRoom.h : 0;
+  const sprigsFit = step === 0 ? welcomeSprig > 0 : sprigH >= sprigMin && room >= sprigH - 6;
   const sprigFade = useAnimatedStyle(() => ({ opacity: withTiming(sprigsFit ? 1 : 0, { duration: 220 }) }));
   // Where the flowers stand on the screen: along the bottom of the page's area at rest. With the
   // keyboard up, whatever would show above its top edge is clipped, so they never peek out over
@@ -610,7 +629,7 @@ export function Wizard() {
       const h = e.nativeEvent.layout.height;
       setRootH((prev) => (atRest(prev, h) ? h : prev));
     }}>
-      {(sprigH >= sprigMin || step === 0) && restBox.h > 0 ? (
+      {(step === 0 ? welcomeSprig > 0 : sprigH >= sprigMin) && restBox.h > 0 ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0, top: clipTop, height: Math.max(0, bandBottom - clipTop), overflow: 'hidden' }, sprigFade]}>
           <View style={{ position: 'absolute', left: 0, right: 0, top: bandTop - clipTop, height: sprigH }}>
             <FlowerSprigs key={`${step}-${sprigH}`} height={sprigH} sides={sidePage(step)} />
@@ -623,7 +642,7 @@ export function Wizard() {
           const { y, height } = e.nativeEvent.layout;
           setRestBox((prev) => (atRest(prev.h, height) ? { y, h: height } : prev));
         }}>
-          <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: 28, flexGrow: 1 }}>
+          <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: BODY_BOTTOM, flexGrow: 1 }}>
             <Animated.View key={step} entering={reduceMotion ? FadeIn.duration(160) : (dir > 0 ? FadeInRight : FadeInLeft).duration(300)} style={{ flex: 1 }}>
               {step === 0 ? body : <View onLayout={(e) => setBodyH({ step, h: e.nativeEvent.layout.height })}>{body}</View>}
             </Animated.View>

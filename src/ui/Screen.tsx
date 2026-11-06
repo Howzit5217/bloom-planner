@@ -19,6 +19,7 @@ import { CameraMeadow } from './skia/CameraMeadow';
 import { Meadow } from './skia/Meadow';
 import { Seedling } from './skia/Seedling';
 import { TAB_BAR_SPACE } from './TabBar';
+import { useGlide } from './glide';
 import { useT } from '@/i18n';
 
 /** Whether the app has shown its first page yet (that one doesn't slide in). */
@@ -169,16 +170,31 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   // The meadow's flowers sway only while Home is the page in view.
   const inView = useIsFocused();
   const tiltScroll = (frame.cy + 36) * TILT_SCROLL;
+  const meadow = backdrop === 'meadow';
   // Tied straight to the scroll, so it moves exactly as smoothly as the page does: a spring restarted
   // on every scroll event lagged, then caught up in little steps when events came unevenly. Easing
-  // in and out at the ends keeps the start and the finish soft.
+  // in and out at the ends keeps the start and the finish soft. Only Home's own scroll moves it: the
+  // other pages scrolled it too, and Home came back looking down at the field from the top.
+  const tiltAt = (y: number) => {
+    'worklet';
+    const k = Math.min(1, Math.max(0, y / tiltScroll));
+    return k * k * (3 - 2 * k) * 0.35 + k * 0.65;
+  };
   useAnimatedReaction(
     () => rail.y.value,
     (y) => {
-      const k = Math.min(1, Math.max(0, y / tiltScroll));
-      tilt.value = k * k * (3 - 2 * k) * 0.35 + k * 0.65;
+      if (meadow) tilt.value = tiltAt(y);
     },
   );
+  // Back on a page: on the web its scroller was let go while out of sight and comes back at the top, so
+  // the rail starts there again too; and Home's camera looks where Home is, whatever happened meanwhile.
+  useEffect(() => {
+    if (!inView) return;
+    if (Platform.OS === 'web') rail.y.set(0);
+    if (meadow) tilt.set(tiltAt(rail.y.get()));
+    // tiltAt only changes with the window's size, which a scroll catches up with anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, meadow, rail, tilt]);
   // The fade under the status bar is in the sky's colour while the sky is still up there, the
   // field's once the camera looks down: one gives way to the other, never both half-showing.
   const skyShare = useDerivedValue(() => Math.min(1, Math.max(0, horizonAt(frame, tilt.value) / (insets.top + 24))));
@@ -195,6 +211,8 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   );
   const scrolled = useAnimatedStyle(() => ({ opacity: fadeIn.value, transform: [{ translateY: (fadeIn.value - 1) * 12 }] }));
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // Lifting a box clear of the keyboard runs at the app's own pace, whatever the device's animation speed.
+  const lift = useGlide(scrollRef, false);
   // Typing: the box being typed in scrolls up clear of the keyboard, with room made below the page
   // so even the last box can rise above it. Only the page in view does this.
   const [keyboard, setKeyboard] = useState(0);
@@ -204,7 +222,7 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
       const input = TextInput.State.currentlyFocusedInput() as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | null;
       input?.measureInWindow?.((_x, y, _w, h) => {
         const over = y + h + KEYBOARD_GAP - keyboardTop;
-        if (over > 0) scrollRef.current?.scrollTo({ y: rail.y.get() + over, animated: true });
+        if (over > 0) lift.go(rail.y.get() + over, rail.y.get());
       });
     };
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
@@ -217,7 +235,7 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
       show.remove();
       hide.remove();
     };
-  }, [inView, rail, scrollRef]);
+  }, [inView, rail, lift]);
   const pullGrows = !!onRefresh && Platform.OS === 'ios';
   // By hand (Android, the web): at the top, a drag down eases the page down as the seedling grows;
   // let go past the line and it refreshes, short of it and everything springs back. Android follows
