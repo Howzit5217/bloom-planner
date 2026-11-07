@@ -1,0 +1,24 @@
+import { CATCH_UP_HOUR, planNotifications } from '../notifyPlan';
+import type { Dashboard } from '../summary';
+
+const prefs = { enabled: true, hour: 20, minute: 30, nudges: false, behind: false, milestones: false, lastBehindAlert: null, nudgeDates: [], lastMilestoneLevel: null };
+const dash = (over: Partial<Dashboard> = {}) =>
+  ({ today: '2026-11-07', phase: 'active', loggedToday: false, todayEntry: null, nextMilestone: null, standing: { verdict: 'onTrack', displayDays: 0 }, rates: { bikes: true }, ...over }) as unknown as Dashboard;
+const plan = (d: Dashboard, now = new Date(2026, 10, 7, 9, 0)) => planNotifications({ prefs, dash: d, seasonRates: new Array(12).fill(0.5), forecast: [], preset: 'normal', now });
+const mornings = (d: Dashboard) => plan(d).filter((n) => n.kind === 'catchup');
+
+describe('the morning reminder for a day not logged', () => {
+  it('asks at 8 the next morning, and every morning after while the app stays closed', () => {
+    const m = mornings(dash());
+    expect(m[0]).toMatchObject({ date: '2026-11-08', hour: CATCH_UP_HOUR, minute: 0 });
+    expect(m.map((n) => n.date)).toContain('2026-11-09');
+    // Never this morning: the app is open now.
+    expect(m.some((n) => n.date === '2026-11-07')).toBe(false);
+  });
+
+  it("doesn't ask about today once it's logged, nor once there's no plan to keep up with", () => {
+    expect(mornings(dash({ loggedToday: true })).some((n) => n.date === '2026-11-08')).toBe(false);
+    expect(mornings(dash({ phase: 'goalReached' } as Partial<Dashboard>))).toEqual([]);
+    expect(planNotifications({ prefs: { ...prefs, enabled: false }, dash: dash(), seasonRates: [], forecast: [], preset: 'normal', now: new Date() })).toEqual([]);
+  });
+});

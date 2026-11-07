@@ -1,5 +1,5 @@
 import { addDaysKey } from '../dates';
-import { doneFromToGo, looksLikeLevelUp, missedDay, rebalanceNext, stateBefore } from '../leftLog';
+import { doneFromToGo, looksLikeLevelUp, missedDay, rebalanceNext, stateBefore, toGoAtDayEnd } from '../leftLog';
 import { replayLog } from '../progress';
 import { questOf } from '../quest';
 import { entry, profile, reqOf, table } from './helpers';
@@ -99,5 +99,23 @@ describe("the What's Left log", () => {
     expect(missedDay(logged, '2026-11-04', '2026-11-10', addDaysKey)).toBe('2026-11-07');
     expect(missedDay(logged, '2026-11-08', '2026-11-10', addDaysKey)).toBe('2026-11-09');
     expect(missedDay(logged, '2026-11-10', '2026-11-10', addDaysKey)).toBeNull();
+  });
+});
+
+describe('logging an earlier day after being out today', () => {
+  it("puts today's walking back on the game's numbers, so it counts for today alone", () => {
+    // The game shows 600 steps to go now; 250 of them were walked today: 850 were left at the end of yesterday.
+    expect(toGoAtDayEnd(600, 250, 1000)).toBe(850);
+    // No further than the level can have to go.
+    expect(toGoAtDayEnd(900, 400, 1000)).toBe(1000);
+    // Nothing read yet, or nothing put in for today.
+    expect(toGoAtDayEnd(null, 250, 1000)).toBeNull();
+    expect(toGoAtDayEnd(600, null, 1000)).toBe(600);
+  });
+
+  it("works yesterday out from what's left once today's walking is back on", () => {
+    const yesterday = toGoAtDayEnd(600, 250, req(3)!.steps)!;
+    const before = { level: 2, steps: 0, flowers: 0 };
+    expect(doneFromToGo(before, 2, 'steps', yesterday, req)).toBe(150);
   });
 });

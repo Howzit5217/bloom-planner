@@ -8,6 +8,7 @@ import { severeName } from '@/engine/severe';
 import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, showsWeekCard, StreakCard, TimeCard, WeekCard } from '@/features/home/Cards';
 import { CustomGoalCard, NewGoalCard, showsCustomGoal, showsNewGoal } from '@/features/home/NewGoal';
 import { keptExtremeKey } from '@/features/shared/Difficulty';
+import { MissedDaySheet } from '@/features/home/MissedDaySheet';
 import { TodayCard } from '@/features/home/TodayCard';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
 import { updateLabel } from '@/features/shared/UpdatePrompt';
@@ -189,30 +190,34 @@ export default function Home() {
   ].filter((card): card is React.ReactElement => card != null);
 
   return (
-    <Screen
-      backdrop="meadow"
-      onRefresh={async () => {
-        refreshToday();
-        if (settings.updates.enabled) await runUpdateCheck().catch(() => {});
-        await scheduleNotifications().catch(() => {});
-      }}
-    >
-      {cards.map((card, i) => {
-        const key = (card as { key: string }).key ?? String(i);
-        const shown = (
-          <StaggerIn key={key} index={i} page="home">
-            {card}
-          </StaggerIn>
-        );
-        // A banner folds away when it's put away, and what's below moves up to close the gap.
-        return bannerKeys.has(key) ? (
-          <Reveal key={key} open={!closing[key]} gap={16} onClosed={() => folded(key)}>
-            {shown}
-          </Reveal>
-        ) : (
-          shown
-        );
-      })}
-    </Screen>
+    <>
+      <Screen
+        backdrop="meadow"
+        onRefresh={async () => {
+          refreshToday();
+          if (settings.updates.enabled) await runUpdateCheck().catch(() => {});
+          await scheduleNotifications().catch(() => {});
+        }}
+      >
+        {cards.map((card, i) => {
+          const key = (card as { key: string }).key ?? String(i);
+          const shown = (
+            <StaggerIn key={key} index={i} page="home">
+              {card}
+            </StaggerIn>
+          );
+          // A banner folds away when it's put away, and what's below moves up to close the gap.
+          return bannerKeys.has(key) ? (
+            <Reveal key={key} open={!closing[key]} gap={16} onClosed={() => folded(key)}>
+              {shown}
+            </Reveal>
+          ) : (
+            shown
+          );
+        })}
+      </Screen>
+      {/* A day gone by with nothing logged: asked for once, on coming back. */}
+      <MissedDaySheet dash={dash} />
+    </>
   );
 }

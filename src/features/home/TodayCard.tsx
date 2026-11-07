@@ -9,7 +9,7 @@ import { TextInput } from 'react-native-gesture-handler';
 import { addDaysKey, fromKey, type DayKey } from '@/engine/dates';
 import { isEasyDay } from '@/engine/rhythm';
 import { fmt, fmtLongDay, roundNice } from '@/engine/format';
-import { doneFromToGo, looksLikeLevelUp, missedDay, rebalanceNext, stateBefore } from '@/engine/leftLog';
+import { doneFromToGo, looksLikeLevelUp, missedDay, rebalanceNext, stateBefore, toGoAtDayEnd } from '@/engine/leftLog';
 import { questOf } from '@/engine/quest';
 import type { Dashboard } from '@/engine/summary';
 import type { DayEntry, OutMode } from '@/engine/types';
@@ -47,7 +47,15 @@ export function TodayCard({ dash, levelUpRequest }: Props) {
   return <DayCard key={date} dash={dash} date={date} levelUpRequest={day ? 0 : levelUpRequest} onPickDay={(k) => setDay(k === dash.today ? null : k)} />;
 }
 
-function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayKey; onPickDay: (k: DayKey) => void }) {
+/**
+ * The log for one earlier day on its own, for the sheet that asks for a missed day: the same as the
+ * card's (a screenshot or the numbers), without the card round it or the way to other days.
+ */
+export function DayLog({ dash, date, onSaved }: { dash: Dashboard; date: DayKey; onSaved?: () => void }) {
+  return <DayCard dash={dash} date={date} levelUpRequest={0} onPickDay={() => {}} bare onSaved={onSaved} />;
+}
+
+function DayCard({ dash, date, levelUpRequest, onPickDay, bare, onSaved }: Props & { date: DayKey; onPickDay: (k: DayKey) => void; bare?: boolean; onSaved?: () => void }) {
   const { c } = useTheme();
   const { t } = useT();
   const save = useApp((s) => s.saveEntry);
@@ -79,6 +87,11 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const [syncFlowers, setSyncFlowers] = useState<number | null>(draft ? draft.syncFlowers : (existing?.gameFlowersToGo ?? null));
   const [questLeft, setQuestLeft] = useState<number | null>(draft ? draft.questLeft : (existing?.gameTaskToGo ?? null));
   const [note, setNote] = useState(draft ? draft.note : (existing?.note ?? ''));
+  // Logging an earlier day from the game's numbers now: once today's walking is in them, today's
+  // steps and flowers so far are taken back out, so they count for today alone.
+  const [outToday, setOutToday] = useState(false);
+  const [todaySteps, setTodaySteps] = useState<number | null>(null);
+  const [todayFlowers, setTodayFlowers] = useState<number | null>(null);
   // While the log is open, what's in it is kept as the day's draft.
   useEffect(() => {
     if (editing) keepDraft(date, { steps, flowers, leveled, newLevel, minutes, mode, syncSteps, syncFlowers, questLeft, note });
@@ -112,10 +125,16 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   // Numbers to go fit within this level or the next (the game may already be on the next one).
   const maxToGo = (kind: 'steps' | 'flowers') => Math.max(forReq?.[kind] ?? 0, dash.req(forLevel + 1)?.[kind] ?? 0);
   const missed = profile && isToday ? missedDay(entries, profile.startDate, dash.today, addDaysKey) : null;
+  // What was still to go at the end of the day being logged: the game's numbers now, plus today's
+  // walking where it's already in them.
+  const outShown = !isToday && (leftMode || syncSteps != null || syncFlowers != null);
+  const backOut = (toGo: number | null, soFar: number | null, kind: 'steps' | 'flowers') => (outShown && outToday ? toGoAtDayEnd(toGo, soFar, maxToGo(kind)) : toGo);
+  const stepsToGo = backOut(syncSteps, todaySteps, 'steps');
+  const flowersToGo = backOut(syncFlowers, todayFlowers, 'flowers');
 
   const submit = async (o: { check?: boolean } = {}) => {
     const up = leveled;
-    if (!up && o.check !== false && looksLikeLevelUp(before, taskBefore, dash.req, { steps: stepsToday ? null : syncSteps, flowers: syncFlowers, task: quest ? questLeft : null })) {
+    if (!up && o.check !== false && looksLikeLevelUp(before, taskBefore, dash.req, { steps: stepsToday ? null : stepsToGo, flowers: flowersToGo, task: quest ? questLeft : null })) {
       setAskLevelUp(true);
       return;
     }
@@ -125,16 +144,16 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
     const done = (kind: 'steps' | 'flowers', toGo: number | null, fallback: number) => (toGo == null ? fallback : doneFromToGo(before, toLevel, kind, toGo, dash.req) + (setupDay ? (kind === 'steps' ? profile.setupTodaySteps : profile.setupTodayFlowers) : 0));
     const entry: DayEntry = {
       date,
-      steps: leftMode && !stepsToday ? done('steps', syncSteps, existing?.steps ?? 0) : (steps ?? 0),
-      flowers: leftMode ? done('flowers', syncFlowers, existing?.flowers ?? 0) : (flowers ?? 0),
+      steps: leftMode && !stepsToday ? done('steps', stepsToGo, existing?.steps ?? 0) : (steps ?? 0),
+      flowers: leftMode ? done('flowers', flowersToGo, existing?.flowers ?? 0) : (flowers ?? 0),
       leveledUp: up,
       newLevel: up ? newLevel : null,
       note: note.trim() ? note.trim() : null,
       minutesOut: minutes,
       outMode: minutes ? mode : null,
       // Numbers to go belong to a next level; at the top level there is none.
-      gameStepsToGo: forReq && !stepsToday ? syncSteps : null,
-      gameFlowersToGo: forReq ? syncFlowers : null,
+      gameStepsToGo: forReq && !stepsToday ? stepsToGo : null,
+      gameFlowersToGo: forReq ? flowersToGo : null,
       gameTaskToGo: questOf(dash.req(toLevel + 1)?.task) ? (questLeft ?? (quest?.kind === 'seedling' ? 1 : null)) : null,
     };
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -147,6 +166,8 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
     setAskLevelUp(false);
     setEditing(false);
     setMore(false);
+    setOutToday(false);
+    onSaved?.();
   };
 
   const tg = dash.target;
@@ -188,9 +209,9 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const shownQuest = questOf(dash.req((existing?.leveledUp ? (existing.newLevel ?? baseLevel + 1) : baseLevel) + 1)?.task);
   const questBox = existing?.gameTaskToGo != null && shownQuest && shownQuest.kind !== 'seedling' ? <Logged icon={QUEST_ICON[shownQuest.kind]} value={existing.gameTaskToGo} label={questToGoLabel(shownQuest.kind)} color={c.leafDeep} /> : null;
 
-  return (
-    <Card style={{ overflow: 'visible' }}>
-      <View onLayout={(e) => setSize((s) => ({ ...s, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }))}>
+  const body = (
+    <View onLayout={(e) => setSize((s) => ({ ...s, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }))}>
+      {bare ? null : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
           <T v="h2" accessibilityRole="header" style={{ flexShrink: 1 }}>
             {isToday ? t('Today') : fmtLongDay(date)}
@@ -205,195 +226,220 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
             </Pressable>
           )}
         </View>
-        {!editing && existing ? (
-          <View style={{ gap: 12 }}>
-            {left && (existing.gameStepsToGo != null || existing.gameFlowersToGo != null || existing.gameTaskToGo != null) ? (
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {existing.gameStepsToGo != null ? <Logged icon="shoe-print" value={existing.gameStepsToGo} label={t('Steps to go')} color={c.teal} /> : <Logged icon="shoe-print" value={existing.steps} label={t('steps')} color={c.teal} />}
-                {existing.gameFlowersToGo != null ? <Logged icon="flower" value={existing.gameFlowersToGo} label={t('Flowers to go')} color={c.petalRed} /> : null}
-                {questBox}
-              </View>
-            ) : (
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <Logged icon="shoe-print" value={existing.steps} label={t('steps')} color={c.teal} />
-                <Logged icon="flower" value={existing.flowers} label={t('flowers')} color={c.petalRed} />
-                {questBox}
-              </View>
-            )}
-            {existing.leveledUp ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Icon name="party-popper" size={20} color={c.nectar} />
-                <T v="bodyBold">{t('Leveled up to {level}', { level: existing.newLevel ?? '' })}</T>
-              </View>
-            ) : null}
-            <PillButton label={isToday ? t('Edit today') : t('Edit this day')} variant="secondary" icon="pencil" size="md" onPress={() => setEditing(true)} />
-          </View>
-        ) : (
-          <View style={{ gap: 14 }}>
-            {/* A profile screenshot fills in what's left, and a level-up if the game is past the log. */}
-            <ScreenshotButton
-              name={profile?.playerName ?? null}
-              onName={(n) => void updateProfile({ playerName: n })}
-              req={dash.req}
-              maxLevel={maxLevel}
-              onRead={(shot) => {
-                if (shot.level != null && shot.level > baseLevel) {
-                  setLeveled(true);
-                  setNewLevel(Math.min(maxLevel, shot.level));
-                }
-                if (shot.stepsToGo != null && shot.stepsToGo > 0) setSyncSteps(shot.stepsToGo);
-                if (shot.flowersToGo != null) setSyncFlowers(shot.flowersToGo);
-                if (shot.quest) setQuestLeft(shot.quest.toGo);
-                // The daily log keeps these under More, in Match the game.
-                if (!left) setMore(true);
-              }}
-            />
-            {!isToday && profile ? <DateField label={t('Day')} value={date} onChange={onPickDay} minimumDate={fromKey(profile.startDate)} maximumDate={fromKey(dash.today)} /> : null}
-            {targetLine ? (
-              <Rich v="small" soft>
-                {targetLine}
-              </Rich>
-            ) : null}
-            {isToday && weatherLine ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Icon name={weatherLine.icon} size={18} color={c.leafDeep} />
-                <T v="small" soft style={{ flex: 1 }}>
-                  {weatherLine.text}
-                </T>
-              </View>
-            ) : null}
-            {leftMode && forReq ? (
-              <>
-                <T v="smallBold" soft>
-                  {t('Toward Level {level}', { level: forLevel })}
-                </T>
-                {forReq.steps > 0 ? (
-                  stepsToday ? (
-                    <NumberField label={isToday ? t('Steps today') : t('Steps that day')} value={steps} onChange={setSteps} size="xl" />
-                  ) : (
-                    <NumberField label={t('Steps to go')} value={syncSteps} onChange={setSyncSteps} size="xl" max={maxToGo('steps')} />
-                  )
-                ) : null}
-                {forReq.flowers > 0 ? <NumberField label={t('Flowers to go')} value={syncFlowers} onChange={setSyncFlowers} size="xl" max={maxToGo('flowers')} /> : null}
-              </>
-            ) : (
-              <>
-                <NumberField label={isToday ? t('Steps today') : t('Steps that day')} value={steps} onChange={setSteps} size="xl" />
-                <NumberField label={isToday ? t('Flowers today') : t('Flowers that day')} value={flowers} onChange={setFlowers} size="xl" />
-              </>
-            )}
-            {/* The level's quest (mushrooms, expeditions, ...): the count the game shows still to go. */}
-            {forReq && quest?.kind === 'seedling' ? (
-              <Toggle label={questToGoLabel('seedling')} hint={taskText(forReq.task)} value={questLeft === 0} onChange={(b) => setQuestLeft(b ? 0 : 1)} />
-            ) : forReq && quest ? (
-              <NumberField label={questToGoLabel(quest.kind)} hint={taskText(forReq.task)} value={questLeft} onChange={setQuestLeft} size="lg" max={quest.count} />
-            ) : null}
-            <Toggle label={t('Leveled Up!')} value={leveled} onChange={setLeveled} hint={leveled ? t('The level the game shows now.') : undefined} />
-            <Reveal open={leveled} gap={14}>
-              <View style={{ gap: 8 }}>
-                <Stepper label={t('New level')} value={newLevel} min={Math.min(maxLevel, baseLevel + 1)} max={maxLevel} onChange={setNewLevel} size={56} />
-                <T v="caption" soft center>
-                  {newLevel > 100 ? t('Flowers start again from zero for the new level, and so do steps.') : t('Flowers start again from zero for the new level.')}
-                </T>
-              </View>
-            </Reveal>
-            <Pressable accessibilityRole="button" onPress={() => setMore((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }}>
-              <Icon name={more ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
-              <T v="smallBold" color={c.leafDeep}>
-                {t('More (optional)')}
+      )}
+      {!editing && existing ? (
+        <View style={{ gap: 12 }}>
+          {left && (existing.gameStepsToGo != null || existing.gameFlowersToGo != null || existing.gameTaskToGo != null) ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {existing.gameStepsToGo != null ? <Logged icon="shoe-print" value={existing.gameStepsToGo} label={t('Steps to go')} color={c.teal} /> : <Logged icon="shoe-print" value={existing.steps} label={t('steps')} color={c.teal} />}
+              {existing.gameFlowersToGo != null ? <Logged icon="flower" value={existing.gameFlowersToGo} label={t('Flowers to go')} color={c.petalRed} /> : null}
+              {questBox}
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Logged icon="shoe-print" value={existing.steps} label={t('steps')} color={c.teal} />
+              <Logged icon="flower" value={existing.flowers} label={t('flowers')} color={c.petalRed} />
+              {questBox}
+            </View>
+          )}
+          {existing.leveledUp ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon name="party-popper" size={20} color={c.nectar} />
+              <T v="bodyBold">{t('Leveled up to {level}', { level: existing.newLevel ?? '' })}</T>
+            </View>
+          ) : null}
+          <PillButton label={isToday ? t('Edit today') : t('Edit this day')} variant="secondary" icon="pencil" size="md" onPress={() => setEditing(true)} />
+        </View>
+      ) : (
+        <View style={{ gap: 14 }}>
+          {/* A profile screenshot fills in what's left, and a level-up if the game is past the log. */}
+          <ScreenshotButton
+            name={profile?.playerName ?? null}
+            onName={(n) => void updateProfile({ playerName: n })}
+            req={dash.req}
+            maxLevel={maxLevel}
+            onRead={(shot) => {
+              if (shot.level != null && shot.level > baseLevel) {
+                setLeveled(true);
+                setNewLevel(Math.min(maxLevel, shot.level));
+              }
+              if (shot.stepsToGo != null && shot.stepsToGo > 0) setSyncSteps(shot.stepsToGo);
+              if (shot.flowersToGo != null) setSyncFlowers(shot.flowersToGo);
+              if (shot.quest) setQuestLeft(shot.quest.toGo);
+              // The daily log keeps these under More, in Match the game.
+              if (!left) setMore(true);
+            }}
+          />
+          {!isToday && profile && !bare ? <DateField label={t('Day')} value={date} onChange={onPickDay} minimumDate={fromKey(profile.startDate)} maximumDate={fromKey(dash.today)} /> : null}
+          {targetLine ? (
+            <Rich v="small" soft>
+              {targetLine}
+            </Rich>
+          ) : null}
+          {isToday && weatherLine ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon name={weatherLine.icon} size={18} color={c.leafDeep} />
+              <T v="small" soft style={{ flex: 1 }}>
+                {weatherLine.text}
               </T>
-            </Pressable>
-            <Reveal open={more} gap={14}>
-              <View style={{ gap: 14 }}>
-                <NumberField label={t('Minutes out planting')} value={minutes} onChange={setMinutes} size="md" hint={t('Helps work out your real planting rate.')} max={1440} />
-                <Reveal open={!!minutes} gap={14}>
-                  <Segmented
-                    label={t('Mostly')}
-                    value={mode}
-                    onChange={setMode}
-                    options={[
-                      { key: 'bike', label: t('Mostly biking') },
-                      { key: 'walk', label: t('Mostly walking') },
-                    ]}
-                  />
-                </Reveal>
-                {/* Matching the game is the whole of the What's Left log; this is for the daily one. */}
-                {leftMode ? null : (
-                  <Card variant="deep" style={{ gap: 10 }}>
-                    <T v="smallBold">{t('Match the game')}</T>
-                    <T v="caption" soft>
-                      {leveled ? t('If your profile shows different numbers to go for Level {level}, enter them here to replace the estimate.', { level: newLevel + 1 }) : t('If your profile shows different numbers to go, enter them here to replace the estimate.')}
-                    </T>
-                    <NumberField label={t('Steps to go')} value={syncSteps} onChange={setSyncSteps} size="md" />
-                    <NumberField label={t('Flowers to go')} value={syncFlowers} onChange={setSyncFlowers} size="md" />
-                  </Card>
-                )}
-                <View>
-                  <T v="label" soft style={{ marginBottom: 6 }}>
-                    {t('Note')}
+            </View>
+          ) : null}
+          {leftMode && forReq ? (
+            <>
+              <T v="smallBold" soft>
+                {t('Toward Level {level}', { level: forLevel })}
+              </T>
+              {forReq.steps > 0 ? (
+                stepsToday ? (
+                  <NumberField label={isToday ? t('Steps today') : t('Steps that day')} value={steps} onChange={setSteps} size="xl" />
+                ) : (
+                  <NumberField label={t('Steps to go')} value={syncSteps} onChange={setSyncSteps} size="xl" max={maxToGo('steps')} />
+                )
+              ) : null}
+              {forReq.flowers > 0 ? <NumberField label={t('Flowers to go')} value={syncFlowers} onChange={setSyncFlowers} size="xl" max={maxToGo('flowers')} /> : null}
+            </>
+          ) : (
+            <>
+              <NumberField label={isToday ? t('Steps today') : t('Steps that day')} value={steps} onChange={setSteps} size="xl" />
+              <NumberField label={isToday ? t('Flowers today') : t('Flowers that day')} value={flowers} onChange={setFlowers} size="xl" />
+            </>
+          )}
+          {outShown ? (
+            <>
+              <Toggle label={t('Been Out Today Already')} value={outToday} onChange={setOutToday} hint={outToday ? undefined : t("Turn this on if you've walked or ridden today: the game's numbers then include today.")} />
+              <Reveal open={outToday} gap={14}>
+                <View style={{ gap: 10 }}>
+                  <T v="caption" soft>
+                    {t("Put in today's steps and flowers so far, from the game. They're taken back out of its numbers, so they count for today, not this day.")}
                   </T>
-                  <TextInput
-                    accessibilityLabel={t('Note')}
-                    value={note}
-                    onChangeText={setNote}
-                    placeholder={t('Big Flower day, rainy walk…')}
-                    placeholderTextColor={c.inkSoft + '99'}
-                    multiline
-                    maxLength={280}
-                    style={{ minHeight: 52, borderRadius: radius.field, backgroundColor: c.canvasDeep, padding: 14, fontFamily: font.body, fontSize: 16, color: c.ink }}
-                  />
+                  <NumberField label={t('Steps so far today')} value={todaySteps} onChange={setTodaySteps} size="md" />
+                  <NumberField label={t('Flowers so far today')} value={todayFlowers} onChange={setTodayFlowers} size="md" />
                 </View>
-              </View>
-            </Reveal>
-            {askLevelUp && !leveled ? (
-              // The numbers to go went up: usually the game has moved on to the next level.
-              <Card variant="deep" style={{ gap: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Icon name="party-popper" size={22} color={c.nectar} />
-                  <T v="bodyBold" style={{ flex: 1 }}>
-                    {t('More to go than before. Did you level up?')}
-                  </T>
-                </View>
-                <PillButton
-                  label={t('Yes, leveled up')}
-                  icon="party-popper"
-                  size="md"
-                  onPress={() => {
-                    setLeveled(true);
-                    setNewLevel(baseLevel + 1);
-                    setAskLevelUp(false);
-                  }}
-                />
-                <PillButton label={t('No, save as is')} variant="ghost" size="md" onPress={() => void submit({ check: false })} />
-              </Card>
-            ) : (
-              <View onLayout={(e) => setSize((s) => ({ ...s, bx: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, by: e.nativeEvent.layout.y + 20 }))}>
-                <PillButton label={existing ? t('Save changes') : isToday ? t('Log today') : t('Log this day')} icon="sprout" onPress={() => void submit()} disabled={!canLog} haptic={false} />
-              </View>
-            )}
-            {existing ? (
-              <PillButton
-                label={t('Cancel')}
-                variant="ghost"
-                size="sm"
-                onPress={() => {
-                  dropDraft(date);
-                  setEditing(false);
-                }}
-              />
-            ) : null}
-          </View>
-        )}
-        {missed ? (
-          <Pressable accessibilityRole="button" onPress={() => onPickDay(missed)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, marginTop: 6 }}>
-            <Icon name="calendar-plus" size={20} color={c.leafDeep} />
+              </Reveal>
+            </>
+          ) : null}
+          {/* The level's quest (mushrooms, expeditions, ...): the count the game shows still to go. */}
+          {forReq && quest?.kind === 'seedling' ? (
+            <Toggle label={questToGoLabel('seedling')} hint={taskText(forReq.task)} value={questLeft === 0} onChange={(b) => setQuestLeft(b ? 0 : 1)} />
+          ) : forReq && quest ? (
+            <NumberField label={questToGoLabel(quest.kind)} hint={taskText(forReq.task)} value={questLeft} onChange={setQuestLeft} size="lg" max={quest.count} />
+          ) : null}
+          <Toggle label={t('Leveled Up!')} value={leveled} onChange={setLeveled} hint={leveled ? t('The level the game shows now.') : undefined} />
+          <Reveal open={leveled} gap={14}>
+            <View style={{ gap: 8 }}>
+              <Stepper label={t('New level')} value={newLevel} min={Math.min(maxLevel, baseLevel + 1)} max={maxLevel} onChange={setNewLevel} size={56} />
+              <T v="caption" soft center>
+                {newLevel > 100 ? t('Flowers start again from zero for the new level, and so do steps.') : t('Flowers start again from zero for the new level.')}
+              </T>
+            </View>
+          </Reveal>
+          <Pressable accessibilityRole="button" onPress={() => setMore((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }}>
+            <Icon name={more ? 'chevron-down' : 'chevron-right'} size={22} color={c.leafDeep} />
             <T v="smallBold" color={c.leafDeep}>
-              {entries.some((e) => e.date === missed) ? t('Edit an Earlier Day') : t('Fill In a Missed Day')}
+              {t('More (optional)')}
             </T>
           </Pressable>
-        ) : null}
-      </View>
-      <PetalBurst trigger={burst} width={size.w + 36} height={size.h + 36} originX={size.bx + 18} originY={size.by + 18} />
+          <Reveal open={more} gap={14}>
+            <View style={{ gap: 14 }}>
+              <NumberField label={t('Minutes out planting')} value={minutes} onChange={setMinutes} size="md" hint={t('Helps work out your real planting rate.')} max={1440} />
+              <Reveal open={!!minutes} gap={14}>
+                <Segmented
+                  label={t('Mostly')}
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    { key: 'bike', label: t('Mostly biking') },
+                    { key: 'walk', label: t('Mostly walking') },
+                  ]}
+                />
+              </Reveal>
+              {/* Matching the game is the whole of the What's Left log; this is for the daily one. */}
+              {leftMode ? null : (
+                <Card variant="deep" style={{ gap: 10 }}>
+                  <T v="smallBold">{t('Match the game')}</T>
+                  <T v="caption" soft>
+                    {leveled ? t('If your profile shows different numbers to go for Level {level}, enter them here to replace the estimate.', { level: newLevel + 1 }) : t('If your profile shows different numbers to go, enter them here to replace the estimate.')}
+                  </T>
+                  <NumberField label={t('Steps to go')} value={syncSteps} onChange={setSyncSteps} size="md" />
+                  <NumberField label={t('Flowers to go')} value={syncFlowers} onChange={setSyncFlowers} size="md" />
+                </Card>
+              )}
+              <View>
+                <T v="label" soft style={{ marginBottom: 6 }}>
+                  {t('Note')}
+                </T>
+                <TextInput
+                  accessibilityLabel={t('Note')}
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder={t('Big Flower day, rainy walk…')}
+                  placeholderTextColor={c.inkSoft + '99'}
+                  multiline
+                  maxLength={280}
+                  style={{ minHeight: 52, borderRadius: radius.field, backgroundColor: c.canvasDeep, padding: 14, fontFamily: font.body, fontSize: 16, color: c.ink }}
+                />
+              </View>
+            </View>
+          </Reveal>
+          {askLevelUp && !leveled ? (
+            // The numbers to go went up: usually the game has moved on to the next level.
+            <Card variant="deep" style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Icon name="party-popper" size={22} color={c.nectar} />
+                <T v="bodyBold" style={{ flex: 1 }}>
+                  {t('More to go than before. Did you level up?')}
+                </T>
+              </View>
+              <PillButton
+                label={t('Yes, leveled up')}
+                icon="party-popper"
+                size="md"
+                onPress={() => {
+                  setLeveled(true);
+                  setNewLevel(baseLevel + 1);
+                  setAskLevelUp(false);
+                }}
+              />
+              <PillButton label={t('No, save as is')} variant="ghost" size="md" onPress={() => void submit({ check: false })} />
+            </Card>
+          ) : (
+            <View onLayout={(e) => setSize((s) => ({ ...s, bx: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, by: e.nativeEvent.layout.y + 20 }))}>
+              <PillButton label={existing ? t('Save changes') : isToday ? t('Log today') : t('Log this day')} icon="sprout" onPress={() => void submit()} disabled={!canLog} haptic={false} />
+            </View>
+          )}
+          {existing ? (
+            <PillButton
+              label={t('Cancel')}
+              variant="ghost"
+              size="sm"
+              onPress={() => {
+                dropDraft(date);
+                setEditing(false);
+              }}
+            />
+          ) : null}
+        </View>
+      )}
+      {missed ? (
+        <Pressable accessibilityRole="button" onPress={() => onPickDay(missed)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, marginTop: 6 }}>
+          <Icon name="calendar-plus" size={20} color={c.leafDeep} />
+          <T v="smallBold" color={c.leafDeep}>
+            {entries.some((e) => e.date === missed) ? t('Edit an Earlier Day') : t('Fill In a Missed Day')}
+          </T>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+  const burstAt = <PetalBurst trigger={burst} width={size.w + 36} height={size.h + 36} originX={size.bx + 18} originY={size.by + 18} />;
+  return bare ? (
+    <View>
+      {body}
+      {burstAt}
+    </View>
+  ) : (
+    <Card style={{ overflow: 'visible' }}>
+      {body}
+      {burstAt}
     </Card>
   );
 }

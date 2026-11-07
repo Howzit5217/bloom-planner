@@ -128,3 +128,8 @@ export async function pickScreenshotText(): Promise<ScreenshotText> {
     return { error: 'failed' };
   }
 }
+
+/** The web version only reads a screenshot picked on the spot (pickScreenshotText). */
+export async function readScreenshotText(_uri: string): Promise<ScreenshotText> {
+  return { error: 'unsupported' };
+}

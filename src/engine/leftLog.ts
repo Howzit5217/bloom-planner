@@ -65,3 +65,13 @@ export function missedDay(entries: DayEntry[], startDate: DayKey, today: DayKey,
   for (let k = yesterday, i = 0; k >= startDate && i < 1000; k = addDays(k, -1), i++) if (!logged.has(k)) return k;
   return yesterday;
 }
+
+/**
+ * What was still to go at the end of an earlier day, from the game's numbers now (`toGo`): with
+ * today's walking already in them, today's so far (`soFar`) goes back on, no further than the most
+ * the level can have to go (`most`).
+ */
+export function toGoAtDayEnd(toGo: number | null, soFar: number | null, most: number): number | null {
+  if (toGo == null) return null;
+  return Math.min(most, toGo + Math.max(0, soFar ?? 0));
+}

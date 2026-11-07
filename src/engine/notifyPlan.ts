@@ -24,7 +24,7 @@ export interface ForecastLite {
   wind: number;
 }
 
-export type NotifyKind = 'daily' | 'nudge' | 'behind' | 'milestone';
+export type NotifyKind = 'daily' | 'nudge' | 'behind' | 'milestone' | 'catchup';
 
 export interface PlannedNotification {
   date: DayKey;
@@ -49,6 +49,8 @@ export interface Schedulable {
 
 export const NOTIFY_HORIZON_DAYS = 14;
 const NUDGE_HOUR = 9;
+/** The morning after a day with nothing logged, a reminder to put it in, at 8. */
+export const CATCH_UP_HOUR = 8;
 
 /** A clear day for a ride: dry, calm, and inside the player's hot and cold limits (else the preset's). */
 const isClear = (f: ForecastLite, preset: ThresholdPreset, limits?: TempLimits) => {
@@ -60,7 +62,8 @@ const isClear = (f: ForecastLite, preset: ThresholdPreset, limits?: TempLimits) 
 
 /**
  * §8 Local notifications, at most one per day, never guilt-tripping.
- * Priority on any day: milestone > behind-pace > ride nudge > daily reminder.
+ * Priority on any day: milestone > behind-pace > ride nudge > daily reminder. Besides those, the
+ * morning after a day with nothing logged, one at 8 asking for it.
  * Pure: the caller schedules the result and records what was used.
  */
 /** Translator hooks: the app passes its own; tests and the default use plain English. */
@@ -157,6 +160,16 @@ export function planNotifications(args: {
       pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: t("How'd Today Go?"), body: t('Pop in your steps and flowers.') };
     }
     out.push(pick);
+  }
+
+  // The morning after a day with nothing logged, a reminder at 8 to put it in, for as long as the
+  // app stays closed. Opening it plans these again, so a day logged meanwhile goes unasked, and so
+  // does any morning the app has been opened on already (today's is never planned).
+  if (active) {
+    for (let i = 1; i < NOTIFY_HORIZON_DAYS; i++) {
+      if (i === 1 && dash.loggedToday) continue;
+      out.push({ date: addDaysKey(today, i), hour: CATCH_UP_HOUR, minute: 0, kind: 'catchup', title: t('Log Yesterday'), body: t("Yesterday's steps and flowers aren't in yet. Put them in to stay on track.") });
+    }
   }
   return out;
 }

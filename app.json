@@ -32,7 +32,8 @@
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -85,6 +86,16 @@
           "color": "#3C7A3E"
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Bloom Planner finds the screenshot you just took in Pikmin Bloom, to read your level and what's left. It stays on your phone.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["photo"]
+        }
+      ],
+      "./plugins/withPikminQuery",
       "./plugins/withReleaseSigning"
     ],
     "experiments": {

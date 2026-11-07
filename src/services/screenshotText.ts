@@ -79,15 +79,20 @@ function dropCopies(uris: string[]) {
   }
 }
 
-/**
- * Pick a screenshot and read its text on the phone (Google ML Kit on Android, Apple Vision on
- * iOS): the screenshot as it is, then the cleaned-up copies of the name's part of it. The picture
- * never leaves the phone. Expo Go has no text reader, so it says so there.
- */
+/** Pick a screenshot and read it (readScreenshotText). */
 export async function pickScreenshotText(): Promise<ScreenshotText> {
   const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
   const uri = picked.canceled ? null : picked.assets?.[0]?.uri;
   if (!uri) return { error: 'canceled' };
+  return readScreenshotText(uri);
+}
+
+/**
+ * Read a screenshot's text on the phone (Google ML Kit on Android, Apple Vision on iOS): the
+ * screenshot as it is, then the cleaned-up copies of the name's part of it. The picture never
+ * leaves the phone. Expo Go has no text reader, so it says so there.
+ */
+export async function readScreenshotText(uri: string): Promise<ScreenshotText> {
   let reader: typeof import('expo-text-extractor');
   try {
     reader = await import('expo-text-extractor');
