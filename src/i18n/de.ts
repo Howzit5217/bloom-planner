@@ -356,6 +356,7 @@ export const de: Dict = {
   "Severe Weather Tomorrow": "Unwetter morgen",
   "Severe thunderstorms": "Schwere Gewitter",
   "Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.": "Heute Unwetter. Pass auf dich auf: Der Plan verlangt sehr wenig, die anderen Tage gleichen es aus.",
+  "Severe weather today. Stay in: the steps can be walked indoors, and the flowers move to better days.": "Heute Unwetter. Bleib drinnen: Die Schritte gehen auch drinnen, die Blumen wandern auf bessere Tage.",
   "Skip and set the months by hand": "Überspringen und Monate von Hand einstellen",
   "Skip: treat every day as rideable": "Überspringen: Jeder Tag ist ein Radtag",
   "Slide the ruler, or tap the number to type it.": "Schieb das Lineal oder tippe auf die Zahl, um sie einzugeben.",

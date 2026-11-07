@@ -356,6 +356,7 @@ export const ja: Dict = {
   "Severe Weather Tomorrow": "明日は荒天に警戒",
   "Severe thunderstorms": "激しい雷雨",
   "Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.": "今日は荒天です。安全第一で、プランはごく少なめにし、ほかの日で埋め合わせます。",
+  "Severe weather today. Stay in: the steps can be walked indoors, and the flowers move to better days.": "今日は荒天です。屋内で過ごしましょう。歩数は屋内で歩けて、花は良い日に回します。",
   "Skip and set the months by hand": "スキップして月を手動で設定",
   "Skip: treat every day as rideable": "スキップ：毎日を自転車日和にする",
   "Slide the ruler, or tap the number to type it.": "定規をスライドするか、数字をタップして入力します。",

@@ -356,6 +356,7 @@ export const ko: Dict = {
   "Severe Weather Tomorrow": "내일 악천후 주의",
   "Severe thunderstorms": "강한 뇌우",
   "Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.": "오늘은 악천후예요. 안전이 먼저예요. 계획은 아주 적게 잡고 다른 날이 차이를 채워요.",
+  "Severe weather today. Stay in: the steps can be walked indoors, and the flowers move to better days.": "오늘은 악천후예요. 실내에 있어요. 걸음은 실내에서 걸을 수 있고, 꽃은 더 좋은 날로 옮겨요.",
   "Skip and set the months by hand": "건너뛰고 달 직접 설정",
   "Skip: treat every day as rideable": "건너뛰기: 매일 자전거 타기 좋음",
   "Slide the ruler, or tap the number to type it.": "자를 밀거나 숫자를 탭해서 입력하세요.",

@@ -34,10 +34,10 @@ export type { TempLimits };
 export const DEFAULT_LIMITS: TempLimits = { hot: 35, cold: 2 };
 
 /**
- * How much of a full walking day is left when it's too hot or too cold, or pouring: some steps still happen
- * (errands, a short walk), more with a treadmill or indoor walking.
+ * How much of a full walking day is left when it's too hot or too cold, or pouring: out of doors only
+ * a few steps still happen (errands, a short walk), with a treadmill or indoor walking most of them.
  */
-export const walkFallback = (indoor: boolean) => (indoor ? 0.75 : 0.4);
+export const walkFallback = (indoor: boolean) => (indoor ? 0.75 : 0.25);
 
 /** 'wet': a downpour (or, riding, more rain than the preset allows); 'rain': walking, rain likely to come. */
 export type DayVerdict = 'good' | 'hot' | 'wet' | 'rain' | 'snow' | 'storm' | 'wind' | 'cold' | 'dark' | 'severe';
@@ -45,6 +45,8 @@ export type DayVerdict = 'good' | 'hot' | 'wet' | 'rain' | 'snow' | 'storm' | 'w
 export interface ForecastWeights {
   walk: DayWeights;
   ride: DayWeights;
+  /** Planting flowers on foot (without a bike): out of doors, so indoor walking doesn't help. */
+  flower: DayWeights;
   /** The forecast itself, by date, for showing it. */
   day: Record<string, ForecastWeatherDay>;
   /** Why each day is weighed as it is, for walking and for riding. */
@@ -104,6 +106,15 @@ export function walkWeight(d: ForecastWeatherDay, limits: TempLimits, indoor: bo
   return 1 - (1 - rainShare(d.precip ?? 0, indoor)) * rainChance(d);
 }
 
+/**
+ * A day's share of planting flowers on foot. Flowers are planted out of doors, so indoor walking
+ * doesn't help: a bad day keeps only what a short walk out plants, and a day of severe weather none
+ * at all (they move to the other days).
+ */
+export function flowerWeight(d: ForecastWeatherDay, limits: TempLimits): number {
+  return walkVerdict(d, limits) === 'severe' ? 0 : walkWeight(d, limits, false);
+}
+
 /** A day for riding: the weather preset (rain, snow, wind, daylight) plus the hot and cold limits. */
 export function rideVerdict(d: ForecastWeatherDay, th: Thresholds, limits: TempLimits): DayVerdict {
   if (severeOf(d).length) return 'severe';
@@ -121,12 +132,13 @@ export function rideVerdict(d: ForecastWeatherDay, th: Thresholds, limits: TempL
 /**
  * Weights for the forecast's days. Riding: 1 on a good day, 0 on a bad one, except rain that may not
  * come (under a 50% chance) is half a day. Walking: see walkWeight (less for rain, by how much and how
- * likely; the fallback share on a stormy, snowy, hot or cold day).
+ * likely; the fallback share on a stormy, snowy, hot or cold day). Flowers on foot: flowerWeight.
  * Days from `from` on only (earlier ones are already logged).
  */
 export function forecastWeights(days: ForecastWeatherDay[], th: Thresholds, limits: TempLimits, indoor: boolean, from: string): ForecastWeights {
   const walk: DayWeights = {};
   const ride: DayWeights = {};
+  const flower: DayWeights = {};
   const why: ForecastWeights['why'] = {};
   const day: ForecastWeights['day'] = {};
   for (const d of days) {
@@ -135,8 +147,9 @@ export function forecastWeights(days: ForecastWeatherDay[], th: Thresholds, limi
     const w = walkVerdict(d, limits);
     const r = rideVerdict(d, th, limits);
     walk[d.date] = walkWeight(d, limits, indoor);
+    flower[d.date] = flowerWeight(d, limits);
     ride[d.date] = r === 'good' ? 1 : r === 'wet' && (d.precipChance ?? 100) < 50 ? 0.5 : 0;
     why[d.date] = { walk: w, ride: r };
   }
-  return { walk, ride, why, day };
+  return { walk, ride, flower, why, day };
 }

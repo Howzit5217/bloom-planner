@@ -356,6 +356,7 @@ export const ptBR: Dict = {
   "Severe Weather Tomorrow": "Tempo severo amanhã",
   "Severe thunderstorms": "Tempestades fortes",
   "Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.": "Tempo severo hoje. Fique seguro: o plano pede muito pouco, e os outros dias compensam a diferença.",
+  "Severe weather today. Stay in: the steps can be walked indoors, and the flowers move to better days.": "Tempo severo hoje. Fique em casa: os passos podem ser feitos em ambiente fechado, e as flores passam para dias melhores.",
   "Skip and set the months by hand": "Pular e definir os meses manualmente",
   "Skip: treat every day as rideable": "Pular: todos os dias são bons para pedalar",
   "Slide the ruler, or tap the number to type it.": "Deslize a régua ou toque no número para digitá-lo.",

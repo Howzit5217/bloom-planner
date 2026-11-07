@@ -37,6 +37,8 @@ export interface DashboardInput {
   today: DayKey;
   /** Walking days per month (heat, downpours), 0..1; missing: every day is a walking day. */
   walkRates?: number[];
+  /** The same for planting flowers on foot, which is out of doors whatever indoor walking there is. */
+  flowerWalkRates?: number[];
   /** The forecast's own weights for the next two weeks. */
   forecast?: ForecastWeights | null;
   /** The week's rhythm (rhythm.ts): easy days ask less, the rest a little more. */
@@ -75,7 +77,11 @@ export interface Dashboard {
   plan: Plan;
   baseline: Plan;
   standing: Standing;
-  /** The next plan day's targets (today, or tomorrow once today is logged). */
+  /**
+   * The next plan day's targets (today, or tomorrow once today is logged). `flowersIfRiding`: the
+   * day's flowers, what a ride plants on the bike, what the weather leaves of a day's planting on
+   * foot; 0 on a day too bad to plant any.
+   */
   target: { date: DayKey; isToday: boolean; steps: number; flowersIfRiding: number; expectedFlowers: number };
   /** Today's targets as they stood before today's log (for "daily goal hit"). */
   todayGoal: { steps: number; flowersIfRiding: number };
@@ -116,7 +122,7 @@ export interface Dashboard {
    * What the plan is built from besides the goal: walking days, the forecast's days and the week's
    * rhythm. A goal being chosen is checked with these too, so it grades the same as once saved.
    */
-  goalInputs: { walkRates?: number[]; walkDays?: DayWeights; rideDays?: DayWeights; rhythm?: (d: Date) => number };
+  goalInputs: { walkRates?: number[]; flowerWalkRates?: number[]; walkDays?: DayWeights; rideDays?: DayWeights; walkFlowerDays?: DayWeights; rhythm?: (d: Date) => number };
 }
 
 const ring = (done: number, need: number): RingData => ({
@@ -126,11 +132,11 @@ const ring = (done: number, need: number): RingData => ({
   fraction: need > 0 ? Math.min(1, Math.max(0, done / need)) : 1,
 });
 
-export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today, walkRates, forecast, rhythm }: DashboardInput): Dashboard {
-  // Riding needs fair weather; without a bike, flowers come from walking, on the walking days.
+export function computeDashboard({ table, overrides, profile, entries, seasonRates: weather, today, walkRates, flowerWalkRates, forecast, rhythm }: DashboardInput): Dashboard {
+  // Riding needs fair weather; without a bike, flowers come from walking out of doors, on the days fit for it.
   const bikes = profile.rates.bikes !== false;
-  const seasonRates = bikes ? weather : (walkRates ?? flowerDays(weather, false));
-  const days = { walkRates, walkDays: forecast?.walk, flowerDays: bikes ? forecast?.ride : forecast?.walk, rhythm };
+  const seasonRates = bikes ? weather : (flowerWalkRates ?? walkRates ?? flowerDays(weather, false));
+  const days = { walkRates, walkDays: forecast?.walk, flowerDays: bikes ? forecast?.ride : (forecast?.flower ?? forecast?.walk), rhythm };
   const req = makeReq(table, overrides);
   const replay = replayLog(profile, entries, req, table.maxLevel);
   const current = replay.state;
@@ -154,17 +160,21 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
   });
   const stand = standing(baseline, current, req, today, loggedToday);
 
+  // A day's flowers: on the bike, what a ride plants (all or nothing: you ride or you don't); on
+  // foot, what the day's weather leaves of a full day's planting (little on a bad day, none on a
+  // day of severe weather).
+  const flowersOn = (d: ReturnType<typeof plannedForDay>) => (bikes ? d.flowersIfRiding : d.expectedFlowers);
   const day0 = plannedForDay(plan, 0);
-  let todayGoal = { steps: day0.steps, flowersIfRiding: day0.flowersIfRiding };
+  let todayGoal = { steps: day0.steps, flowersIfRiding: flowersOn(day0) };
   if (loggedToday) {
     const prior = replayLog(profile, entries.filter((e) => e.date !== today), req, table.maxLevel).state;
     const p0 = buildPlan({ start: prior, startKey: today, goalKey: profile.goalDate, goalLevel, seasonRates, req, ...days });
     const d = plannedForDay(p0, 0);
-    todayGoal = { steps: d.steps, flowersIfRiding: d.flowersIfRiding };
+    todayGoal = { steps: d.steps, flowersIfRiding: flowersOn(d) };
   }
   const seg = segmentAt(plan, 0);
   const rates = resolveRates(profile.rates);
-  const time = timeCost(day0.steps, day0.flowersIfRiding, rates);
+  const time = timeCost(day0.steps, flowersOn(day0), rates);
 
   const projected = projectedLevels(plan);
   const peakSteps = peakStepsPerDay(plan);
@@ -244,7 +254,7 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     plan,
     baseline,
     standing: stand,
-    target: { date: planStart, isToday: !loggedToday, steps: day0.steps, flowersIfRiding: day0.flowersIfRiding, expectedFlowers: day0.expectedFlowers },
+    target: { date: planStart, isToday: !loggedToday, steps: day0.steps, flowersIfRiding: flowersOn(day0), expectedFlowers: day0.expectedFlowers },
     todayGoal,
     pace: {
       stepsPerDay: seg ? seg.stepRate : 0,
@@ -281,6 +291,6 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
     impossible,
     difficulty,
     difficultyShift,
-    goalInputs: { walkRates, walkDays: forecast?.walk, rideDays: forecast?.ride, rhythm },
+    goalInputs: { walkRates, flowerWalkRates, walkDays: forecast?.walk, rideDays: forecast?.ride, walkFlowerDays: forecast?.flower, rhythm },
   };
 }

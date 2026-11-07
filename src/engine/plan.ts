@@ -352,18 +352,22 @@ export function planStateAt(plan: Plan, t: number): LevelState {
   return { level: last.level, steps: last.carryOut, flowers: 0 };
 }
 
-/** Planned steps on plan day i, and flowers you'd plant on it if you ride. */
+/**
+ * Planned steps on plan day i, and flowers you'd plant on it if you ride: none on a day the forecast
+ * rules out (a storm, severe weather), so that day asks for no flowers at all.
+ */
 export function plannedForDay(plan: Plan, i: number): { steps: number; flowersIfRiding: number; expectedFlowers: number } {
   let steps = 0;
   let flowersIfRiding = 0;
   let expectedFlowers = 0;
+  const open = plan.calendar.rateOnDay(i) > 0;
   for (const s of plan.segments) {
     const a = Math.max(i, s.startT);
     const b = Math.min(i + 1, s.endT);
     if (b <= a) continue;
     steps += s.stepRate * (plan.walk.W(b) - plan.walk.W(a));
     // A ride on an easy day plants less too.
-    flowersIfRiding += s.flowerRate * (b - a) * plan.calendar.shareOnDay(i);
+    if (open) flowersIfRiding += s.flowerRate * (b - a) * plan.calendar.shareOnDay(i);
     expectedFlowers += s.flowerRate * (plan.calendar.W(b) - plan.calendar.W(a));
   }
   return { steps, flowersIfRiding, expectedFlowers };

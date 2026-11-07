@@ -170,7 +170,10 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const weatherLine: { icon: IconName; text: string } | null = !wt
     ? null
     : wt.walk === 'severe'
-      ? { icon: 'alert', text: t('Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.') }
+      ? // With indoor walking a fair share of the steps stays; the flowers, planted out of doors, none.
+        dash.rates.treadmillAvailable
+        ? { icon: 'alert', text: t('Severe weather today. Stay in: the steps can be walked indoors, and the flowers move to better days.') }
+        : { icon: 'alert', text: t('Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.') }
     : wt.walk === 'hot'
       ? { icon: 'thermometer-high', text: t('Too hot for a long walk today, so the plan asks for less.') }
       : wt.walk === 'cold'

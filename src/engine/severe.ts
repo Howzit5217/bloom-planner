@@ -21,8 +21,11 @@ export const SNOWSTORM_CM = 15;
 export const EXTREME_HEAT = 41;
 export const EXTREME_COLD = -18;
 
-/** How much of a usual walking day a severe day keeps: indoors a fair amount, outdoors very little. */
-export const severeShare = (indoor: boolean) => (indoor ? 0.6 : 0.15);
+/**
+ * How much of a usual walking day a severe day keeps: with indoor walking a fair amount, without it
+ * next to nothing (it isn't safe out). Flowers on foot or by bike: none (weatherPlan).
+ */
+export const severeShare = (indoor: boolean) => (indoor ? 0.6 : 0.08);
 
 /** The severe weather a day brings, worst first; none for an ordinary bad day. */
 export function severeOf(d: SevereInput): SevereKind[] {

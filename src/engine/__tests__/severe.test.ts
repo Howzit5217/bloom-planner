@@ -39,7 +39,7 @@ describe('severe weather', () => {
     expect(walkVerdict(severe, limits)).toBe('severe');
     expect(rideVerdict(severe, PRESETS.normal, limits)).toBe('severe');
     expect(walkWeight(severe, limits, false)).toBeLessThan(walkWeight(day({ code: 95 }), limits, false));
-    expect(walkWeight(severe, limits, false)).toBeCloseTo(0.15);
+    expect(walkWeight(severe, limits, false)).toBeCloseTo(0.08);
     // Indoors (a treadmill), a fair amount still.
     expect(walkWeight(severe, limits, true)).toBeCloseTo(0.6);
   });

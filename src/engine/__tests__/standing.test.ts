@@ -71,7 +71,7 @@ describe('the streak flowers', () => {
 describe('a goal being chosen', () => {
   it('grades the same as the plan it becomes once saved (the forecast and the easy days in both)', () => {
     const rhythm = makeRhythm(DEFAULT_RHYTHM);
-    const forecast = { walk: { '2026-11-09': 0.4, '2026-11-10': 0.7 }, ride: { '2026-11-09': 0 }, day: {}, why: {} };
+    const forecast = { walk: { '2026-11-09': 0.4, '2026-11-10': 0.7 }, ride: { '2026-11-09': 0 }, flower: { '2026-11-09': 0 }, day: {}, why: {} };
     const d = computeDashboard({ table: t, overrides: {}, profile: p, entries: [], seasonRates: ALL_RIDEABLE, today: '2026-11-08', forecast, rhythm });
     const check = checkGoal({ start: d.plan.start, startKey: d.plan.startKey, goalKey: p.goalDate, goalLevel: p.goalLevel, seasonRates: ALL_RIDEABLE, req: d.req, bikeFlowersPerHour: d.rates.bikeFlowersPerHour, bikes: d.rates.bikes, walkFlowersPerHour: d.rates.walkFlowersPerHour, ...d.goalInputs });
     expect(check.plan?.status).toBe('ok');

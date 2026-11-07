@@ -356,6 +356,7 @@ export const zhHans: Dict = {
   "Severe Weather Tomorrow": "明天有恶劣天气",
   "Severe thunderstorms": "强雷雨",
   "Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.": "今天有恶劣天气。注意安全：计划只安排很少，其他日子会补上差额。",
+  "Severe weather today. Stay in: the steps can be walked indoors, and the flowers move to better days.": "今天有恶劣天气。待在室内：步数可以在室内走，花移到天气更好的日子。",
   "Skip and set the months by hand": "跳过并手动设置月份",
   "Skip: treat every day as rideable": "跳过：每天都适合骑车",
   "Slide the ruler, or tap the number to type it.": "滑动标尺，或点数字直接输入。",

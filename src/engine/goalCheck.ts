@@ -34,6 +34,9 @@ export interface GoalCheckInput {
   walkRates?: number[];
   walkDays?: DayWeights;
   rideDays?: DayWeights;
+  /** Planting flowers on foot, out of doors whatever indoor walking there is: per month, and the forecast's. */
+  flowerWalkRates?: number[];
+  walkFlowerDays?: DayWeights;
   /** The week's rhythm (easy days lighter), as the saved plan has it. */
   rhythm?: (d: Date) => number;
 }
@@ -74,10 +77,10 @@ export function checkGoal(input: GoalCheckInput): GoalCheck {
   // Riding needs fair weather; walking plants flowers on any day.
   const plan = buildPlan({
     ...input,
-    seasonRates: bikes ? input.seasonRates : (input.walkRates ?? flowerDays(input.seasonRates, false)),
+    seasonRates: bikes ? input.seasonRates : (input.flowerWalkRates ?? input.walkRates ?? flowerDays(input.seasonRates, false)),
     walkRates: input.walkRates,
     walkDays: input.walkDays,
-    flowerDays: bikes ? input.rideDays : input.walkDays,
+    flowerDays: bikes ? input.rideDays : (input.walkFlowerDays ?? input.walkDays),
     rhythm: input.rhythm,
   });
   if (plan.status === 'reached') return { ok: true, problem: null, plan, ...base };

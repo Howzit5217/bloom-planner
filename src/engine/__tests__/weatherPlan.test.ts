@@ -1,6 +1,6 @@
 import { PRESETS } from '../climate';
 import { buildPlan, plannedForDay } from '../plan';
-import { forecastWeights, rainShare, rideVerdict, walkVerdict, walkWeight, type ForecastWeatherDay } from '../weatherPlan';
+import { flowerWeight, forecastWeights, rainShare, rideVerdict, walkVerdict, walkWeight, type ForecastWeatherDay } from '../weatherPlan';
 import { fmtTemp } from '../units';
 import { reqOf, table } from './helpers';
 
@@ -46,10 +46,10 @@ describe('the forecast in the plan', () => {
       false,
       '2026-07-01',
     );
-    // Rain that may not come (30%) trims a walking day by its chance: 7 mm leaves 58% of a day if it comes.
+    // Rain that may not come (30%) trims a walking day by its chance: 7 mm leaves 47.5% of a day if it comes.
     expect(w.walk['2026-07-01']).toBe(1);
-    expect(w.walk['2026-07-02']).toBe(0.4);
-    expect(w.walk['2026-07-03']).toBeCloseTo(1 - 0.42 * 0.3);
+    expect(w.walk['2026-07-02']).toBe(0.25);
+    expect(w.walk['2026-07-03']).toBeCloseTo(1 - 0.525 * 0.3);
     // Rain that may well not come is half a riding day.
     expect(w.ride).toEqual({ '2026-07-01': 1, '2026-07-02': 0, '2026-07-03': 0.5 });
     // A treadmill keeps more of a hot day.
@@ -63,15 +63,15 @@ describe('the forecast in the plan', () => {
     expect(walkVerdict(day('2026-07-01', { precip: 20, precipChance: 90 }), limits)).toBe('wet');
     // A shower trims a day, steady rain takes more, a downpour the most (less with a treadmill).
     expect(rainShare(0.5, false)).toBe(1);
-    expect(rainShare(3, false)).toBeCloseTo(0.79);
-    expect(rainShare(10, false)).toBeCloseTo(0.58);
-    expect(rainShare(20, false)).toBe(0.4);
+    expect(rainShare(3, false)).toBeCloseTo(0.7375);
+    expect(rainShare(10, false)).toBeCloseTo(0.475);
+    expect(rainShare(20, false)).toBe(0.25);
     expect(rainShare(20, true)).toBe(0.75);
     // Certain steady rain, then the same rain at a 50% chance.
-    expect(walkWeight(day('2026-07-01', { precip: 10, precipChance: 100 }), limits, false)).toBeCloseTo(0.58);
-    expect(walkWeight(day('2026-07-01', { precip: 10, precipChance: 50 }), limits, false)).toBeCloseTo(0.79);
+    expect(walkWeight(day('2026-07-01', { precip: 10, precipChance: 100 }), limits, false)).toBeCloseTo(0.475);
+    expect(walkWeight(day('2026-07-01', { precip: 10, precipChance: 50 }), limits, false)).toBeCloseTo(0.7375);
     // A storm, or heat on top of rain, is a bad day whatever the rain.
-    expect(walkWeight(day('2026-07-01', { precip: 3, precipChance: 80, feelsMax: 36 }), limits, false)).toBe(0.4);
+    expect(walkWeight(day('2026-07-01', { precip: 3, precipChance: 80, feelsMax: 36 }), limits, false)).toBe(0.25);
   });
 
   it('asks less of a rainy day and spreads the rest over the others, so the goal still holds', () => {
@@ -80,11 +80,47 @@ describe('the forecast in the plan', () => {
     const rain = forecastWeights([day('2026-07-01'), day('2026-07-02', { precip: 10, precipChance: 100 }), day('2026-07-03')], PRESETS.normal, limits, false, '2026-07-01');
     const plan = buildPlan({ ...base, walkDays: rain.walk });
     const [a, b, c] = [0, 1, 2].map((i) => plannedForDay(plan, i).steps);
-    // 30,000 over 2.58 walking days: about 11,600 on each dry day, 6,700 on the rainy one.
+    // 30,000 over 2.475 walking days: about 12,100 on each dry day, 5,800 on the rainy one.
     expect(b).toBeLessThan(a);
     expect(a).toBeCloseTo(c);
-    expect(b).toBeCloseTo(a * 0.58);
+    expect(b).toBeCloseTo(a * 0.475);
     expect(a + b + c).toBeCloseTo(30000);
+  });
+
+  it('asks much less walking of a really bad day without indoor walking, and a fair amount with it', () => {
+    const storm = day('2026-07-01', { code: 95 });
+    const hail = day('2026-07-01', { code: 96 });
+    expect(walkWeight(storm, limits, false)).toBe(0.25);
+    expect(walkWeight(storm, limits, true)).toBe(0.75);
+    expect(walkWeight(hail, limits, false)).toBeCloseTo(0.08);
+    expect(walkWeight(hail, limits, true)).toBeCloseTo(0.6);
+  });
+
+  it('plants no flowers on foot on a day of severe weather, and indoor walking never helps the flowers', () => {
+    const w = forecastWeights([day('2026-07-01'), day('2026-07-02', { code: 96 }), day('2026-07-03', { feelsMax: 36 }), day('2026-07-04', { precip: 10, precipChance: 100 })], PRESETS.normal, limits, true, '2026-07-01');
+    expect(w.flower['2026-07-01']).toBe(1);
+    // Hail: none at all, though indoor walking keeps a fair share of the steps.
+    expect(w.flower['2026-07-02']).toBe(0);
+    expect(w.walk['2026-07-02']).toBeCloseTo(0.6);
+    expect(w.ride['2026-07-02']).toBe(0);
+    // Too hot, or raining: only what a walk out plants, whatever the treadmill does for the steps.
+    expect(w.flower['2026-07-03']).toBe(0.25);
+    expect(w.walk['2026-07-03']).toBe(0.75);
+    expect(w.flower['2026-07-04']).toBeCloseTo(0.475);
+    expect(flowerWeight(day('2026-07-04', { precip: 10, precipChance: 100 }), limits)).toBe(walkWeight(day('2026-07-04', { precip: 10, precipChance: 100 }), limits, false));
+  });
+
+  it('moves a severe day\'s flowers onto the other days, and still asks a few steps of it', () => {
+    const t = table([{ level: 3, steps: 30000, flowers: 3000 }]);
+    const w = forecastWeights([day('2026-07-01'), day('2026-07-02', { code: 99 }), day('2026-07-03')], PRESETS.normal, limits, false, '2026-07-01');
+    const plan = buildPlan({ start: { level: 2, steps: 0, flowers: 0 }, startKey: '2026-07-01', goalKey: '2026-07-03', goalLevel: 3, seasonRates: new Array(12).fill(1), req: reqOf(t), walkDays: w.walk, flowerDays: w.flower });
+    const [a, b, c] = [0, 1, 2].map((i) => plannedForDay(plan, i));
+    expect(b.flowersIfRiding).toBe(0);
+    expect(a.flowersIfRiding).toBeCloseTo(1500);
+    expect(c.flowersIfRiding).toBeCloseTo(1500);
+    expect(b.steps).toBeGreaterThan(0);
+    expect(b.steps).toBeCloseTo(a.steps * 0.08);
+    expect(a.steps + b.steps + c.steps).toBeCloseTo(30000);
   });
 
   it('moves steps off a hot day onto the good ones', () => {
