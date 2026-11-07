@@ -1,4 +1,6 @@
 import { addDaysKey, daysBetween, monthIndex, type DayKey } from './dates';
+import { fmt, roundNice } from './format';
+import { plannedForDay } from './plan';
 import { PRESETS, type TempLimits } from './climate';
 import type { Dashboard } from './summary';
 import type { ThresholdPreset } from './types';
@@ -93,6 +95,18 @@ export function planNotifications(args: {
   const minutesNow = now.getHours() * 60 + now.getMinutes();
   const reminderMinutes = prefs.hour * 60 + prefs.minute;
   const active = dash.phase === 'active';
+  // The day's targets, as the Today card says them: steps, and flowers (if you ride, on a bike).
+  const targetOn = (date: DayKey): string | null => {
+    const plan = dash.plan;
+    if (!active || !plan || plan.status !== 'ok') return null;
+    const i = daysBetween(plan.startKey, date);
+    if (i < 0 || i >= plan.calendarDays) return null;
+    const p = plannedForDay(plan, i);
+    const steps = fmt(roundNice(p.steps));
+    const flowers = Math.round(dash.rates.bikes ? p.flowersIfRiding : p.expectedFlowers);
+    if (flowers <= 0) return t("Today's target: {steps} steps", { steps });
+    return dash.rates.bikes ? t("Today's target: {steps} steps · {flowers} flowers if you ride", { steps, flowers: fmt(roundNice(flowers)) }) : t("Today's target: {steps} steps · {flowers} flowers", { steps, flowers: fmt(roundNice(flowers)) });
+  };
   let behindUsed = false;
   let milestoneUsed = false;
   const recentNudges = prefs.nudgeDates.filter((d) => daysBetween(d, today) < 7).length;
@@ -157,7 +171,9 @@ export function planNotifications(args: {
 
     if (!pick) {
       if (isToday && (dash.loggedToday || reminderPassed)) continue;
-      pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: t("How'd Today Go?"), body: t('Pop in your steps and flowers.') };
+      // What the plan asks of that day, to set against what the game shows.
+      const target = targetOn(date);
+      pick = { date, hour: prefs.hour, minute: prefs.minute, kind: 'daily', title: t("How'd Today Go?"), body: target ? `${target}. ${t('Pop in your steps and flowers.')}` : t('Pop in your steps and flowers.') };
     }
     out.push(pick);
   }

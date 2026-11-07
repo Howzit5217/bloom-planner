@@ -76,6 +76,17 @@ describe("Home's camera", () => {
     }
   });
 
+  it('leaves a flower coming in from below leaning toward you less than a full turn would', () => {
+    const m = cameraMatrix(fr, tiltAt(fr, 1));
+    const v = fr.cy + 420;
+    // How much bigger across a flower 40 points tall is drawn at its top than at its base.
+    const grow = (m[7] * v + m[8]) / (m[7] * (v - 40) + m[8]);
+    const q = Math.sin(fr.tiltMax) / fr.F;
+    const fullTurn = (q * v + Math.cos(fr.tiltMax) - fr.cy * q) / (q * (v - 40) + Math.cos(fr.tiltMax) - fr.cy * q);
+    expect(grow).toBeGreaterThan(1);
+    expect(grow - 1).toBeLessThan((fullTurn - 1) * 0.75);
+  });
+
   it('eases into the full tilt and never tilts up', () => {
     expect(tiltAt(fr, -1)).toBe(0);
     expect(tiltAt(fr, 2)).toBeCloseTo(fr.tiltMax);

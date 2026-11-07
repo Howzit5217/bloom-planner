@@ -1,4 +1,4 @@
-import { addMonths, monthGrid, uses12HourClock, weekdayHeadings, weekStartFor } from '../calendar';
+import { addMonths, monthGrid, uses12HourClock, weekdayHeadings } from '../calendar';
 
 describe('in-house calendar', () => {
   it('lays a month out in whole weeks from Sunday', () => {
@@ -30,14 +30,7 @@ describe('in-house calendar', () => {
     expect(addMonths({ year: 2026, month: 10 }, 26)).toEqual({ year: 2029, month: 0 });
   });
 
-  it('starts the week where the phone region does', () => {
-    expect(weekStartFor('en-US')).toBe(0);
-    expect(weekStartFor('en-GB')).toBe(1);
-    expect(weekStartFor('de-DE')).toBe(1);
-    expect(weekStartFor('ja-JP')).toBe(0);
-    expect(weekStartFor('zh-Hant-TW')).toBe(0);
-    expect(weekStartFor('en')).toBe(0);
-    expect(weekStartFor(undefined)).toBe(1);
+  it('names the week from Monday', () => {
     expect(weekdayHeadings(1)[0]).toEqual({ short: 'M', name: 'Monday' });
     expect(weekdayHeadings(0)[6].name).toBe('Saturday');
   });

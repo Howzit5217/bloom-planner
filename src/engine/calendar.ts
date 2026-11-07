@@ -38,22 +38,6 @@ export function weekdayHeadings(weekStartsOn: 0 | 1): Array<{ short: string; nam
   });
 }
 
-// Regions whose calendars start on Sunday (CLDR "firstDay": sun). Everywhere else gets Monday,
-// except a few Saturday-first regions, which are close enough to Sunday for a 7-column grid.
-const SUNDAY_FIRST = new Set([
-  'US', 'CA', 'MX', 'BR', 'AR', 'CO', 'PE', 'VE', 'GT', 'HN', 'NI', 'PA', 'PR', 'DO', 'SV', 'BS', 'BZ', 'JM', 'TT',
-  'JP', 'KR', 'KP', 'TW', 'HK', 'MO', 'PH', 'TH', 'KH', 'LA', 'MM', 'ID', 'IN', 'NP', 'BT', 'PK', 'BD',
-  'IL', 'SA', 'YE', 'KE', 'ET', 'ZA', 'ZW', 'MZ', 'BW', 'UM', 'VI', 'GU', 'AS', 'MH', 'WS', 'PY',
-  'AE', 'BH', 'DJ', 'DZ', 'EG', 'IQ', 'IR', 'JO', 'KW', 'LY', 'OM', 'QA', 'SD', 'SY', 'AF',
-]);
-
-/** Week start for a BCP 47 locale such as "en-US" or "de-DE". Unknown regions start on Monday. */
-export function weekStartFor(locale: string | undefined): 0 | 1 {
-  const region = locale?.match(/[-_]([A-Za-z]{2})(?:[-_]|$)/)?.[1]?.toUpperCase();
-  if (!region) return locale?.toLowerCase().startsWith('en') ? 0 : 1;
-  return SUNDAY_FIRST.has(region) ? 0 : 1;
-}
-
 /** Whether the phone's locale writes times with AM/PM, judged from how it formats 13:00. */
 export function uses12HourClock(formatted1pm: string): boolean {
   return !/13/.test(formatted1pm);

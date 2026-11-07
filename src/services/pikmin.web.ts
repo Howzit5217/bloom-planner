@@ -5,10 +5,12 @@ export function openPikmin(): boolean {
   return false;
 }
 
-export async function allowPictures(): Promise<boolean> {
-  return false;
+export async function allowPictures(): Promise<'all' | 'limited' | 'none'> {
+  return 'none';
 }
 
 export async function newestPictureSince(_since: number): Promise<string | null> {
   return null;
 }
+
+export function forgetPicture(_uri: string) {}

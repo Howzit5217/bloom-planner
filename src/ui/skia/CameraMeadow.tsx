@@ -9,7 +9,7 @@ import { useSkyClock, useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudsOf, color, drawBlade, drawHaze, drawMistBank, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, hazeFade, mistBanks, shineOf, type MistBank } from './Meadow';
-import { cloudLight } from './cloudShader';
+import { cloudLight } from './clouds';
 import { fallOf, useFalling, type Fall } from './Precipitation';
 import { fieldSprig, geometry, headOf, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
@@ -234,8 +234,6 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
   const cloudLit = cloudLight(look);
   // Faster in a storm or rain, and the windier it is.
   const wind = (look.weather === 'storm' ? 1.6 : look.rain ? 1.2 : 1) * (1 + Math.min(2.5, look.wind / 18));
-  // On the web the clouds are drawn on the GPU where there's one to draw on, else plainly.
-  const plain = Platform.OS === 'web' && !webSurface();
   const clouds = cloudsOf(look, cloudRand, f.cy, f.picW, f.W).map((k, index): Drifter => {
     const bounds = Skia.XYWHRect(CLOUD_BOUNDS.left * k.s, CLOUD_BOUNDS.top * k.s, CLOUD_BOUNDS.width * k.s, CLOUD_BOUNDS.height * k.s);
     const scale = imageScale(bounds);
@@ -246,7 +244,7 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       const got = made.get(round);
       if (got) return got;
       const own = rng(Math.abs((seed ^ 0x9e3779b9) + index * 7919 + round * 104729) + 1);
-      const picture = createPicture((cv) => cloud(cv, 0, 0, k.s, own, cloudLit, scale, plain), bounds);
+      const picture = createPicture((cv) => cloud(cv, 0, 0, k.s, own, cloudLit), bounds);
       const out = { picture, image: pictureImage(picture, bounds, scale) };
       made.set(round, out);
       for (const r of made.keys()) if (r < round - 1 || r > round + 1) made.delete(r);

@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { addMonths, monthGrid, weekStartFor, ymIndex, ymOf, type YearMonth } from '@/engine/calendar';
+import { addMonths, monthGrid, ymIndex, ymOf, type YearMonth } from '@/engine/calendar';
 import { fromKey, toKey, type DayKey } from '@/engine/dates';
 import { fmtLongDate, fmtMonthYear, monthShort, weekdayName, weekdayNarrow } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
@@ -12,7 +12,8 @@ import { T } from './T';
 import { t } from '@/i18n';
 import { shadow } from './shadow';
 
-const WEEK_START = weekStartFor(Intl.DateTimeFormat().resolvedOptions().locale);
+/** Every calendar's weeks start on Monday, as the Easy Days row does. */
+const WEEK_START = 1;
 const ROWS = 6;
 const CELL_H = 46;
 const DOT = 40;
@@ -241,8 +242,9 @@ function DayCell({ k, width, selected, isToday, disabled, band, bandEndsHere, ba
                 position: 'absolute',
                 top: (CELL_H - BAND_H) / 2,
                 height: BAND_H,
-                left: bandStartsHere ? width / 2 : 0,
-                right: bandEndsHere ? width / 2 : 0,
+                // A little past the cell where the next one carries on, so no hairline shows between them.
+                left: bandStartsHere ? width / 2 : roundL ? 0 : -0.5,
+                right: bandEndsHere ? width / 2 : roundR ? 0 : -0.5,
                 backgroundColor: c.leafPale,
                 borderTopLeftRadius: roundL && !bandStartsHere ? BAND_H / 2 : 0,
                 borderBottomLeftRadius: roundL && !bandStartsHere ? BAND_H / 2 : 0,

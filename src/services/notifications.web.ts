@@ -1,5 +1,6 @@
 import { fromKey } from '@/engine/dates';
 import type { Schedulable } from '@/engine/notifyPlan';
+import { lookOf } from './notificationLook';
 
 /**
  * The web app's notifications, through the browser. A web page can't wake itself up, so they come
@@ -59,7 +60,10 @@ async function show(n: Schedulable, at: number) {
   if (Date.now() - at > TOO_LATE || !(await hasPermission())) return;
   const id = `${n.date}|${n.hour}:${n.minute}|${n.kind}`;
   if (!firstTime(id)) return;
-  const options = { body: n.body, icon: `${BASE}/logo192.png`, tag: id };
+  const look = lookOf(n.kind);
+  // The app's icon beside it, and the white flower in the status bar (Android's browsers). A hard
+  // day ahead stays until it's seen.
+  const options = { body: n.body, icon: `${BASE}/logo192.png`, badge: `${BASE}/notification-badge.png`, tag: id, requireInteraction: look.channel === 'severe' };
   try {
     const reg = registration ?? (await navigator.serviceWorker?.getRegistration(`${BASE}/`)) ?? null;
     if (reg) {
@@ -85,13 +89,6 @@ export async function applySchedule(plan: Schedulable[]): Promise<void> {
     if (wait <= 0 || wait > DAY) continue;
     timers.push(setTimeout(() => void show(n, at), wait));
   }
-}
-
-/** One notification a few seconds from now, to see the alerts work (Settings). */
-export async function sendTest(title: string, body: string): Promise<void> {
-  if (!(await hasPermission())) return;
-  const at = Date.now() + 3000;
-  setTimeout(() => void show({ date: '', hour: 0, minute: 0, kind: `test-${at}`, title, body }, at), 3000);
 }
 
 export async function cancelAll(): Promise<void> {

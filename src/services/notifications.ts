@@ -2,13 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { fromKey } from '@/engine/dates';
 import type { Schedulable } from '@/engine/notifyPlan';
-import { t } from '@/i18n';
-
-const CHANNEL = 'daily';
-/** The weather alerts have their own channel, so Android can quieten them apart from the check-in. */
-const WEATHER_CHANNEL = 'weather';
-const WEATHER_KINDS = new Set(['forecast', 'uv', 'rain', 'severe', 'storm', 'snow', 'heat', 'cold']);
-
+import { CHANNELS, lookOf, type NotificationLook } from './notificationLook';
 
 /** The phone app can always show notifications (once allowed). */
 export const notificationsSupported = () => true;
@@ -22,18 +16,32 @@ export function configureNotifications() {
 /** The channels made (Android): a channel that couldn't be made isn't asked for, so its notifications still come, on the default one. */
 const madeChannels = new Set<string>();
 
+/** A short buzz for the everyday ones; two firmer ones before a hard day. */
+const SOFT_BUZZ = [0, 120];
+const FIRM_BUZZ = [0, 220, 140, 220];
+
 async function ensureChannel() {
   if (Platform.OS !== 'android') return;
-  const make = async (id: string, name: string, description: string) => {
+  for (const ch of CHANNELS) {
     try {
-      await Notifications.setNotificationChannelAsync(id, { name, description, importance: Notifications.AndroidImportance.DEFAULT });
-      madeChannels.add(id);
+      // Android keeps a channel's importance, light and buzz as first made; the name and description
+      // follow the app's language each time.
+      await Notifications.setNotificationChannelAsync(ch.id, {
+        name: ch.name(),
+        description: ch.description(),
+        importance: ch.high ? Notifications.AndroidImportance.HIGH : Notifications.AndroidImportance.DEFAULT,
+        lightColor: ch.color,
+        enableLights: true,
+        enableVibrate: true,
+        vibrationPattern: ch.high ? FIRM_BUZZ : SOFT_BUZZ,
+        showBadge: false,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      madeChannels.add(ch.id);
     } catch {
       // Expo Go can refuse to make channels; the permission prompt and the notifications go ahead without.
     }
-  };
-  await make(CHANNEL, t('Daily check-in'), t('One friendly reminder a day at most.'));
-  await make(WEATHER_CHANNEL, t('Weather alerts'), t('The morning forecast, high UV, rain on the way, and storms, snow, heat or cold ahead.'));
+  }
 }
 
 export async function hasPermission(): Promise<boolean> {
@@ -48,11 +56,6 @@ export async function requestPermission(): Promise<boolean> {
   return s.granted || s.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
 }
 
-const channelFor = (kind: string) => {
-  const id = WEATHER_KINDS.has(kind) ? WEATHER_CHANNEL : CHANNEL;
-  return madeChannels.has(id) ? { channelId: id } : {};
-};
-
 /** Replace everything scheduled with the given plan. */
 export async function applySchedule(plan: Schedulable[]): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
@@ -63,22 +66,30 @@ export async function applySchedule(plan: Schedulable[]): Promise<void> {
     const d = fromKey(n.date);
     d.setHours(n.hour, n.minute, 0, 0);
     if (d.getTime() <= now + 60_000) continue;
+    const look = lookOf(n.kind);
     await Notifications.scheduleNotificationAsync({
-      content: { title: n.title, body: n.body, data: { kind: n.kind } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: d, ...channelFor(n.kind) },
+      content: contentOf(n, look),
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: d, ...channelOf(look) },
     });
   }
 }
 
-/** One notification a few seconds from now, to see the alerts work (Settings). */
-export async function sendTest(title: string, body: string): Promise<void> {
-  if (!(await hasPermission())) return;
-  await ensureChannel();
-  await Notifications.scheduleNotificationAsync({
-    content: { title, body, data: { kind: 'test' } },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3, ...channelFor('forecast') },
-  });
+/**
+ * How it shows: the label beside the app's name (Android) or under the title (iPhone) says which
+ * kind it is, and the color tints the flower icon and the app's name.
+ */
+function contentOf(n: Schedulable, look: NotificationLook): Notifications.NotificationContentInput {
+  return {
+    title: n.title,
+    subtitle: look.label(),
+    body: n.body,
+    color: look.color,
+    priority: look.channel === 'severe' ? Notifications.AndroidNotificationPriority.HIGH : Notifications.AndroidNotificationPriority.DEFAULT,
+    data: { kind: n.kind },
+  };
 }
+
+const channelOf = (look: NotificationLook) => (madeChannels.has(look.channel) ? { channelId: look.channel } : {});
 
 export async function cancelAll(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();

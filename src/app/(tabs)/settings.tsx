@@ -15,7 +15,7 @@ import { WeatherLimits } from '@/features/shared/WeatherLimits';
 import { CustomGoalForm } from '@/features/home/NewGoal';
 import { EasyVerdict, GoalVerdict, useEarliestDate, useMoreChallenge } from '@/features/shared/GoalVerdict';
 import { runUpdateCheck, scheduleNotifications } from '@/hooks/useLifecycle';
-import { notificationsSupported, requestPermission, sendTest } from '@/services/notifications';
+import { notificationsSupported, requestPermission } from '@/services/notifications';
 import { APP_VERSION, IS_BETA_BUILD, REPO_URL } from '@/services/updates';
 import { useApp, useDashboard, type LogMode, type ThemePref } from '@/store/app';
 import { useTheme } from '@/theme/theme';
@@ -97,7 +97,6 @@ export default function Settings() {
   const dash = useDashboard();
   const st = useApp();
   const profile = st.profile;
-  const [testSent, setTestSent] = useState(false);
   // The time being picked: the evening check-in's, or the morning forecast's.
   const [timeSheet, setTimeSheet] = useState<'reminder' | 'forecast' | null>(null);
   const [timeDraft, setTimeDraft] = useState({ hour: 20, minute: 0 });
@@ -312,14 +311,15 @@ export default function Settings() {
       </Section>
 
       <Section title={t('Where You Play')} icon="map-marker-radius">
+        {/* Following the phone comes first; while it's on, the place isn't picked by hand. */}
+        {st.location ? <FollowLocationToggle /> : null}
         {/* The place: its weather history and forecast shape the plan, for walking as well as riding. */}
         <T v="bodyBold">{st.location ? st.location.label || `${st.location.latitude.toFixed(2)}, ${st.location.longitude.toFixed(2)}` : t('Not set')}</T>
         <T v="caption" soft>
           {st.location ? `${t('Weather history from {years} years, looked up {date}.', { years: st.location.climateYears, date: fmtDate(toKey(new Date(st.location.resolvedAt))) })} ` : t('Add where you play to plan around its weather.')}
           {bikes ? ` ${st.seasonRates.some((r) => r.source === 'manual') ? t('Months set by hand.') : st.seasonRates.every((r) => r.source === 'default') ? t('Every day counts as rideable.') : t('Months from the climate record.')}` : ''}
         </T>
-        <LinkRow label={st.location ? t('Change place') : t('Find your place')} onPress={() => router.push('/location')} />
-        {st.location ? <FollowLocationToggle /> : null}
+        {st.location && st.settings.followLocation ? null : <LinkRow label={st.location ? t('Change place') : t('Find your place')} onPress={() => router.push('/location')} />}
         {bikes && st.location && st.climate ? <LinkRow label={t('Climate details')} onPress={() => router.push('/climate')} /> : null}
         {/* Temperatures (the phone's way, or always °C or °F), and too hot and too cold: feels-like
             highs, for walking and riding alike. */}
@@ -454,18 +454,6 @@ export default function Settings() {
                 <Toggle label={t('High UV Warnings')} hint={t('When the UV gets high: a reminder to wear sunscreen.')} value={wa.uv} onChange={(b) => setAlerts({ uv: b })} />
                 <Toggle label={t('Rain on the Way')} hint={t('An hour before rain is likely, so you can walk first.')} value={wa.rain} onChange={(b) => setAlerts({ rain: b })} />
                 <Toggle label={t('Storms, Snow, Heat and Cold')} hint={t('The evening before a stormy, snowy, too hot or too cold day.')} value={wa.severe} onChange={(b) => setAlerts({ severe: b })} />
-                {/* To see they work (and how they look), especially in a browser. */}
-                <PillButton
-                  label={testSent ? t('It arrives in a few seconds.') : t('Send a test alert')}
-                  icon="bell-ring-outline"
-                  variant="secondary"
-                  size="md"
-                  onPress={() => {
-                    void sendTest(t('Weather Alerts Are On'), t('This is how they’ll look: the forecast, high UV, rain on the way, and hard days ahead.'));
-                    setTestSent(true);
-                    setTimeout(() => setTestSent(false), 5000);
-                  }}
-                />
               </View>
             </Reveal>
             {IS_WEB ? <WebNotifyNote /> : null}

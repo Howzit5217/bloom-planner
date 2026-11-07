@@ -3,7 +3,7 @@ import { AppState, View } from 'react-native';
 import { fmt } from '@/engine/format';
 import { finishShot, nameOnShot, readProfileShot, sameName, type ProfileShot } from '@/engine/profileShot';
 import type { ReqFn } from '@/engine/types';
-import { allowPictures, canOpenPikmin, newestPictureSince, openPikmin } from '@/services/pikmin';
+import { allowPictures, canOpenPikmin, forgetPicture, newestPictureSince, openPikmin } from '@/services/pikmin';
 import { pickScreenshotText, readScreenshotText, type ScreenshotText } from '@/services/screenshotText';
 import { useTheme } from '@/theme/theme';
 import { Icon } from '@/ui/Icon';
@@ -83,8 +83,14 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
     if (busy) return;
     setNote(null);
     // Asked first, so the question doesn't wait on coming back.
-    if (!(await allowPictures())) {
+    const access = await allowPictures();
+    if (access === 'none') {
       setNote({ ok: false, text: t('To find the screenshot, Bloom Planner needs to see your pictures. Pick a Screenshot works without that.') });
+      return;
+    }
+    // Only pictures picked one by one: a new screenshot wouldn't be among them.
+    if (access === 'limited') {
+      setNote({ ok: false, text: t("Bloom Planner can see only the pictures you chose, so a new screenshot stays hidden from it. Allow all photos for it in your phone's settings, or use Pick a Screenshot.") });
       return;
     }
     const at = Date.now();
@@ -121,6 +127,7 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
         openedAt.current = null;
         setBusy(true);
         const r = await readScreenshotText(uri).catch(() => ({ error: 'failed' as const }));
+        forgetPicture(uri);
         setBusy(false);
         latest.current(r);
       })();

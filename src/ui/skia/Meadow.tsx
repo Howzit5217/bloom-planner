@@ -1,8 +1,8 @@
 import { BlendMode, Canvas, ClipOp, createPicture, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkCanvas, type SkPaint } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
-import { PixelRatio, View } from 'react-native';
+import { View } from 'react-native';
 import { lookKey, mix, multiply, type SkyLook } from '@/engine/sky';
-import { cloudEffect, cloudLight, drawShaderCloud, type CloudLight } from './cloudShader';
+import { cartoonCloud, cloudLight, type CloudLight } from './clouds';
 import { milkyWay, seenStars, type StarSky } from '@/engine/stars';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
@@ -22,90 +22,9 @@ export const color = (paint: SkPaint, hex: string, alpha = 1) => {
 /** How far a cloud reaches round its middle, in its sizes: for the picture it's drawn into. */
 export const CLOUD_BOUNDS = { left: -1.75, top: -1.35, width: 3.5, height: 1.8 };
 
-/**
- * A cloud (a cumulus, heaped on a flat base), its middle at (`x`, `y`) and `s` its size, lit as
- * `light` says; its build comes from `rand`, so each cloud is its own. Drawn a pixel at a time by
- * the cloud shader (cloudShader.ts), fine to `scale` device pixels a point; `plain` (or a device
- * that can't run the shader) draws the plain clouds instead, quick enough to draw without a GPU.
- */
-export function cloud(canvas: SkCanvas, x: number, y: number, s: number, rand: () => number, light: CloudLight, scale: number, plain = false) {
-  const fx = plain ? null : cloudEffect();
-  if (fx) drawShaderCloud(canvas, fx, x, y, s, rand, light, scale, CLOUD_BOUNDS);
-  else plainCloud(canvas, x, y, s, light.fill, light.shade, rand, light.lean);
-}
-
-/**
- * The plain cloud: a heap of rounded billows, the biggest in the middle building into a dome,
- * smaller ones crowding their tops, on a flat, shaded base. `lean` is where the light comes from
- * across (-1 left to 1 right).
- */
-function plainCloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, rand: () => number, lean = 0) {
-  const base = y + s * 0.12;
-  const puffs: Array<{ x: number; y: number; r: number; edge: number }> = [];
-  // Each its own build: some long and flat, some tall and heaped, built up off-centre a little.
-  const wide = 0.75 + rand() * 0.55;
-  const tall = 0.65 + rand() * 0.5;
-  const n = 4 + Math.floor(rand() * 3) + (wide > 1.05 ? 1 : 0);
-  const peak = (rand() - 0.5) * 0.6;
-  for (let i = 0; i < n; i++) {
-    const t = (i / (n - 1)) * 2 - 1 + (rand() - 0.5) * 0.25;
-    const dome = Math.max(0, 1 - (t - peak) * (t - peak) * 0.8);
-    const r = s * (0.15 + 0.21 * dome * tall + rand() * 0.05);
-    const p = { x: x + t * s * 0.78 * wide, y: base - r * 0.75 - dome * s * 0.26 * tall - rand() * s * 0.03, r, edge: 1 - dome };
-    puffs.push(p);
-    // Smaller billows building on its top, and smaller still on theirs.
-    if (dome > 0.35 && rand() < 0.4 + 0.6 * tall) {
-      const k = 1 + Math.floor(rand() * 2);
-      for (let j = 0; j < k; j++) {
-        const a = -Math.PI / 2 + (rand() - 0.5) * 2.2;
-        const r2 = r * (0.5 + rand() * 0.22);
-        const q = { x: p.x + Math.cos(a) * r * 0.65, y: p.y + Math.sin(a) * r * 0.65, r: r2, edge: 0.35 };
-        puffs.push(q);
-        if (rand() < 0.4) {
-          const a3 = -Math.PI / 2 + (rand() - 0.5) * 1.8;
-          puffs.push({ x: q.x + Math.cos(a3) * r2 * 0.6, y: q.y + Math.sin(a3) * r2 * 0.6, r: r2 * (0.45 + rand() * 0.15), edge: 0.7 });
-        }
-      }
-    }
-  }
-  // The highest first, so the lower billows in front overlap them.
-  puffs.sort((a, b) => a.y - b.y);
-  const top = Math.min(...puffs.map((p) => p.y - p.r));
-  const lit = mix(fill, '#FFFFFF', 0.55);
-  const dark = mix(shade, fill, 0.15);
-  const blur = Math.max(1, s * 0.03);
-  const layer = Skia.Paint();
-  canvas.saveLayer(layer);
-  // A faint, wider veil of cloud round it all: the thin edges real cloud has.
-  const veil = Skia.Paint();
-  veil.setAntiAlias(true);
-  veil.setMaskFilter(Skia.MaskFilter.MakeBlur(0, s * 0.07, true));
-  veil.setColor(Skia.Color(fill));
-  veil.setAlphaf(0.28);
-  for (const p of puffs) canvas.drawCircle(p.x, p.y, p.r * 1.05, veil);
-  const puff = Skia.Paint();
-  puff.setAntiAlias(true);
-  puff.setMaskFilter(Skia.MaskFilter.MakeBlur(0, blur, true));
-  for (const p of puffs) {
-    // Lit toward the light, shading round to the far side and underneath.
-    const lx = p.x + lean * p.r * 0.38;
-    const ly = p.y - p.r * 0.5;
-    puff.setShader(Skia.Shader.MakeRadialGradient(vec(lx, ly), p.r * 1.5, [Skia.Color(lit), Skia.Color(fill), Skia.Color(mix(fill, dark, 0.4))], [0, 0.5, 1], TileMode.Clamp));
-    // The small billows on the edges are thinner: a little see-through.
-    puff.setAlphaf(1 - 0.25 * p.edge);
-    canvas.drawCircle(p.x, p.y, p.r, puff);
-  }
-  // The base in shadow, darkest along the bottom.
-  const under = Skia.Paint();
-  under.setBlendMode(BlendMode.SrcATop);
-  under.setShader(Skia.Shader.MakeLinearGradient(vec(x, top + (base - top) * 0.45), vec(x, base + s * 0.05), [Skia.Color(`${dark}00`), Skia.Color(`${dark}80`), Skia.Color(dark)], [0, 0.6, 1], TileMode.Clamp));
-  canvas.drawRect(Skia.XYWHRect(x - s * 1.7, top, s * 3.4, base + s * 0.3 - top), under);
-  // A flat, soft-edged bottom: what hangs below the base thins out to nothing.
-  const cut = Skia.Paint();
-  cut.setBlendMode(BlendMode.DstOut);
-  cut.setShader(Skia.Shader.MakeLinearGradient(vec(x, base - s * 0.04), vec(x, base + s * 0.1), [Skia.Color('#00000000'), Skia.Color('#000000FF')], [0, 1], TileMode.Clamp));
-  canvas.drawRect(Skia.XYWHRect(x - s * 1.7, base - s * 0.04, s * 3.4, s * 0.4), cut);
-  canvas.restore();
+/** A cartoon cloud (clouds.ts), its middle at (`x`, `y`) and `s` its size, lit as `light` says; its build comes from `rand`, so each cloud is its own. */
+export function cloud(canvas: SkCanvas, x: number, y: number, s: number, rand: () => number, light: CloudLight) {
+  cartoonCloud(canvas, x, y, s, rand, light);
 }
 
 /** The sun's disc, in points: bigger than the real thing (as a photo's glare makes it look), still small in the sky. */
@@ -342,8 +261,7 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
   }
   if (!clouds) return;
   const light = cloudLight(look);
-  const scale = Math.min(PixelRatio.get(), 3);
-  for (const k of cloudsOf(look, rand, hz, fullW, viewW)) cloud(canvas, k.x, k.y, k.s, rand, light, scale);
+  for (const k of cloudsOf(look, rand, hz, fullW, viewW)) cloud(canvas, k.x, k.y, k.s, rand, light);
 }
 
 /**
