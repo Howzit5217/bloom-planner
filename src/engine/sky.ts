@@ -1,6 +1,8 @@
 // The backdrop's sky: what it looks like right now, from the time of day (sunrise and sunset at
 // the play location) and the current weather. Pure maths; the drawing lives in ui/skia/Meadow.
 
+import { siderealDeg, starLimit, type StarSky } from './stars';
+
 export type SkyWeather = 'clear' | 'partly' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'storm';
 export type SkyPhase = 'night' | 'dawn' | 'day' | 'dusk';
 
@@ -282,7 +284,8 @@ const WASH: Record<SkyWeather, { amount: number; day: string; night: string }> =
   storm: { amount: 0.78, day: '#6E7787', night: '#1E2432' },
 };
 
-const CLOUDS: Record<SkyWeather, number> = { clear: 2, partly: 5, cloudy: 8, fog: 3, rain: 8, snow: 7, storm: 9 };
+/** How many clouds there are: none to see in fog, the sky above is lost in it. */
+const CLOUDS: Record<SkyWeather, number> = { clear: 2, partly: 5, cloudy: 8, fog: 0, rain: 8, snow: 7, storm: 9 };
 /** How much of the sun (or moon) the weather's cloud hides: it's always up there, just behind more or less cloud. */
 const VEIL: Record<SkyWeather, number> = { clear: 0, partly: 0.12, cloudy: 0.72, fog: 0.8, rain: 0.82, snow: 0.75, storm: 0.92 };
 
@@ -302,6 +305,10 @@ export interface SkyLook {
   night: number;
   /** How bright the stars are (0..1); none behind clouds. */
   stars: number;
+  /** The real night sky there and then (which stars, how faint they show), while any stars are out. */
+  starSky: StarSky | null;
+  /** City light on the night sky, 0 a dark country sky to 1 a city centre's orange-grey glow. */
+  skyglow: number;
   /**
    * The sun while any of it is above the horizon: x 0..1 left to right (it rises on the left facing
    * the noon sun), height 0..1 above the horizon, its altitude in degrees, the colour of its light and
@@ -328,6 +335,14 @@ export interface SkyLook {
   /** How hard the rain or snow comes down: 1 light, 2 moderate, 3 heavy (0 when nothing falls). */
   fall: FallLevel;
   fog: boolean;
+  /** How thick the mist or fog is, 0 none to 1 thick fog (from how far you can see). */
+  mist: number;
+  /** The wind, km/h (0 when it isn't known). */
+  wind: number;
+  /** A thunderstorm: lightning. */
+  lightning: boolean;
+  /** Hail falling. */
+  hail: boolean;
   weather: SkyWeather;
   /** Light text and icons go on top (night, storms). */
   darkSky: boolean;
@@ -350,6 +365,11 @@ export function lookKey(l: SkyLook): string {
     moon: l.moon && { x: r(l.moon.x, 0.025), height: r(l.moon.height, 0.02), altitude: l.moon.altitude < 8 ? r(l.moon.altitude, 0.5) : r(Math.min(70, l.moon.altitude), 1.5), fraction: r(l.moon.fraction, 0.02), tilt: r(l.moon.tilt, 0.1) },
     snowCover: r(l.snowCover, 0.05),
     glow: { ...l.glow, x: r(l.glow.x, 0.025), strength: r(l.glow.strength, 0.05) },
+    // The stars turn a degree every four minutes: drawn again for that, not for every second.
+    starSky: l.starSky && { ...l.starSky, lst: r(l.starSky.lst, 1), limit: r(l.starSky.limit, 0.25), milky: r(l.starSky.milky, 0.1) },
+    skyglow: r(l.skyglow, 0.05),
+    mist: r(l.mist, 0.05),
+    wind: r(l.wind, 5),
   });
 }
 
@@ -370,13 +390,24 @@ export const snowCoverOf = (cm: number | null | undefined, snowing: boolean) => 
 /** Snow as it looks lying in daylight: white with a little blue. */
 const SNOW_GROUND = { groundFar: '#F3F6FA', groundMid: '#EEF2F7', groundNear: '#E6ECF3' } as const;
 
-/** A place on the globe, in degrees. */
+/** A place on the globe, in degrees, and how dark its night sky is (Bortle 1 to 9; about 5 when not known). */
 export interface Place {
   latitude: number;
   longitude: number;
+  bortle?: number;
 }
 
-export function skyLook(now: number, place: Place, weather: SkyWeather, level: FallLevel = 2, snowCm: number | null = null): SkyLook {
+/** What else the weather there is doing: the wind (km/h), how far you can see (m), hail. */
+export interface SkyExtras {
+  wind?: number | null;
+  visibility?: number | null;
+  hail?: boolean;
+}
+
+/** How thick mist or fog is from how far you can see (m): fog under a kilometre, mist or haze to a few. */
+export const mistOfVisibility = (m: number | null | undefined) => (m == null ? 0 : m < 200 ? 1 : m < 1000 ? 0.8 : m < 3000 ? 0.45 : m < 6000 ? 0.2 : 0);
+
+export function skyLook(now: number, place: Place, weather: SkyWeather, level: FallLevel = 2, snowCm: number | null = null, extra: SkyExtras = {}): SkyLook {
   const pos = sunPosition(now, place.latitude, place.longitude);
   // To half a degree: the sky doesn't visibly change for less, so it isn't drawn again for less.
   const e = Math.round(pos.altitude * 2) / 2;
@@ -425,7 +456,14 @@ export function skyLook(now: number, place: Place, weather: SkyWeather, level: F
   const moonlit = moon ? 1 - 0.4 * m.fraction * Math.min(1, Math.max(0, moonAlt / 10)) : 1;
   // Through cloud the glow is mostly lost: a faint warmth on that side.
   const glow = { x, color: mix(at((s) => s.glow), washColor, wash.amount * 0.5), strength: between(SKY_BY_SUN, e, (s) => s.glowAlpha) * (1 - 0.8 * veil) };
-  const cloudColor = mix(mix(at((s) => s.cloud), '#9AA3B1', Math.max(0, wash.amount - 0.2)), washColor, wash.amount * 0.2);
+  // City light: an orange-grey glow on the night sky, lighting the clouds from below.
+  const bortle = place.bortle ?? 5;
+  const skyglow = Math.max(0, Math.min(1, (bortle - 3) / 6)) * night;
+  const cloudColor = mix(mix(mix(at((s) => s.cloud), '#9AA3B1', Math.max(0, wash.amount - 0.2)), washColor, wash.amount * 0.2), '#6E625E', skyglow * 0.45);
+  // The real stars, as many as show through the twilight, the moonlight and the city's glow.
+  const limit = starLimit(bortle, pos.altitude, moon, weather === 'partly');
+  const starSky: StarSky | null = (weather === 'clear' || weather === 'partly') && limit > -1 ? { lst: siderealDeg(now, place.longitude), latitude: place.latitude, facing, limit, milky: Math.max(0, Math.min(1, (limit - 5.6) / 1.5)) } : null;
+  const mist = Math.max(weather === 'fog' ? 0.8 : 0, mistOfVisibility(extra.visibility), weather === 'rain' && fall === 1 ? 0.15 : 0);
   return {
     phase,
     top: sky('top', wash.amount),
@@ -438,6 +476,8 @@ export function skyLook(now: number, place: Place, weather: SkyWeather, level: F
     turn: season.turn,
     night,
     stars: (weather === 'clear' ? night : weather === 'partly' ? night * 0.6 : 0) * moonlit,
+    starSky,
+    skyglow,
     sun,
     moon,
     snowCover,
@@ -448,7 +488,11 @@ export function skyLook(now: number, place: Place, weather: SkyWeather, level: F
     rain: weather === 'rain' || weather === 'storm',
     snow: weather === 'snow',
     fall,
-    fog: weather === 'fog',
+    fog: weather === 'fog' || mist >= 0.7,
+    mist,
+    wind: Math.max(0, extra.wind ?? 0),
+    lightning: weather === 'storm',
+    hail: !!extra.hail,
     weather,
     darkSky: night > 0.5 || weather === 'storm',
   };

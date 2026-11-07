@@ -36,10 +36,16 @@ const SNOW: Sheet[] = [
   { speed: 0.035, per: 1 / 6000, len: 1.9, width: 0, alpha: 0.7, drift: 14, driftMs: 6800 },
   { speed: 0.05, per: 1 / 9000, len: 2.7, width: 0, alpha: 0.85, drift: 18, driftMs: 8600 },
 ];
+/** Hail: small white stones falling fast and nearly straight, the near ones bigger. */
+const HAIL: Sheet[] = [
+  { speed: 0.75, per: 1 / 9000, len: 1.1, width: 0, alpha: 0.55 },
+  { speed: 1, per: 1 / 12000, len: 1.6, width: 0, alpha: 0.75 },
+  { speed: 1.3, per: 1 / 18000, len: 2.3, width: 0, alpha: 0.9 },
+];
 /** Rain leans: across this much for every point it falls (snow falls straight, and drifts). */
 const RAIN_SLANT = 0.26;
 
-export type Fall = 'rain' | 'storm' | 'snow';
+export type Fall = 'rain' | 'storm' | 'snow' | 'hail';
 
 /**
  * Light, moderate and heavy (level 1 to 3): how many drops or flakes there are, how big, how fast
@@ -66,9 +72,9 @@ function drawSheet(kind: Fall, s: Sheet, w: number, h: number, seed: number): Sk
     (canvas) => {
       const paint = Skia.Paint();
       paint.setAntiAlias(true);
-      paint.setColor(Skia.Color(kind === 'snow' ? '#FFFFFF' : '#E4ECFF'));
+      paint.setColor(Skia.Color(kind === 'snow' ? '#FFFFFF' : kind === 'hail' ? '#F4F7FF' : '#E4ECFF'));
       paint.setAlphaf(s.alpha);
-      if (kind !== 'snow') {
+      if (kind !== 'snow' && kind !== 'hail') {
         paint.setStyle(PaintStyle.Stroke);
         paint.setStrokeCap(StrokeCap.Round);
         paint.setStrokeWidth(s.width);
@@ -78,7 +84,7 @@ function drawSheet(kind: Fall, s: Sheet, w: number, h: number, seed: number): Sk
         const y = rand() * h;
         // Drawn twice where it crosses the tile's bottom, so the next tile carries it on.
         for (const dy of y + s.len > h ? [0, -h] : [0]) {
-          if (kind === 'snow') canvas.drawCircle(x, y + dy, s.len * (0.7 + rand() * 0.6), paint);
+          if (kind === 'snow' || kind === 'hail') canvas.drawCircle(x, y + dy, s.len * (0.7 + rand() * 0.6), paint);
           else canvas.drawLine(x, y + dy, x, y + dy + s.len, paint);
         }
       }
@@ -108,15 +114,15 @@ function FallingSheet({ picture, s, h, clock, slant, phase }: { picture: SkPictu
 }
 
 /**
- * Rain, a storm's heavier rain, or snow over a `width` x `height` view, light, moderate or heavy
+ * Rain, a storm's heavier rain, snow or hail over a `width` x `height` view, light, moderate or heavy
  * (`level` 1 to 3), moving with `clock` (a time in milliseconds; held still, the drops hang where
- * they are, as for reduced motion).
+ * they are, as for reduced motion). The rain leans more the windier it is (`wind`, km/h).
  */
-export function Precipitation({ kind, level = 2, width, height, clock }: { kind: Fall; level?: number; width: number; height: number; clock: SharedValue<number> }) {
+export function Precipitation({ kind, level = 2, width, height, clock, wind = 0 }: { kind: Fall; level?: number; width: number; height: number; clock: SharedValue<number>; wind?: number }) {
   const how = LEVELS[kind === 'snow' ? 'snow' : 'rain'][Math.max(1, Math.min(3, level)) - 1];
-  const base = kind === 'snow' ? SNOW : kind === 'storm' ? STORM : RAIN;
+  const base = kind === 'snow' ? SNOW : kind === 'hail' ? HAIL : kind === 'storm' ? STORM : RAIN;
   const sheets = useMemo(() => base.map((s) => ({ ...s, per: s.per * how.per, speed: s.speed * how.speed, len: s.len * how.len, width: s.width * Math.sqrt(how.len), alpha: Math.min(0.95, s.alpha * how.alpha) })), [base, how]);
-  const slant = kind === 'snow' ? 0 : RAIN_SLANT * how.slant;
+  const slant = kind === 'snow' ? 0 : RAIN_SLANT * how.slant * (kind === 'hail' ? 0.4 : 1) * (0.8 + Math.min(1.5, wind / 30));
   // Wide enough that, leaning, the drops still reach both edges (and snow's drift too).
   const tileW = width + slant * height + 40;
   const pictures = useMemo(() => sheets.map((s, i) => drawSheet(kind, s, tileW, height, 7919 * (i + 1))), [kind, sheets, tileW, height]);

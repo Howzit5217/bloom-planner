@@ -30,13 +30,21 @@ export function useScrollRail(): Rail {
   const view = useSharedValue(0);
   const vis = useSharedValue(0);
   const dragging = useSharedValue(0);
+  const shownAt = useSharedValue(0);
   const track: Rail['track'] = (e) => {
     'worklet';
     y.value = e.contentOffset.y;
-    content.value = e.contentSize.height;
-    view.value = e.layoutMeasurement.height;
-    // Shows while you scroll, and slips away a moment after you stop.
-    if (!dragging.value) vis.value = withSequence(withTiming(1, { duration: 120 }), withDelay(1300, withTiming(0, { duration: 320 })));
+    // The page's size only when it changes: the handle's length (a layout change) follows it, and
+    // laying the page out again on every frame of a scroll made scrolling stutter.
+    if (content.value !== e.contentSize.height) content.value = e.contentSize.height;
+    if (view.value !== e.layoutMeasurement.height) view.value = e.layoutMeasurement.height;
+    // Shows while you scroll, and slips away a moment after you stop (started afresh a few times a
+    // second, not on every scroll event).
+    const now = Date.now();
+    if (!dragging.value && now - shownAt.value > 250) {
+      shownAt.value = now;
+      vis.value = withSequence(withTiming(1, { duration: 120 }), withDelay(1300, withTiming(0, { duration: 320 })));
+    }
   };
   return { y, content, view, vis, dragging, track };
 }
@@ -83,10 +91,13 @@ export function ScrollRail({ rail, scrollRef, top = 8, bottom = 8 }: { rail: Rai
 
   // Only for pages long enough to need it.
   const box = useAnimatedStyle(() => ({ opacity: rail.content.value > rail.view.value + 40 ? rail.vis.value : 0 }));
+  // Where the handle is moves with every frame of a scroll, as a transform; its length (a layout
+  // change) only when the page's size changes.
   const grab = useAnimatedStyle(() => {
     const g = geometry();
-    return { height: g.len, transform: [{ translateY: Math.min(1, Math.max(0, rail.y.value / g.max)) * g.travel }] };
+    return { transform: [{ translateY: Math.min(1, Math.max(0, rail.y.value / g.max)) * g.travel }] };
   });
+  const length = useAnimatedStyle(() => ({ height: geometry().len }));
 
   return (
     <Animated.View
@@ -98,8 +109,10 @@ export function ScrollRail({ rail, scrollRef, top = 8, bottom = 8 }: { rail: Rai
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, right: EDGE + (HANDLE_W - TRACK_W) / 2, width: TRACK_W, borderRadius: TRACK_W / 2, backgroundColor: trackColor }} />
       <GestureDetector gesture={pan}>
         {/* The grab area is wide and clear; only the bar inside it shows. */}
-        <Animated.View style={[{ position: 'absolute', top: 0, right: 0, width: GRAB_W, alignItems: 'flex-end', paddingRight: EDGE }, grab]}>
-          <View style={{ flex: 1, width: HANDLE_W, borderRadius: HANDLE_W / 2, backgroundColor: handleColor }} />
+        <Animated.View style={[{ position: 'absolute', top: 0, right: 0, width: GRAB_W }, grab]}>
+          <Animated.View style={[{ alignItems: 'flex-end', paddingRight: EDGE }, length]}>
+            <View style={{ flex: 1, width: HANDLE_W, borderRadius: HANDLE_W / 2, backgroundColor: handleColor }} />
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
     </Animated.View>

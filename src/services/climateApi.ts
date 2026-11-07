@@ -184,13 +184,35 @@ export async function fetchAlertForecast(latitude: number, longitude: number, ti
 }
 
 /** The weather right now, for the backdrop's sky. Two decimals (about 1 km) is plenty for a sky. */
-export async function fetchCurrentWeather(latitude: number, longitude: number): Promise<{ code: number; cloudCover: number | null; snowDepth: number | null }> {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}&current=weather_code,cloud_cover,snow_depth&timezone=auto`;
+export async function fetchCurrentWeather(latitude: number, longitude: number): Promise<{ code: number; cloudCover: number | null; snowDepth: number | null; wind: number | null; visibility: number | null }> {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}&current=weather_code,cloud_cover,snow_depth,wind_speed_10m,visibility&timezone=auto`;
   const json = await getJson(url, 10000);
   const cur = json?.current;
   if (!cur || typeof cur.weather_code !== 'number') throw new ClimateError('No current weather');
-  // Snow lying on the ground, in metres.
-  return { code: cur.weather_code, cloudCover: typeof cur.cloud_cover === 'number' ? cur.cloud_cover : null, snowDepth: typeof cur.snow_depth === 'number' ? cur.snow_depth : null };
+  const n = (v: unknown) => (typeof v === 'number' ? v : null);
+  // Snow lying on the ground in metres, the wind in km/h, how far you can see in metres.
+  return { code: cur.weather_code, cloudCover: n(cur.cloud_cover), snowDepth: n(cur.snow_depth), wind: n(cur.wind_speed_10m), visibility: n(cur.visibility) };
+}
+
+/**
+ * How big the town a place is named for is, and how far the place is from its middle (km): the
+ * nearest place of that name the geocoder knows. Null when it doesn't know one near (or its size).
+ */
+export async function fetchTownSize(name: string, latitude: number, longitude: number): Promise<{ population: number; km: number } | null> {
+  const q = name.split(',')[0].trim();
+  if (q.length < 2) return null;
+  const json = await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=en&format=json`, 10000);
+  const results: any[] = Array.isArray(json?.results) ? json.results : [];
+  const r = Math.PI / 180;
+  const km = (lat: number, lon: number) => {
+    const h = Math.sin(((lat - latitude) * r) / 2) ** 2 + Math.cos(lat * r) * Math.cos(latitude * r) * Math.sin(((lon - longitude) * r) / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+  };
+  const near = results
+    .filter((x) => typeof x.latitude === 'number' && typeof x.longitude === 'number' && typeof x.population === 'number')
+    .map((x) => ({ population: x.population as number, km: km(x.latitude, x.longitude) }))
+    .sort((a, b) => a.km - b.km)[0];
+  return near && near.km < 60 ? near : null;
 }
 
 /**

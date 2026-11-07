@@ -1,5 +1,6 @@
 import * as Network from 'expo-network';
 import { followLocation } from '@/services/followLocation';
+import { judgeNightSky } from '@/services/nightSky';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { msUntilMidnight, todayKey } from '@/engine/dates';
@@ -72,6 +73,10 @@ export function useLifecycle() {
   const weather = useApp((s) => s.settings.weatherAlerts);
   const where = useApp((s) => (s.location ? `${s.location.latitude}|${s.location.longitude}` : ''));
   const tempUnit = useApp((s) => s.settings.temp);
+  // How dark the night sky is there, once for each place.
+  useEffect(() => {
+    if (where) void judgeNightSky();
+  }, [where]);
   useEffect(() => {
     if (!dash) return;
     const t = setTimeout(() => void scheduleNotifications(), 800);

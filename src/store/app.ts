@@ -146,6 +146,8 @@ interface AppState {
   setLocationAndClimate: (location: PlayLocation | null, climate: ClimateCache | null) => Promise<void>;
   /** Following the phone: the place moves (and its forecast with it); its weather history and months stay. */
   moveLocation: (to: { latitude: number; longitude: number; label: string; timezone: string }) => Promise<void>;
+  /** Saves how dark the location's night sky is (Bortle 1 to 9). */
+  setNightSky: (bortle: number) => Promise<void>;
   setPreset: (preset: ThresholdPreset) => Promise<void>;
   setLimits: (limits: TempLimits) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -295,6 +297,14 @@ export const useApp = create<AppState>((set, get) => ({
     await db.kvSet('location', location);
     set({ location });
     void useForecast.getState().refresh(location);
+  },
+
+  setNightSky: async (bortle) => {
+    const prev = get().location;
+    if (!prev) return;
+    const location: PlayLocation = { ...prev, nightSky: { bortle, latitude: prev.latitude, longitude: prev.longitude } };
+    await db.kvSet('location', location);
+    set({ location });
   },
 
   setLimits: async (limits) => {

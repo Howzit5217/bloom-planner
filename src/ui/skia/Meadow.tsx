@@ -1,7 +1,9 @@
 import { BlendMode, Canvas, ClipOp, createPicture, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkCanvas, type SkPaint } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { PixelRatio, View } from 'react-native';
 import { lookKey, mix, multiply, type SkyLook } from '@/engine/sky';
+import { cloudEffect, cloudLight, drawShaderCloud, type CloudLight } from './cloudShader';
+import { milkyWay, seenStars, type StarSky } from '@/engine/stars';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
@@ -18,17 +20,26 @@ export const color = (paint: SkPaint, hex: string, alpha = 1) => {
 };
 
 /** How far a cloud reaches round its middle, in its sizes: for the picture it's drawn into. */
-export const CLOUD_BOUNDS = { left: -1.75, top: -1.25, width: 3.5, height: 1.7 };
+export const CLOUD_BOUNDS = { left: -1.75, top: -1.35, width: 3.5, height: 1.8 };
 
 /**
- * A cloud as clouds look (a fair-weather cumulus): a heap of rounded billows, the biggest in the
- * middle building into a dome, smaller ones crowding their tops like a cauliflower's, sitting on a
- * flat, shaded base. Each billow is lit from the sun's side above and shaded away from it, and the
- * ones in front overlap the ones behind, so every billow stands out from the next; the edges are
- * soft and a little see-through, as cloud is. `lean` is where the light comes from across (-1 left
- * to 1 right). Its shape comes from `rand`, so each cloud is its own.
+ * A cloud (a cumulus, heaped on a flat base), its middle at (`x`, `y`) and `s` its size, lit as
+ * `light` says; its build comes from `rand`, so each cloud is its own. Drawn a pixel at a time by
+ * the cloud shader (cloudShader.ts), fine to `scale` device pixels a point; `plain` (or a device
+ * that can't run the shader) draws the plain clouds instead, quick enough to draw without a GPU.
  */
-export function cloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, _paint: SkPaint, rand: () => number, lean = 0) {
+export function cloud(canvas: SkCanvas, x: number, y: number, s: number, rand: () => number, light: CloudLight, scale: number, plain = false) {
+  const fx = plain ? null : cloudEffect();
+  if (fx) drawShaderCloud(canvas, fx, x, y, s, rand, light, scale, CLOUD_BOUNDS);
+  else plainCloud(canvas, x, y, s, light.fill, light.shade, rand, light.lean);
+}
+
+/**
+ * The plain cloud: a heap of rounded billows, the biggest in the middle building into a dome,
+ * smaller ones crowding their tops, on a flat, shaded base. `lean` is where the light comes from
+ * across (-1 left to 1 right).
+ */
+function plainCloud(canvas: SkCanvas, x: number, y: number, s: number, fill: string, shade: string, rand: () => number, lean = 0) {
   const base = y + s * 0.12;
   const puffs: Array<{ x: number; y: number; r: number; edge: number }> = [];
   // Each its own build: some long and flat, some tall and heaped, built up off-centre a little.
@@ -178,6 +189,57 @@ export function drawSunDisc(canvas: SkCanvas, hz: number, left: number, viewW: n
   canvas.restore();
 }
 
+const RAD = Math.PI / 180;
+
+/** A star's colour from its B-V index: blue-white hot stars, white, then yellow and orange cooler ones (gently, as the eye sees them). */
+function starColor(bv: number) {
+  if (bv < 0) return mix('#C4D4FF', '#FFFFFF', Math.max(0, (bv + 0.4) / 0.4));
+  if (bv < 0.6) return mix('#FFFFFF', '#FFF3DE', bv / 0.6);
+  return mix('#FFF3DE', '#FFCB8E', Math.min(1, (bv - 0.6) / 1.1));
+}
+
+/**
+ * The night sky as it is: each star where it stands (a degree up is as far as a degree across, so
+ * the constellations keep their shapes, facing the way the sun is drawn from), bigger and brighter
+ * the brighter it is, with the faintest just showing; the Milky Way as a soft band under it.
+ */
+function drawStars(canvas: SkCanvas, sky: StarSky, hz: number, fullW: number, left: number, viewW: number, top: number, fade: number) {
+  // Up the sky as the sun and moon go (70 degrees up at the top of their path), the same across.
+  const rise = Math.max(SUN_R + 2, Math.min(hz - top, 18 + (hz - top - 4) * 0.7));
+  const kv = rise / 70;
+  const kh = Math.max(kv, viewW / 200);
+  const cx = left + viewW / 2;
+  const wide = Math.min(180, Math.max(cx, fullW - cx) / kh + 4);
+  const at = (alt: number, right: number) => ({ x: cx + right * kh * Math.cos(alt * RAD), y: hz - alt * kv });
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  for (const m of milkyWay(sky, wide)) {
+    const p = at(m.alt, m.right);
+    const r = m.size * kv * 1.3;
+    if (p.x < -r || p.x > fullW + r || p.y < -r) continue;
+    paint.setShader(Skia.Shader.MakeRadialGradient(vec(p.x, p.y), r, [Skia.Color('#D2D8F0'), clear('#D2D8F0')], [0, 1], TileMode.Clamp));
+    paint.setAlphaf(Math.min(1, m.glow * 0.16 * fade));
+    canvas.drawCircle(p.x, p.y, r, paint);
+  }
+  paint.setShader(null);
+  for (const st of seenStars(sky, wide)) {
+    const p = at(st.alt, st.right);
+    if (p.x < -3 || p.x > fullW + 3 || p.y < -3 || p.y > hz - 1) continue;
+    // 0 at the faintest that shows, 1 for the brightest.
+    const t = Math.max(0, Math.min(1, (sky.limit - st.mag) / 5.5));
+    const r = 0.42 + 1.45 * Math.pow(t, 1.6);
+    const hue = starColor(st.bv);
+    if (st.mag < 1.3) {
+      paint.setShader(Skia.Shader.MakeRadialGradient(vec(p.x, p.y), r * 4.5, [Skia.Color(`${hue}66`), clear(hue)], [0, 1], TileMode.Clamp));
+      paint.setAlphaf(fade);
+      canvas.drawCircle(p.x, p.y, r * 4.5, paint);
+      paint.setShader(null);
+    }
+    color(paint, hue, (0.22 + 0.78 * Math.min(1, t * 2.4)) * fade);
+    canvas.drawCircle(p.x, p.y, r, paint);
+  }
+}
+
 /**
  * The sky from the top down to the horizon `hz`, `fullW` wide: the gradient, the sunrise or sunset
  * glow, stars and clouds across all of it, and the sun's light or the moon placed over the part the
@@ -202,15 +264,16 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
     canvas.drawRect(Skia.XYWHRect(0, 0, fullW, hz + 1), paint);
     paint.setShader(null);
   }
-  // Stars on a clear night, thicker up high.
-  if (look.stars > 0) {
-    const n = Math.round(((fullW * hz) / 1300) * look.stars);
-    for (let i = 0; i < n; i++) {
-      const sy = Math.pow(rand(), 1.6) * hz * 0.85;
-      color(paint, '#FFFFFF', (0.35 + rand() * 0.6) * look.stars);
-      canvas.drawCircle(rand() * fullW, sy, 0.6 + rand() * 1.2, paint);
-    }
+  // City light at night: an orange-grey glow rising off the horizon.
+  if (look.skyglow > 0.02) {
+    paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, hz * 0.2), [Skia.Color('#7A665C'), Skia.Color('#7A665C66'), clear('#7A665C')], [0, 0.35, 1], TileMode.Clamp));
+    paint.setAlphaf(0.7 * look.skyglow);
+    canvas.drawRect(Skia.XYWHRect(0, 0, fullW, hz + 1), paint);
+    paint.setShader(null);
+    paint.setAlphaf(1);
   }
+  // The stars really up there, there and then, and the Milky Way under a dark enough sky.
+  if (look.starSky && look.stars > 0) drawStars(canvas, look.starSky, hz, fullW, left, viewW, top, 0.55 + 0.45 * look.night);
   if (look.sun) {
     // The sky brightens round the sun, a whitish haze close in that fades into the blue (paler and
     // wider behind cloud, where the light spreads through it).
@@ -279,21 +342,26 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
     canvas.restore();
   }
   if (!clouds) return;
-  const shade = cloudShade(look);
-  const lean = look.sun && look.veil < 0.5 ? Math.max(-1, Math.min(1, (look.sun.x - 0.5) * 2.2)) : 0;
-  for (const k of cloudsOf(look, rand, hz, fullW, viewW)) cloud(canvas, k.x, k.y, k.s, look.cloudColor, shade, paint, rand, lean);
+  const light = cloudLight(look);
+  const scale = Math.min(PixelRatio.get(), 3);
+  for (const k of cloudsOf(look, rand, hz, fullW, viewW)) cloud(canvas, k.x, k.y, k.s, rand, light, scale);
 }
 
-/** The clouds' shaded underside: a soft blue-grey, deeper in bad weather (the cloud colour greys already). */
-export const cloudShade = (look: SkyLook) => mix(mix(look.cloudColor, '#7E8CA0', 0.38), look.mid, 0.2);
-
-/** Where the clouds go along the upper sky, sized to the screen: as many as the weather has. */
+/**
+ * Where the clouds go across the sky, as many as the weather has: mostly small, some middling and
+ * now and then a huge one, smaller toward the horizon (further off) and never more than the sky
+ * shown has room for; bigger and heavier the more the sky is covered.
+ */
 export function cloudsOf(look: SkyLook, rand: () => number, hz: number, fullW: number, viewW: number): Array<{ x: number; y: number; s: number }> {
   const count = Math.round(look.clouds * Math.max(0.6, fullW / 420));
   return Array.from({ length: count }, () => {
-    // From small wisps to big heaps (more small than big), bigger and heavier the more the sky is covered.
-    const s = viewW * (0.05 + Math.pow(rand(), 1.4) * 0.12) * (1 + 0.6 * look.veil);
-    const y = hz * (0.18 + rand() * 0.62);
+    const up = rand();
+    const size = rand();
+    const big = size > 0.88 ? 0.26 + rand() * 0.14 : size > 0.55 ? 0.09 + rand() * 0.1 : 0.02 + rand() * 0.06;
+    const far = 1 - 0.5 * up;
+    const s = Math.min(viewW * big * far * (1 + 0.5 * look.veil), hz * 0.45);
+    // A big one low enough that most of it shows.
+    const y = Math.max(hz * (0.12 + up * 0.68), s * 0.7);
     return { x: rand() * (fullW + s) - s * 0.5, y, s };
   });
 }
@@ -422,18 +490,75 @@ export function drawHaze(canvas: SkCanvas, w: number, hz: number, haze: number, 
   }
 }
 
+/** A bank of mist: where it lies (its middle), how tall, how thick, and its own noise. */
+export interface MistBank {
+  y: number;
+  h: number;
+  alpha: number;
+  seed: number;
+  /** Points a second it drifts. */
+  speed: number;
+}
+
+/** The banks of mist or fog lying over the field and along the horizon, more and thicker the thicker it is. */
+export function mistBanks(look: SkyLook, rand: () => number, hz: number, h: number): MistBank[] {
+  if (look.mist <= 0) return [];
+  const depth = Math.max(1, h - hz);
+  const n = look.mist > 0.6 ? 5 : look.mist > 0.3 ? 4 : 2;
+  return Array.from({ length: n }, (_, i) => {
+    // From along the horizon (far, thin and dense) forward over the field (nearer, taller, fainter).
+    const k = i / Math.max(1, n - 1);
+    const y = hz + depth * (0.02 + 0.45 * k * k) - (i === 0 ? 8 : 0);
+    return { y, h: 30 + 90 * k + rand() * 20, alpha: Math.min(0.95, look.mist * (0.95 - 0.35 * k)), seed: Math.floor(rand() * 9999), speed: (2 + 6 * k) * (0.6 + rand() * 0.8) * (1 + Math.min(2, look.wind / 20)) };
+  });
+}
+
+/**
+ * One bank of mist, `w` across (and repeating every `w`, so it drifts round without a seam) and
+ * `b.h` tall round y = 0: patches of fog from a noise, soft above and below.
+ */
+export function drawMistBank(canvas: SkCanvas, w: number, b: MistBank, look: SkyLook) {
+  const tone = mix(mix('#EEF1F5', look.horizon, 0.3), '#2E3444', look.night * 0.8);
+  const c = Skia.Color(tone);
+  const layer = Skia.Paint();
+  canvas.saveLayer(layer, Skia.XYWHRect(0, -b.h, w, b.h * 2));
+  const fog = Skia.Paint();
+  // Stretched along: fog lies in long patches. The noise tiles across w, so the bank wraps round.
+  fog.setShader(Skia.Shader.MakeFractalNoise(3 / Math.max(80, b.h * 4), 3 / Math.max(30, b.h), 4, b.seed, w, b.h * 2));
+  fog.setColorFilter(Skia.ColorFilter.MakeMatrix([0, 0, 0, 0, c[0], 0, 0, 0, 0, c[1], 0, 0, 0, 0, c[2], 2.4, 0, 0, 0, -0.75]));
+  fog.setAlphaf(b.alpha);
+  canvas.save();
+  canvas.translate(0, -b.h);
+  canvas.drawRect(Skia.XYWHRect(0, 0, w, b.h * 2), fog);
+  canvas.restore();
+  // Soft above and below, thickest along its middle.
+  const edge = Skia.Paint();
+  edge.setBlendMode(BlendMode.DstIn);
+  edge.setShader(Skia.Shader.MakeLinearGradient(vec(0, -b.h), vec(0, b.h), [Skia.Color('#00000000'), Skia.Color('#000000FF'), Skia.Color('#000000CC'), Skia.Color('#00000000')], [0, 0.45, 0.6, 1], TileMode.Clamp));
+  canvas.drawRect(Skia.XYWHRect(0, -b.h, w, b.h * 2), edge);
+  canvas.restore();
+}
+
 /**
  * Fog, rain or snow over the scene, fireflies at night, and the dark theme's dimming by day.
  * `falling: false` leaves out the rain and snow, for a scene that has them falling live
  * (Precipitation) or is too small for them: drawn into a still picture they only hang there.
+ * `banks: false` leaves out the banks of fog, for a scene that has them drifting live.
  */
-export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: number, hz: number, look: SkyLook, c: Palette, { falling = true }: { falling?: boolean } = {}) {
+export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: number, hz: number, look: SkyLook, c: Palette, { falling = true, banks = true }: { falling?: boolean; banks?: boolean } = {}) {
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
   const groundH = Math.max(1, h - hz);
-  if (look.fog) {
-    color(paint, '#E9EDF2', 0.22);
+  if (look.mist > 0) {
+    // A pale veil over all of it, and banks of fog lying across the field, thickest far off.
+    color(paint, mix('#E9EDF2', '#3A4152', look.night), 0.2 * look.mist);
     canvas.drawRect(Skia.XYWHRect(0, 0, w, h), paint);
+    for (const b of banks ? mistBanks(look, rand, hz, h) : []) {
+      canvas.save();
+      canvas.translate(0, b.y);
+      drawMistBank(canvas, w, b, look);
+      canvas.restore();
+    }
   }
   if (look.rain && falling) {
     const drop = Skia.Paint();

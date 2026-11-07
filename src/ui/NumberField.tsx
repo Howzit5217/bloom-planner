@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
+// The gesture handler's own text box: a touch starting on it still pulls the page down to refresh
+// (Android's own box stopped that) and scrolls the page; a tap focuses it.
+import { TextInput } from 'react-native-gesture-handler';
+
 import { fmt } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { font, radius } from '@/theme/tokens';

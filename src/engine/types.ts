@@ -163,6 +163,8 @@ export interface PlayLocation {
   elevation: number | null;
   resolvedAt: string;
   climateYears: number;
+  /** How dark its night sky is (Bortle 1 to 9), worked out for these coordinates (missing until then). */
+  nightSky?: { bortle: number; latitude: number; longitude: number };
 }
 
 export type ThresholdPreset = 'fair' | 'normal' | 'all';

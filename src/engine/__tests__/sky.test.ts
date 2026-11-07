@@ -1,4 +1,4 @@
-import { defaultPlace, fallLevelFromCode, lookKey, moonPosition, seasonGround, skyLook, snowCoverOf, solarDay, sunPosition, sunTimes, weatherFromCode } from '../sky';
+import { defaultPlace, fallLevelFromCode, lookKey, mistOfVisibility, moonPosition, seasonGround, skyLook, snowCoverOf, solarDay, sunPosition, sunTimes, weatherFromCode } from '../sky';
 
 const utc = (iso: string) => new Date(iso).getTime();
 const near = (ms: number | null, iso: string, minutes = 6) => {
@@ -216,6 +216,44 @@ describe('the sky', () => {
     expect(fallLevelFromCode(71)).toBe(1);
     expect(fallLevelFromCode(75)).toBe(3);
     expect(fallLevelFromCode(0)).toBe(0);
+  });
+
+  it('lies in fog and mist, from how far you can see', () => {
+    expect(mistOfVisibility(null)).toBe(0);
+    expect(mistOfVisibility(40000)).toBe(0);
+    expect(mistOfVisibility(4000)).toBeGreaterThan(0);
+    expect(mistOfVisibility(500)).toBeGreaterThan(mistOfVisibility(4000));
+    const fog = skyLook(at(9), place, 'fog');
+    expect(fog.mist).toBeGreaterThan(0.5);
+    expect(fog.fog).toBe(true);
+    // The sky above is lost in it: no clouds to see.
+    expect(fog.clouds).toBe(0);
+    // A clear morning with thick ground fog all the same.
+    expect(skyLook(at(9), place, 'clear', 0, null, { visibility: 150 }).fog).toBe(true);
+    expect(look(12).mist).toBe(0);
+  });
+
+  it('carries the wind, lightning and hail', () => {
+    expect(skyLook(at(12), place, 'storm', 2).lightning).toBe(true);
+    expect(look(12).lightning).toBe(false);
+    expect(skyLook(at(12), place, 'storm', 3, null, { hail: true, wind: 40 })).toMatchObject({ hail: true, wind: 40 });
+    expect(look(12).wind).toBe(0);
+  });
+
+  it('shows the real stars by night, fewer under a city\'s glow, none under cloud', () => {
+    const night = utc('2026-11-06T04:30:00Z');
+    const phoenix = { latitude: 33.45, longitude: -112.07 };
+    const city = skyLook(night, { ...phoenix, bortle: 9 }, 'clear');
+    const desert = skyLook(night, { ...phoenix, bortle: 2 }, 'clear');
+    expect(city.starSky!.limit).toBeLessThan(desert.starSky!.limit);
+    expect(desert.starSky!.milky).toBeGreaterThan(0);
+    expect(city.starSky!.milky).toBe(0);
+    // The city's light glows on its sky; a dark place's doesn't.
+    expect(city.skyglow).toBeGreaterThan(0.5);
+    expect(desert.skyglow).toBe(0);
+    expect(skyLook(night, phoenix, 'cloudy').starSky).toBeNull();
+    // None by day.
+    expect(skyLook(utc('2026-11-06T19:00:00Z'), phoenix, 'clear').starSky).toBeNull();
   });
 
   it('reads Open-Meteo weather codes', () => {

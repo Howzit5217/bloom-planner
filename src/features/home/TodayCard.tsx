@@ -1,7 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { em, Rich } from '@/ui/Rich';
 import { useEffect, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+// The gesture handler's own text box: a touch starting on it still pulls the page down to refresh
+// (Android's own box stopped that) and scrolls the page; a tap focuses it.
+import { TextInput } from 'react-native-gesture-handler';
+
 import { addDaysKey, fromKey, type DayKey } from '@/engine/dates';
 import { isEasyDay } from '@/engine/rhythm';
 import { fmt, fmtLongDay, roundNice } from '@/engine/format';

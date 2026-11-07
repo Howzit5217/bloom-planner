@@ -13,6 +13,9 @@ interface Weather {
   cloudCover: number | null;
   /** Snow on the ground, metres (missing from weather saved before 1.8.1). */
   snowDepth?: number | null;
+  /** The wind (km/h) and how far you can see (m), missing from weather saved before 1.8.2. */
+  wind?: number | null;
+  visibility?: number | null;
   at: number;
   latitude: number;
   longitude: number;
@@ -133,6 +136,9 @@ export function useSkyLook(): SkyLook {
     const live = current ? weatherFromCode(current.code, current.cloudCover) : 'clear';
     // The sun's path and the seasons' colours are the play location's, or a mid-northern place's.
     const snowCm = current?.snowDepth != null ? current.snowDepth * 100 : null;
-    return skyLook(now, location ?? defaultPlace(now), live, fallLevelFromCode(current?.code), snowCm);
+    const place = location ? { latitude: location.latitude, longitude: location.longitude, bortle: location.nightSky?.bortle } : defaultPlace(now);
+    // Thunderstorms with hail are codes 96 and 99.
+    const extra = { wind: current?.wind, visibility: current?.visibility, hail: current?.code === 96 || current?.code === 99 };
+    return skyLook(now, place, live, fallLevelFromCode(current?.code), snowCm, extra);
   }, [now, location, weather]);
 }
