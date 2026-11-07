@@ -189,8 +189,6 @@ export function drawSunDisc(canvas: SkCanvas, hz: number, left: number, viewW: n
   canvas.restore();
 }
 
-const RAD = Math.PI / 180;
-
 /** A star's colour from its B-V index: blue-white hot stars, white, then yellow and orange cooler ones (gently, as the eye sees them). */
 function starColor(bv: number) {
   if (bv < 0) return mix('#C4D4FF', '#FFFFFF', Math.max(0, (bv + 0.4) / 0.4));
@@ -201,16 +199,17 @@ function starColor(bv: number) {
 /**
  * The night sky as it is: each star where it stands (a degree up is as far as a degree across, so
  * the constellations keep their shapes, facing the way the sun is drawn from), bigger and brighter
- * the brighter it is, with the faintest just showing; the Milky Way as a soft band under it.
+ * the brighter it is, with the faintest just showing; the Milky Way as a soft band under it. The
+ * whole sky is full of them: from the horizon to straight overhead at the top, and right across.
+ * (Drawing them closer together toward the top, as on a globe, left the top corners empty and the
+ * stars in a dome-shaped patch.)
  */
-function drawStars(canvas: SkCanvas, sky: StarSky, hz: number, fullW: number, left: number, viewW: number, top: number, fade: number) {
-  // Up the sky as the sun and moon go (70 degrees up at the top of their path), the same across.
-  const rise = Math.max(SUN_R + 2, Math.min(hz - top, 18 + (hz - top - 4) * 0.7));
-  const kv = rise / 70;
+function drawStars(canvas: SkCanvas, sky: StarSky, hz: number, fullW: number, left: number, viewW: number, fade: number) {
+  const kv = Math.max(1, hz) / 90;
   const kh = Math.max(kv, viewW / 200);
   const cx = left + viewW / 2;
   const wide = Math.min(180, Math.max(cx, fullW - cx) / kh + 4);
-  const at = (alt: number, right: number) => ({ x: cx + right * kh * Math.cos(alt * RAD), y: hz - alt * kv });
+  const at = (alt: number, right: number) => ({ x: cx + right * kh, y: hz - alt * kv });
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
   for (const m of milkyWay(sky, wide)) {
@@ -273,7 +272,7 @@ export function drawSky(canvas: SkCanvas, rand: () => number, hz: number, fullW:
     paint.setAlphaf(1);
   }
   // The stars really up there, there and then, and the Milky Way under a dark enough sky.
-  if (look.starSky && look.stars > 0) drawStars(canvas, look.starSky, hz, fullW, left, viewW, top, 0.55 + 0.45 * look.night);
+  if (look.starSky && look.stars > 0) drawStars(canvas, look.starSky, hz, fullW, left, viewW, 0.55 + 0.45 * look.night);
   if (look.sun) {
     // The sky brightens round the sun, a whitish haze close in that fades into the blue (paler and
     // wider behind cloud, where the light spreads through it).
@@ -475,7 +474,10 @@ export function drawHaze(canvas: SkCanvas, w: number, hz: number, haze: number, 
   const paint = Skia.Paint();
   const fade = (hex: string) =>
     Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, hz + haze), [Skia.Color(hex), Skia.Color(`${hex}A0`), Skia.Color(`${hex}4D`), Skia.Color(`${hex}17`), Skia.Color(`${hex}00`)], [0, 0.12, 0.32, 0.62, 1], TileMode.Clamp);
-  paint.setShader(fade(look.horizon));
+  // The air's colour where it meets the sky: under a city's glow at night, the glow's (as drawSky has
+  // it at the horizon), or the haze showed as a dark line along the horizon under the glowing sky.
+  const air = look.skyglow > 0 ? mix(look.horizon, '#7A665C', Math.min(1, 0.7 * look.skyglow)) : look.horizon;
+  paint.setShader(fade(air));
   paint.setAlphaf(alpha);
   canvas.drawRect(Skia.XYWHRect(0, hz, w, haze), paint);
   const glow = look.glow;
@@ -543,9 +545,10 @@ export function drawMistBank(canvas: SkCanvas, w: number, b: MistBank, look: Sky
  * Fog, rain or snow over the scene, fireflies at night, and the dark theme's dimming by day.
  * `falling: false` leaves out the rain and snow, for a scene that has them falling live
  * (Precipitation) or is too small for them: drawn into a still picture they only hang there.
- * `banks: false` leaves out the banks of fog, for a scene that has them drifting live.
+ * `banks: false` leaves out the banks of fog, for a scene that has them drifting live, and
+ * `fireflies: false` the fireflies, for one that has them flying.
  */
-export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: number, hz: number, look: SkyLook, c: Palette, { falling = true, banks = true }: { falling?: boolean; banks?: boolean } = {}) {
+export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: number, hz: number, look: SkyLook, c: Palette, { falling = true, banks = true, fireflies = true }: { falling?: boolean; banks?: boolean; fireflies?: boolean } = {}) {
   const paint = Skia.Paint();
   paint.setAntiAlias(true);
   const groundH = Math.max(1, h - hz);
@@ -579,7 +582,7 @@ export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: 
       canvas.drawCircle(rand() * w, rand() * h, 1.2 + rand() * 2, paint);
     }
   }
-  if (look.night > 0.6) {
+  if (look.night > 0.6 && fireflies) {
     const fly = Skia.Paint();
     fly.setAntiAlias(true);
     fly.setBlendMode(BlendMode.Screen);
