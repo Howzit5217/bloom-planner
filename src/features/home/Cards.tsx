@@ -26,6 +26,7 @@ import { Ring } from '@/ui/skia/Ring';
 import { T } from '@/ui/T';
 import { useT } from '@/i18n';
 import { taskText } from '@/i18n/level-text';
+import { shadow } from '@/ui/shadow';
 
 /** Header: current level in the gold badge, the goal beneath. Tap for the level table. */
 export function HomeHeader({ dash }: { dash: Dashboard }) {
@@ -54,7 +55,7 @@ export function HomeHeader({ dash }: { dash: Dashboard }) {
       <View
         accessible
         accessibilityLabel={maxed ? undefined : t('Goal: level {level} by {date}', { level: dash.goal.level, date: goalDate })}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.card, borderRadius: 999, paddingLeft: maxed ? 18 : 8, paddingRight: 18, paddingVertical: 6, boxShadow: `0px 4px 14px 0px ${c.shadow}` }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.card, borderRadius: 999, paddingLeft: maxed ? 18 : 8, paddingRight: 18, paddingVertical: 6, ...shadow(`0px 4px 14px 0px ${c.shadow}`) }}
       >
         {/* The level you're going for, in its own badge, and when by. */}
         {maxed ? null : <LevelBadge level={dash.goal.level} size={38} />}
@@ -73,7 +74,7 @@ const BLOOM_H = 172;
 function Pill({ icon, text, tint }: { icon: IconName; text: string; tint?: string }) {
   const { c } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.card, borderRadius: 999, paddingHorizontal: 14, minHeight: 40, boxShadow: `0px 4px 12px 0px ${c.shadow}` }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.card, borderRadius: 999, paddingHorizontal: 14, minHeight: 40, ...shadow(`0px 4px 12px 0px ${c.shadow}`) }}>
       <Icon name={icon} size={18} color={tint ?? c.leafDeep} />
       <T v="smallBold">{text}</T>
     </View>

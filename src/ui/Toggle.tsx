@@ -5,6 +5,7 @@ import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSprin
 import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
 import { T } from './T';
+import { shadow } from './shadow';
 
 interface Props {
   label: string;
@@ -47,8 +48,8 @@ export function Toggle({ label, value, onChange, hint, tone = 'paper' }: Props) 
           </T>
         ) : null}
       </View>
-      <Animated.View style={[{ width: 52, height: 30, borderRadius: 15, padding: 3, boxShadow: `inset 0px 1px 3px 0px ${c.shadow}` }, track]}>
-        <Animated.View style={[{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF', boxShadow: '0px 2px 4px 0px rgba(0,0,0,0.18)' }, knob]} />
+      <Animated.View style={[{ width: 52, height: 30, borderRadius: 15, padding: 3, ...shadow(`inset 0px 1px 3px 0px ${c.shadow}`) }, track]}>
+        <Animated.View style={[{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF', ...shadow('0px 2px 4px 0px rgba(0,0,0,0.18)') }, knob]} />
       </Animated.View>
     </Pressable>
   );

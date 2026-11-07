@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme/theme';
 import { SPRING } from '@/theme/tokens';
+import { shadow } from './shadow';
 
 interface Props {
   /** 0..1 */
@@ -103,7 +104,7 @@ export function Slider({ value, onChange, label, step = 0.05 }: Props) {
                   height: KNOB,
                   borderRadius: KNOB / 2,
                   backgroundColor: '#FFFFFF',
-                  boxShadow: `0px 2px 8px 0px ${c.shadow}, 0px 0px 0px 3px ${c.leaf}`,
+                  ...shadow(`0px 2px 8px 0px ${c.shadow}, 0px 0px 0px 3px ${c.leaf}`),
                 },
                 knob,
               ]}

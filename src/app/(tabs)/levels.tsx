@@ -22,6 +22,7 @@ import { T } from '@/ui/T';
 import { TAB_BAR_SPACE } from '@/ui/TabBar';
 import { useT } from '@/i18n';
 import { taskText } from '@/i18n/level-text';
+import { shadow } from '@/ui/shadow';
 
 /** A tile: padding above and below, an objective per line, the note under them, and the gap to the next. */
 const PAD = 14;
@@ -165,7 +166,7 @@ function LevelRowView({ row, r, current }: { row: LevelRow; r: Requirement; curr
         alignItems: 'center',
         gap: 12,
         backgroundColor: tile,
-        boxShadow: `0px 3px 12px 0px ${c.shadow}`,
+        ...shadow(`0px 3px 12px 0px ${c.shadow}`),
       }}
     >
       {/* Every level wears its rank badge, in its metal: the ones reached and the ones still to come. */}

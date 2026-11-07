@@ -10,6 +10,7 @@ import { font, SPRING } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { T } from './T';
 import { t } from '@/i18n';
+import { shadow } from './shadow';
 
 const WEEK_START = weekStartFor(Intl.DateTimeFormat().resolvedOptions().locale);
 const ROWS = 6;
@@ -80,7 +81,7 @@ export function CalendarPicker({ value, onChange, min, max, today }: Props) {
         paddingHorizontal: 10,
         paddingTop: 10,
         paddingBottom: 12,
-        boxShadow: `0px 6px 24px 0px ${c.shadow}, 0px 1px 3px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`,
+        ...shadow(`0px 6px 24px 0px ${c.shadow}, 0px 1px 3px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`),
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
@@ -261,7 +262,7 @@ function DayCell({ k, width, selected, isToday, disabled, band, bandEndsHere, ba
                 backgroundColor: selected ? c.button : pressed && !disabled ? c.leafPale : isToday ? c.card : 'transparent',
                 borderWidth: isToday && !selected ? 2 : 0,
                 borderColor: c.nectar,
-                boxShadow: selected ? `0px 3px 8px 0px ${c.shadow}` : undefined,
+                ...shadow(selected ? `0px 3px 8px 0px ${c.shadow}` : undefined),
               },
               dot,
             ]}

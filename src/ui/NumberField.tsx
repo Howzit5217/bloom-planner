@@ -9,6 +9,7 @@ import { useTheme } from '@/theme/theme';
 import { font, radius } from '@/theme/tokens';
 import { T } from './T';
 import { t } from '@/i18n';
+import { shadow } from './shadow';
 
 interface Props {
   label: string;
@@ -50,7 +51,7 @@ export function NumberField({ label, value, onChange, placeholder, hint, size = 
           borderRadius: radius.field,
           paddingHorizontal: 16,
           minHeight: size === 'md' ? 52 : 64,
-          boxShadow: `inset 0px 2px 5px 0px ${c.shadow}`,
+          ...shadow(`inset 0px 2px 5px 0px ${c.shadow}`),
         }}
       >
         <TextInput

@@ -21,6 +21,7 @@ import { MonthBars } from './MonthBars';
 import { t, useT } from '@/i18n';
 import { monthList } from '@/i18n/climate-text';
 import { useAppWidth } from '@/ui/layout';
+import { shadow } from '@/ui/shadow';
 
 export interface ClimateResult {
   location: PlayLocation;
@@ -180,7 +181,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
           borderRadius: radius.field,
           paddingHorizontal: 14,
           minHeight: 58,
-          boxShadow: `inset 0px 2px 5px 0px ${c.shadow}`,
+          ...shadow(`inset 0px 2px 5px 0px ${c.shadow}`),
         }}
       >
         <Icon name="magnify" size={22} color={c.inkSoft} />
@@ -210,7 +211,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
             paddingHorizontal: 14,
             borderRadius: 16,
             backgroundColor: pressed ? c.leafPale : c.card,
-            boxShadow: `0px 2px 10px 0px ${c.shadow}`,
+            ...shadow(`0px 2px 10px 0px ${c.shadow}`),
           })}
         >
           <Icon name="map-marker" size={20} color={c.leafDeep} />

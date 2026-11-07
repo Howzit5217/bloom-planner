@@ -8,6 +8,7 @@ import { font } from '@/theme/tokens';
 import { clearOf } from './color';
 import { useGlide } from './glide';
 import { T } from './T';
+import { shadow } from './shadow';
 
 /** Room per number: wide enough that a drag moves calmly, a number at a time. */
 const TICK = 22;
@@ -242,7 +243,7 @@ export function LevelRuler({ value, min, max, onChange, onSettle }: Props) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={{ height: H, borderRadius: 22, backgroundColor: c.canvasDeep, overflow: 'hidden', boxShadow: `inset 0px 2px 6px 0px ${c.shadow}` }}
+      style={{ height: H, borderRadius: 22, backgroundColor: c.canvasDeep, overflow: 'hidden', ...shadow(`inset 0px 2px 6px 0px ${c.shadow}`) }}
     >
       {width > 0 ? (
         <Animated.ScrollView

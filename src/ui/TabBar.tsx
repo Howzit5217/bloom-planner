@@ -10,6 +10,7 @@ import { SPRING } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { T } from './T';
 import { useT } from '@/i18n';
+import { shadow } from './shadow';
 
 const ICONS: Record<string, [IconName, IconName]> = {
   index: ['flower', 'flower-outline'],
@@ -68,7 +69,7 @@ export function TabBar({ state, descriptors, navigateToTab }: BottomTabBarProps)
           borderRadius: 999,
           paddingHorizontal: 6,
           paddingVertical: 4,
-          boxShadow: `0px 8px 26px 0px ${c.shadow}, 0px 2px 6px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`,
+          ...shadow(`0px 8px 26px 0px ${c.shadow}, 0px 2px 6px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`),
         }}
       >
         {state.routes.map((route, i) => {

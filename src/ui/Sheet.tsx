@@ -10,6 +10,7 @@ import { MAX_APP_WIDTH } from './layout';
 import { ScrollRail, useScrollRail } from './ScrollRail';
 import { T } from './T';
 import { t } from '@/i18n';
+import { shadow } from './shadow';
 
 interface Props {
   visible: boolean;
@@ -102,7 +103,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Prop
               width: '100%',
               maxWidth: MAX_APP_WIDTH,
               alignSelf: 'center',
-              boxShadow: `0px -6px 28px 0px ${c.shadow}`,
+              ...shadow(`0px -6px 28px 0px ${c.shadow}`),
             },
             sheet,
           ]}

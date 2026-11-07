@@ -15,6 +15,7 @@ import { ScrollText } from './ScrollText';
 import { T } from './T';
 import { t, tn } from '@/i18n';
 import { STILL } from '@/ui/skia/still';
+import { shadow } from './shadow';
 
 interface Props {
   label: string;
@@ -51,7 +52,7 @@ function CalendarPage({ value }: { value: DayKey | null }) {
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={{ width: 42, height: 46, borderRadius: 12, backgroundColor: c.card, overflow: 'hidden', boxShadow: `0px 2px 6px 0px ${c.shadow}` }}
+      style={{ width: 42, height: 46, borderRadius: 12, backgroundColor: c.card, overflow: 'hidden', ...shadow(`0px 2px 6px 0px ${c.shadow}`) }}
     >
       <View style={{ height: 15, backgroundColor: d ? c.leaf : c.leafPale, alignItems: 'center', justifyContent: 'center' }}>
         {d ? <Text style={{ fontFamily: font.bodyHeavy, fontSize: 9.5, lineHeight: 12, color: '#FFFFFF', letterSpacing: 0.4 }}>{monthShort(d.getMonth()).toUpperCase()}</Text> : null}
@@ -103,7 +104,7 @@ export function DateField({ label, value, onChange, minimumDate, maximumDate, pl
           borderRadius: radius.field,
           backgroundColor: c.canvasDeep,
           opacity: pressed ? 0.8 : 1,
-          boxShadow: `inset 0px 2px 5px 0px ${c.shadow}`,
+          ...shadow(`inset 0px 2px 5px 0px ${c.shadow}`),
         })}
       >
         <CalendarPage value={value} />

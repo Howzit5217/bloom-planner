@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '@/theme/theme';
 import { radius } from '@/theme/tokens';
+import { shadow } from './shadow';
 
 interface Props {
   children: ReactNode;
@@ -22,10 +23,7 @@ export function Card({ children, variant = 'paper', style, padded = true }: Prop
           backgroundColor: bg,
           borderRadius: radius.card,
           padding: padded ? 18 : 0,
-          boxShadow:
-            variant === 'deep'
-              ? `inset 0px 2px 6px 0px ${c.shadow}`
-              : `0px 6px 24px 0px ${c.shadow}, 0px 1px 3px 0px ${c.shadow}, inset 0px 1px 0px 0px ${highlight}`,
+          ...shadow(variant === 'deep' ? `inset 0px 2px 6px 0px ${c.shadow}` : `0px 6px 24px 0px ${c.shadow}, 0px 1px 3px 0px ${c.shadow}, inset 0px 1px 0px 0px ${highlight}`),
         },
         style,
       ]}

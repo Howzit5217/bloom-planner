@@ -10,6 +10,7 @@ import { FlowerHead } from '@/ui/skia/FlowerHead';
 import { T } from '@/ui/T';
 import { tk, useT } from '@/i18n';
 import { STILL } from '@/ui/skia/still';
+import { shadow } from '@/ui/shadow';
 
 export const DIFFICULTY_NAMES: Record<Difficulty, string> = {
   easy: tk('Easy Plan'),
@@ -56,7 +57,7 @@ export function DifficultyPill({ d, onPanel, wide }: { d: PlanDifficulty; onPane
     return (
       <View accessible style={{ flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 9, paddingLeft: 11, paddingRight: 16, borderRadius: radius.field, backgroundColor: onPanel ? c.panelTrack : c.canvasDeep }}>
         {/* The flower on a small light tile, like the date field's calendar. */}
-        <View style={{ width: 42, height: 46, borderRadius: 12, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center', boxShadow: `0px 2px 6px 0px ${c.shadow}` }}>
+        <View style={{ width: 42, height: 46, borderRadius: 12, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center', ...shadow(`0px 2px 6px 0px ${c.shadow}`) }}>
           <DifficultyFlower difficulty={d.level} size={34} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>

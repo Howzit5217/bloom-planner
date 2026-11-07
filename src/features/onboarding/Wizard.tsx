@@ -48,6 +48,7 @@ import { T } from '@/ui/T';
 import { tk, useT } from '@/i18n';
 import { taskText } from '@/i18n/level-text';
 import { useAppWidth } from '@/ui/layout';
+import { shadow } from '@/ui/shadow';
 
 const STEPS = 9;
 // Flowers on every page: a row of sprigs on the first and last, and on the rest a few leaning in
@@ -729,7 +730,7 @@ function Choice({ icon, title, text, on, onPress }: { icon: IconName; title: str
         borderRadius: radius.card,
         backgroundColor: on ? c.leafPale : c.card,
         transform: [{ scale: pressed ? 0.98 : 1 }],
-        boxShadow: on ? `0px 0px 0px 3px ${c.leaf}, 0px 6px 20px 0px ${c.shadow}` : `0px 6px 20px 0px ${c.shadow}`,
+        ...shadow(on ? `0px 0px 0px 3px ${c.leaf}, 0px 6px 20px 0px ${c.shadow}` : `0px 6px 20px 0px ${c.shadow}`),
       })}
     >
       <Animated.View style={[{ width: 52, height: 52, borderRadius: 26, backgroundColor: on ? c.leaf : c.canvasDeep, alignItems: 'center', justifyContent: 'center' }, popStyle]}>

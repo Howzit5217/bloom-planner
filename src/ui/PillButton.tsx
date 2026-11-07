@@ -5,6 +5,7 @@ import { useTheme } from '@/theme/theme';
 import { font, SPRING } from '@/theme/tokens';
 import { Icon, type IconName } from './Icon';
 import { T } from './T';
+import { shadow } from './shadow';
 
 interface Props {
   label: string;
@@ -60,7 +61,7 @@ export function PillButton({ label, onPress, variant = 'primary', icon, disabled
           gap: 8,
           opacity: disabled ? 0.45 : 1,
           backgroundColor: pressed && variant === 'primary' ? c.buttonPressed : bg,
-          boxShadow: variant === 'ghost' ? undefined : `0px 4px 14px 0px ${c.shadow}, inset 0px 1px 0px 0px ${variant === 'secondary' ? c.cardHighlight : 'rgba(255,255,255,0.25)'}`,
+          ...shadow(variant === 'ghost' ? undefined : `0px 4px 14px 0px ${c.shadow}, inset 0px 1px 0px 0px ${variant === 'secondary' ? c.cardHighlight : 'rgba(255,255,255,0.25)'}`),
         })}
       >
         {icon ? <Icon name={icon} size={size === 'lg' ? 22 : 19} color={fg} /> : null}
@@ -90,7 +91,7 @@ export function RoundButton({ icon, onPress, label, size = 48, tone = 'card' }: 
         justifyContent: 'center',
         backgroundColor: tone === 'leaf' ? (pressed ? c.buttonPressed : c.button) : c.card,
         transform: [{ scale: pressed ? 0.92 : 1 }],
-        boxShadow: `0px 4px 12px 0px ${c.shadow}`,
+        ...shadow(`0px 4px 12px 0px ${c.shadow}`),
       })}
     >
       <View>

@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/theme/theme';
 import { ScrollText } from './ScrollText';
+import { shadow } from './shadow';
 
 interface Props<K extends string> {
   options: Array<{ key: K; label: string }>;
@@ -34,13 +35,13 @@ export function Segmented<K extends string>({ options, value, onChange, label }:
       accessibilityRole="radiogroup"
       accessibilityLabel={label}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={{ flexDirection: 'row', backgroundColor: c.canvasDeep, borderRadius: 999, padding: PAD, gap: GAP, boxShadow: `inset 0px 2px 5px 0px ${c.shadow}` }}
+      style={{ flexDirection: 'row', backgroundColor: c.canvasDeep, borderRadius: 999, padding: PAD, gap: GAP, ...shadow(`inset 0px 2px 5px 0px ${c.shadow}`) }}
     >
       {seg > 0 ? (
         <Animated.View
           pointerEvents="none"
           style={[
-            { position: 'absolute', top: PAD, bottom: PAD, left: PAD, width: seg, borderRadius: 999, backgroundColor: c.card, boxShadow: `0px 2px 8px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}` },
+            { position: 'absolute', top: PAD, bottom: PAD, left: PAD, width: seg, borderRadius: 999, backgroundColor: c.card, ...shadow(`0px 2px 8px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`) },
             thumb,
           ]}
         />

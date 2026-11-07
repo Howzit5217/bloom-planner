@@ -9,6 +9,7 @@ import { font } from '@/theme/tokens';
 import { T } from './T';
 import { useGlide } from './glide';
 import { t } from '@/i18n';
+import { shadow } from './shadow';
 
 const ITEM = 50;
 const VISIBLE = 5;
@@ -48,7 +49,7 @@ export function TimeWheel({ hour, minute, onChange }: Props) {
         borderRadius: 26,
         paddingVertical: 8,
         paddingHorizontal: 14,
-        boxShadow: `0px 6px 24px 0px ${c.shadow}, 0px 1px 3px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`,
+        ...shadow(`0px 6px 24px 0px ${c.shadow}, 0px 1px 3px 0px ${c.shadow}, inset 0px 1px 0px 0px ${c.cardHighlight}`),
       }}
     >
       <View
