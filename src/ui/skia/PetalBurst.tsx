@@ -1,7 +1,8 @@
 import { Canvas, Group, Path } from '@shopify/react-native-skia';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Easing, useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme/theme';
 import { PETALS } from '@/theme/tokens';
 import { petalPath, rng } from './shapes';
@@ -53,12 +54,17 @@ export function PetalBurst({ trigger, width, height, originX, originY }: { trigg
       color: colors[Math.floor(rand() * colors.length)],
     }));
   }, [trigger, c]);
+  // Its canvas only while a burst plays: one fewer drawing surface the rest of the time (on the web
+  // each takes one of the browser's few, and Home made them all afresh on every visit).
+  const [finished, setFinished] = useState(0);
   useEffect(() => {
     if (trigger <= 0 || reduceMotion) return;
     t.value = 0;
-    t.value = withTiming(1, { duration: 1300, easing: Easing.out(Easing.quad) });
+    t.value = withTiming(1, { duration: 1300, easing: Easing.out(Easing.quad) }, (done) => {
+      if (done) scheduleOnRN(setFinished, trigger);
+    });
   }, [trigger, reduceMotion, t]);
-  if (reduceMotion || width <= 0) return null;
+  if (reduceMotion || width <= 0 || trigger <= 0 || finished === trigger) return null;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width, height }}>
       <Canvas style={{ width, height }}>

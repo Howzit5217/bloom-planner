@@ -200,7 +200,7 @@ export default function Home() {
       {cards.map((card, i) => {
         const key = (card as { key: string }).key ?? String(i);
         const shown = (
-          <StaggerIn key={key} index={i}>
+          <StaggerIn key={key} index={i} page="home">
             {card}
           </StaggerIn>
         );

@@ -81,7 +81,7 @@ export default function Progress() {
   return (
     <Screen>
       {cards.map((card, i) => (
-        <StaggerIn key={i} index={i}>
+        <StaggerIn key={i} index={i} page="progress">
           {card}
         </StaggerIn>
       ))}

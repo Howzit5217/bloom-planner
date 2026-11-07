@@ -6,6 +6,9 @@ import { LoadSkiaWeb } from '@shopify/react-native-skia/lib/module/web';
 // development server serves public files from the root instead.
 const base = __DEV__ ? '' : (process.env.EXPO_BASE_URL ?? '');
 
-LoadSkiaWeb({ locateFile: (file) => `${base}/${file}` }).then(() => {
+// The built site names canvaskit.wasm for its contents (tools/web-finish.js), so it can be kept.
+const named = (file) => (file === 'canvaskit.wasm' && globalThis.__CANVASKIT_WASM__) || file;
+
+LoadSkiaWeb({ locateFile: (file) => `${base}/${named(file)}` }).then(() => {
   require('expo-router/entry');
 });

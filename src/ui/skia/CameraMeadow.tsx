@@ -33,6 +33,8 @@ const UPSCALE = Math.max(1, PixelRatio.get() / 2);
 const CANVAS_DENSITY = PixelRatio.get() / UPSCALE;
 
 interface Scene {
+  /** Just the sky's and the field's colours, while the scene itself is being drawn (the web). */
+  placeholder?: true;
   /** Sky, grass and the far flowers, still. */
   picture: SkPicture;
   /** The near flowers, to sway: drawn once, side by side, into one image. */
@@ -788,6 +790,50 @@ function useMotePicture(motes: Motes | null, matrix: SharedValue<number[]>, cloc
   });
 }
 
+/**
+ * One field for the whole time the app is open: the same one each time Home comes back (on the web a
+ * page out of sight is put away, and Home planted a new field, and drew it all again, every visit).
+ */
+const FIELD_SEED = 1 + Math.floor(Math.random() * 2147483000);
+
+/** The last scene drawn and its images, kept for when Home comes back under the same sky. */
+let kept: { key: string; scene: Scene; images: Map<number, SkImage | null>; soft?: SkImage | null } | null = null;
+
+function keep(key: string, scene: Scene): Scene {
+  kept = { key, scene, images: new Map() };
+  return scene;
+}
+
+/** The scene as an image (snapshot), kept with the scene. */
+function keptSnapshot(scene: Scene, f: CameraFrame, most: number): SkImage | null {
+  const own = kept?.scene === scene ? kept : null;
+  if (own?.images.has(most)) return own.images.get(most) ?? null;
+  const image = snapshot(scene.picture, f, most);
+  own?.images.set(most, image);
+  return image;
+}
+
+/** The far field out of focus (softImage), kept with the scene. */
+function keptSoft(scene: Scene, image: SkImage, f: CameraFrame): SkImage | null {
+  const own = kept?.scene === scene ? kept : null;
+  if (own && own.soft !== undefined) return own.soft;
+  const soft = softImage(image, f);
+  if (own) own.soft = soft;
+  return soft;
+}
+
+/** The sky's and the field's colours alone: what shows for a moment while the scene is drawn. */
+function placeholderScene(f: CameraFrame, look: SkyLook): Scene {
+  const picture = createPicture((canvas) => {
+    const paint = Skia.Paint();
+    paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, 0), vec(0, f.cy), [Skia.Color(look.top), Skia.Color(look.mid), Skia.Color(look.horizon)], [0, 0.55, 1], TileMode.Clamp));
+    canvas.drawRect(Skia.XYWHRect(0, 0, f.picW, f.cy + 1), paint);
+    paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, f.cy), vec(0, f.H), [Skia.Color(look.groundFar), Skia.Color(look.groundMid), Skia.Color(look.groundNear)], [0, 0.4, 1], TileMode.Clamp));
+    canvas.drawRect(Skia.XYWHRect(0, f.cy, f.picW, f.picH - f.cy), paint);
+  }, Skia.XYWHRect(0, 0, f.picW, f.picH));
+  return { placeholder: true, picture, near: null, nearStill: null, clouds: [], mists: [], bolts: [], motes: null };
+}
+
 /** A canvas drawn at CANVAS_DENSITY and scaled up to fill `width` x `height` on screen. */
 const upscaled = (width: number, height: number) => ({ width: Math.ceil(width / UPSCALE), height: Math.ceil(height / UPSCALE), transform: [{ scale: UPSCALE }], transformOrigin: 'top left' }) as const;
 const DOWN = [{ scale: 1 / UPSCALE }];
@@ -804,16 +850,33 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   const { c, reduceMotion } = useTheme();
   const look = useSkyLook();
   const bloom = useBloomFactor();
-  // A fresh field every visit.
-  const [seed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
-  // Drawn again only when the sky visibly changes (lookKey), not at every few minutes' tick.
+  // Drawn again only when the sky visibly changes (lookKey), not at every few minutes' tick, and
+  // kept for when Home comes back to the same sky.
   const sky = lookKey(look);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const scene = useMemo(() => drawCameraScene(frame, look, c, seed, bloom), [frame, sky, c, seed, bloom]);
+  const sceneKey = `${frame.W}|${frame.H}|${frame.viewH}|${frame.cy}|${c.dark ? 1 : 0}|${bloom}|${sky}`;
+  // On the web the page shows first, with just the sky's and field's colours, and the scene fades
+  // in a moment later: drawn there on the CPU, it held the whole page back while it was.
+  const later = Platform.OS === 'web';
+  const [drawn, setDrawn] = useState(0);
+  const scene = useMemo(
+    () => (kept?.key === sceneKey ? kept.scene : later ? placeholderScene(frame, look) : keep(sceneKey, drawCameraScene(frame, look, c, FIELD_SEED, bloom))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sceneKey, drawn],
+  );
+  useEffect(() => {
+    if (!later || kept?.key === sceneKey) return;
+    const id = setTimeout(() => {
+      keep(sceneKey, drawCameraScene(frame, look, c, FIELD_SEED, bloom));
+      setDrawn((n) => n + 1);
+    }, 30);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneKey, later]);
   // Running through the time away, each frame is made at a point a pixel: four times quicker, and it
   // sharpens again at the end.
   const lapsing = useSkyClock((s) => s.lapsing);
-  const image = useMemo(() => snapshot(scene.picture, frame, lapsing ? 1 : 2), [scene, frame, lapsing]);
+  // (The placeholder as a small image too, so the scene fades in over it.)
+  const image = useMemo(() => keptSnapshot(scene, frame, scene.placeholder ? 0.25 : lapsing ? 1 : 2), [scene, frame, lapsing]);
   // When the sky is drawn again (the clock moving on, or running through the time away), the new
   // scene fades in over the one before instead of replacing it at once, so the sky changes smoothly.
   const [layers, setLayers] = useState<{ cur: SkImage | null; prev: SkImage | null }>({ cur: image, prev: null });
@@ -883,7 +946,7 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   const empty = useMemo(() => createPicture(() => {}), []);
   // The far field out of focus, for when the camera looks down (not while running through the time
   // away, each frame of which is on screen only a moment).
-  const soft = useMemo(() => (image && !lapsing ? softImage(image, frame) : null), [image, frame, lapsing]);
+  const soft = useMemo(() => (image && !lapsing && !scene.placeholder ? keptSoft(scene, image, frame) : null), [scene, image, frame, lapsing]);
   const skyNow = useSkyPicture(scene, frame, layers.cur, layers.prev, blend, clock, cloudsShown, storm, soft, tilt);
   const nearNow = useNearPicture(scene.near, matrix, clock, gust, empty);
   const motesNow = useMotePicture(moving ? scene.motes : null, matrix, clock, frame.picW, empty);
