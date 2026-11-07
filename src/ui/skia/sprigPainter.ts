@@ -13,7 +13,7 @@ const isWhite = (color: string) => ['#FFFFFF', '#EDE8DF'].includes(color.toUpper
  * be a few points across, it's just a speck of its colour. With `light`, a flower facing the sun
  * (or moon) takes on a little of its colour and one away from it falls a little into shade.
  */
-export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight) {
+export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight, fade?: (y: number) => number) {
   // Lit as the field is (warm by a low sun, blue at dusk) but keeping much of their own colour, so
   // they still show at night, tinted toward blue.
   const night = (hex: string) => mix(mix(multiply(hex, look.light), hex, 0.45), '#2A3466', look.night * 0.25);
@@ -32,12 +32,17 @@ export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight) {
   const leafBase = night(c.leaf);
   // Lit toward the light's colour, shaded toward a cool dark: a touch either way.
   const lightAt = (hex: string, lit: number) => (lit > 0 ? mixHex(hex, light!.tint, 0.22 * lit) : lit < 0 ? mixHex(hex, '#1B2A3A', 0.08 * -lit) : hex);
+  const centreBase = night(CENTRE_COLOR);
   return (canvas: SkCanvas, s: Sprig) => {
     const lit = light ? light.lit(s.x) : 0;
-    stem.setColor(Skia.Color(lightAt(stemBase, lit)));
-    leaf.setColor(Skia.Color(lightAt(leafBase, lit)));
+    // Far off, a flower takes on the colour of the air in between, as the field does under it.
+    const far = fade ? fade(s.y) : 0;
+    const tone = (hex: string) => (far > 0 ? mixHex(hex, look.horizon, far) : hex);
+    stem.setColor(Skia.Color(tone(lightAt(stemBase, lit))));
+    leaf.setColor(Skia.Color(tone(lightAt(leafBase, lit))));
+    centre.setColor(Skia.Color(tone(centreBase)));
     if (s.r < 2.4) {
-      petal.setColor(Skia.Color(lightAt(night(s.color), lit)));
+      petal.setColor(Skia.Color(tone(lightAt(night(s.color), lit))));
       canvas.drawCircle(s.x, s.y - s.r * 2, Math.max(0.8, s.r * 0.9), petal);
       return;
     }
@@ -60,10 +65,10 @@ export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight) {
     }
     const head = flowerPath(g.top.x, g.top.y, s.r, 1, 5, s.rot);
     if (isWhite(s.color)) {
-      petal.setColor(Skia.Color(lightAt(night(mixHex(s.color, '#8A7A5C', 0.35)), lit)));
+      petal.setColor(Skia.Color(tone(lightAt(night(mixHex(s.color, '#8A7A5C', 0.35)), lit))));
       canvas.drawPath(flowerPath(g.top.x, g.top.y + Math.max(0.8, s.r * 0.07), s.r, 1, 5, s.rot), petal);
     }
-    petal.setColor(Skia.Color(lightAt(night(s.color), lit)));
+    petal.setColor(Skia.Color(tone(lightAt(night(s.color), lit))));
     canvas.drawPath(head, petal);
     canvas.drawCircle(g.top.x, g.top.y, s.r * CENTRE_R, centre);
     canvas.restore();

@@ -8,7 +8,7 @@ import { lookKey, type SkyLook } from '@/engine/sky';
 import { useSkyClock, useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
+import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, hazeFade, shineOf } from './Meadow';
 import { fallOf, Precipitation } from './Precipitation';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
@@ -84,8 +84,9 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
   const sky = look.sun ?? look.moon;
   const lightX = sky ? f.pad + sky.x * f.W : f.picW / 2;
   const light = fieldLight(look, f.picW, lightX);
-  const paintSprig = sprigPainter(c, look, light);
   let live: Scene['live'] = [];
+  // The live (near, swaying) flowers are drawn without haze: it's all behind them.
+  const paintNear = sprigPainter(c, look, light);
   const picture = createPicture((canvas) => {
     const rand = rng(seed);
     const hz = f.cy;
@@ -128,6 +129,13 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       for (let i = 0; i < n; i++) drawBlade(canvas, blade, rand() * f.picW, hz + y0 + rand() * 2, Math.max(1.2, (5 + rand() * 7) * k), (rand() - 0.5) * 6 * k, 2 * k);
     }
 
+    // The air toward the horizon, over the grass and under the flowers: they fade into it a little
+    // instead (a band lying over them looked like a line drawn across them).
+    const hazeDepth = Math.min(rest * (look.fog ? 0.45 : 0.22), look.fog ? 400 : 110);
+    const hazeAlpha = look.fog ? 0.9 : 1;
+    drawHaze(canvas, f.picW, hz, hazeDepth, hazeAlpha, look, f.pad + look.glow.x * f.W);
+    const paintSprig = sprigPainter(c, look, light, hazeFade(hz, hazeDepth, hazeAlpha));
+
     // Fewer flowers than grass, and the setup screens' big stemmed ones. The nearest ones (the last,
     // back to front) sway, so they're drawn live; everything behind them stays in this picture.
     const sprigs = plant(f, rand, colors, many, near, bloom);
@@ -138,10 +146,9 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     for (const sp of sprigs.slice(0, cut)) paintSprig(canvas, sp);
     live = sprigs.slice(cut).map((sp) => ({
       s: sp,
-      picture: createPicture((cv) => paintSprig(cv, { ...sp, x: 0, y: 0 }), Skia.XYWHRect(-sp.r * 6 - sp.len, -sp.len - sp.r * 3, (sp.r * 6 + sp.len) * 2, sp.len + sp.r * 4)),
+      picture: createPicture((cv) => paintNear(cv, { ...sp, x: 0, y: 0 }), Skia.XYWHRect(-sp.r * 6 - sp.len, -sp.len - sp.r * 3, (sp.r * 6 + sp.len) * 2, sp.len + sp.r * 4)),
     }));
 
-    drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.22), look.fog ? 400 : 110), look.fog ? 0.9 : 1, look, f.pad + look.glow.x * f.W);
     // Rain and snow fall live over the top (Precipitation), not frozen into this picture.
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c, { falling: false });
     // The sun last, bright over everything that dims the scene.

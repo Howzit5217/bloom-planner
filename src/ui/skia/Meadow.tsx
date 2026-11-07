@@ -391,6 +391,12 @@ export function drawBlade(canvas: SkCanvas, blade: SkPaint, x: number, y: number
   canvas.drawPath(Skia.PathBuilder.Make().moveTo(x, y).quadTo(x + lean * 0.3, y - len * 0.6, x + lean, y - len).build(), blade);
 }
 
+/** How much of the haze a flower `y` takes on, `haze` deep below the horizon `hz`: some right at the horizon, none from half way down it. */
+export const hazeFade = (hz: number, haze: number, alpha: number) => (y: number) => {
+  const k = 1 - (y - hz) / Math.max(1, haze * 0.5);
+  return y <= hz || k <= 0 ? 0 : Math.min(0.55, 0.55 * alpha) * k * k;
+};
+
 /**
  * The air between here and the far field: at the horizon the sky's own colour (so the sky runs into
  * the field rather than meeting it at a line), thinning quickly down the field, as distance fades
@@ -508,6 +514,14 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
       const k = 0.35 + 0.75 * t;
       drawBlade(canvas, blade, x, y, (5 + rand() * 7) * k, (rand() - 0.5) * 6 * k, 2 * k);
     }
+    // Haze where the ground meets the sky (and a thicker one in fog), over the grass and under the
+    // flowers, which fade into it a little instead (a band lying over them looked like a line drawn
+    // across them). A field drawn on its own (its horizon at the top edge) meets a separately drawn
+    // sky there, so its haze is fuller.
+    const own = horizon <= 0;
+    const hazeDepth = Math.min(groundH * (look.fog ? 0.45 : own ? 0.14 : 0.2), look.fog ? 400 : own ? 110 : 90);
+    const hazeAlpha = look.fog ? 0.9 : own ? 0.8 : 1;
+    drawHaze(canvas, w, hz, hazeDepth, hazeAlpha, look, look.glow.x * w);
     // A few of the setup screens' stemmed flowers across the field, back to front.
     const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
     const n = Math.round(((w * groundH) / 1700) * density * 0.4);
@@ -518,12 +532,8 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
     sprigs.sort((a, b) => a.y - b.y);
     const light = fieldLight(look, w, lightX);
     drawShadows(canvas, light, sprigs);
-    const paintSprig = sprigPainter(c, look, light);
+    const paintSprig = sprigPainter(c, look, light, hazeFade(hz, hazeDepth, hazeAlpha));
     for (const sp of sprigs) paintSprig(canvas, sp);
-    // Haze where the ground meets the sky (and a thicker one in fog). A field drawn on its own (its
-    // horizon at the top edge) meets a separately drawn sky there, so its haze is fuller.
-    const own = horizon <= 0;
-    drawHaze(canvas, w, hz, Math.min(groundH * (look.fog ? 0.45 : own ? 0.14 : 0.2), look.fog ? 400 : own ? 110 : 90), look.fog ? 0.9 : own ? 0.8 : 1, look, look.glow.x * w);
     // This is a still strip above a page: rain or snow would only hang in it (Home has it falling).
     drawWeather(canvas, rand, w, h, hz, look, c, { falling: false });
     if (hz > 0) drawSunDisc(canvas, hz, 0, w, look, skyTop);
