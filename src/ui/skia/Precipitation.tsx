@@ -1,4 +1,4 @@
-import { createPicture, Group, PaintStyle, Picture, Skia, StrokeCap, type SkPicture } from '@shopify/react-native-skia';
+import { createPicture, PaintStyle, Skia, StrokeCap, type SkPicture } from '@shopify/react-native-skia';
 import { useMemo } from 'react';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { rng } from './random';
@@ -93,46 +93,57 @@ function drawSheet(kind: Fall, s: Sheet, w: number, h: number, seed: number): Sk
   );
 }
 
-function FallingSheet({ picture, s, h, clock, slant, phase }: { picture: SkPicture; s: Sheet; h: number; clock: SharedValue<number>; slant: number; phase: number }) {
-  // Falling straight down in the tile's own space; the slant turns it into a slanting fall.
-  const transform = useDerivedValue(() => {
-    const t = clock.value;
-    const off = (t * s.speed + phase * h) % h;
-    const sway = s.drift ? Math.sin((t / (s.driftMs ?? 6000) + phase) * Math.PI * 2) * s.drift : 0;
-    return [{ translateX: sway }, { translateY: off }];
-  });
-  return (
-    <Group matrix={[1, -slant, 0, 0, 1, 0, 0, 0, 1]}>
-      <Group transform={transform}>
-        <Picture picture={picture} />
-        <Group transform={[{ translateY: -h }]}>
-          <Picture picture={picture} />
-        </Group>
-      </Group>
-    </Group>
-  );
+/** One sheet of drops as it moves: its picture (a tile), how fast it falls, its drift and its lean. */
+interface Layer {
+  picture: SkPicture;
+  s: Sheet;
+  slant: number;
+  phase: number;
 }
 
-/**
- * Rain, a storm's heavier rain, snow or hail over a `width` x `height` view, light, moderate or heavy
- * (`level` 1 to 3), moving with `clock` (a time in milliseconds; held still, the drops hang where
- * they are, as for reduced motion). The rain leans more the windier it is (`wind`, km/h).
- */
-export function Precipitation({ kind, level = 2, width, height, clock, wind = 0 }: { kind: Fall; level?: number; width: number; height: number; clock: SharedValue<number>; wind?: number }) {
+/** A fall's sheets, from the far ones to the near. */
+function layersOf(kind: Fall, level: number, width: number, height: number, wind: number): Layer[] {
   const how = LEVELS[kind === 'snow' ? 'snow' : 'rain'][Math.max(1, Math.min(3, level)) - 1];
   const base = kind === 'snow' ? SNOW : kind === 'hail' ? HAIL : kind === 'storm' ? STORM : RAIN;
-  const sheets = useMemo(() => base.map((s) => ({ ...s, per: s.per * how.per, speed: s.speed * how.speed, len: s.len * how.len, width: s.width * Math.sqrt(how.len), alpha: Math.min(0.95, s.alpha * how.alpha) })), [base, how]);
+  const sheets = base.map((s) => ({ ...s, per: s.per * how.per, speed: s.speed * how.speed, len: s.len * how.len, width: s.width * Math.sqrt(how.len), alpha: Math.min(0.95, s.alpha * how.alpha) }));
   const slant = kind === 'snow' ? 0 : RAIN_SLANT * how.slant * (kind === 'hail' ? 0.4 : 1) * (0.8 + Math.min(1.5, wind / 30));
   // Wide enough that, leaning, the drops still reach both edges (and snow's drift too).
   const tileW = width + slant * height + 40;
-  const pictures = useMemo(() => sheets.map((s, i) => drawSheet(kind, s, tileW, height, 7919 * (i + 1))), [kind, sheets, tileW, height]);
-  return (
-    <Group transform={[{ translateX: -20 }]}>
-      {sheets.map((s, i) => (
-        <FallingSheet key={i} picture={pictures[i]} s={s} h={height} clock={clock} slant={slant} phase={i * 0.37} />
-      ))}
-    </Group>
-  );
+  return sheets.map((s, i) => ({ picture: drawSheet(kind, s, tileW, height, 7919 * (i + 1)), s, slant, phase: i * 0.37 }));
+}
+
+/**
+ * Rain, a storm's heavier rain, snow or hail (`falls`, any of them at once) over a `width` x
+ * `height` view, light, moderate or heavy (`level` 1 to 3), moving with `clock` (a time in
+ * milliseconds; held still, the drops hang where they are, as for reduced motion). The rain leans
+ * more the windier it is (`wind`, km/h). One picture a frame for all of it, which can be drawn on
+ * more than one canvas: each sheet slides down its own tile and wraps round.
+ */
+export function useFalling(falls: Fall[], level: number, width: number, height: number, clock: SharedValue<number>, wind = 0): SharedValue<SkPicture> {
+  const key = falls.join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const layers = useMemo(() => falls.flatMap((kind) => layersOf(kind, level, width, height, wind)), [key, level, width, height, wind]);
+  const empty = useMemo(() => createPicture(() => {}), []);
+  return useDerivedValue(() => {
+    if (!layers.length) return empty;
+    const t = clock.value;
+    return createPicture((cv) => {
+      for (let i = 0; i < layers.length; i++) {
+        const { picture, s, slant, phase } = layers[i];
+        // Falling straight down in the tile's own space; the slant turns it into a slanting fall.
+        const off = (t * s.speed + phase * height) % height;
+        const sway = s.drift ? Math.sin((t / (s.driftMs ?? 6000) + phase) * Math.PI * 2) * s.drift : 0;
+        cv.save();
+        cv.translate(-20, 0);
+        cv.skew(-slant, 0);
+        cv.translate(sway, off);
+        cv.drawPicture(picture);
+        cv.translate(0, -height);
+        cv.drawPicture(picture);
+        cv.restore();
+      }
+    });
+  });
 }
 
 /** What falls from a sky look, if anything. */

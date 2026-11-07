@@ -27,7 +27,7 @@ export function SubScreen({ title, children }: { title: string; children: ReactN
         </Pressable>
       </View>
       <View style={{ flex: 1 }}>
-        <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32, gap: 16 }}>
+        <Animated.ScrollView ref={scrollRef} onScroll={onScroll} onContentSizeChange={rail.onContentSizeChange} onLayout={rail.onLayout} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32, gap: 16 }}>
           <T v="h1" accessibilityRole="header">
             {title}
           </T>

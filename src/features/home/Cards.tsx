@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { em, Rich } from '@/ui/Rich';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { daysBetween, fromKey } from '@/engine/dates';
 import { isEasyDay } from '@/engine/rhythm';
 import { fmt, fmtDate, fmtHours, fmtShort, fmtWeekday, roundNice } from '@/engine/format';
@@ -15,6 +15,7 @@ import { DIFFICULTY_NAMES, DifficultyPill, difficultyColor } from '@/features/sh
 import { QUEST_ICON } from '@/features/shared/quest';
 import { Card } from '@/ui/Card';
 import { Icon, type IconName } from '@/ui/Icon';
+import { useIdleClock } from '@/ui/idle';
 import { IconChip } from '@/ui/IconChip';
 import { BloomFlower } from '@/ui/skia/BloomFlower';
 import { FlowerRow } from '@/ui/skia/FlowerRow';
@@ -160,16 +161,14 @@ export function PaceCard({ dash }: { dash: Dashboard }) {
   const { t, tn } = useT();
   const st = dash.standing;
   const behind = dash.phase === 'active' && st.verdict === 'behind';
-  // A continuous 0-1 clock while behind; the card breathes on a sine of it, so the loop is seamless.
-  const breathe = useSharedValue(0);
+  // A continuous 0-1 clock while behind; the card breathes on a sine of it, so the loop is seamless
+  // (moving on a few times less often than the screen redraws, and only while Home is in view).
+  const breathe = useIdleClock(4400, { on: behind });
+  const amp = useSharedValue(0);
   useEffect(() => {
-    if (behind && !reduceMotion) breathe.value = withRepeat(withTiming(1, { duration: 4400, easing: Easing.linear }), -1, false);
-    else {
-      cancelAnimation(breathe);
-      breathe.value = withTiming(0, { duration: 300 });
-    }
-  }, [behind, reduceMotion, breathe]);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.01 * (1 - Math.cos(breathe.value * Math.PI * 2)) }] }));
+    amp.value = withTiming(behind && !reduceMotion ? 1 : 0, { duration: 300 });
+  }, [behind, reduceMotion, amp]);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.01 * amp.value * (1 - Math.cos(breathe.value * Math.PI * 2)) }] }));
 
   let icon: IconName = 'check-circle';
   let tone = c.leaf;

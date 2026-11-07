@@ -1,7 +1,8 @@
 import { Canvas, Circle, Group, Path, vec, type SkPath, type Transforms3d } from '@shopify/react-native-skia';
 import { useEffect, useMemo } from 'react';
-import { Easing, useDerivedValue, useSharedValue, withDelay, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
+import { Easing, useDerivedValue, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/theme/theme';
+import { useIdleClock } from '../idle';
 import { CENTRE_COLOR, CENTRE_R, mixHex, petalShape } from './shapes';
 
 const PETALS = 5;
@@ -41,7 +42,9 @@ function Petal({ t, path, angle, start, cx, cy, color, dy = 0, stroke }: { t: Sh
 export function BloomFlower({ size = 160, color, delay = 150, edge }: { size?: number; color?: string; delay?: number; edge?: boolean }) {
   const { c, reduceMotion } = useTheme();
   const t = useSharedValue(reduceMotion ? 1 : 0);
-  const idle = useSharedValue(0);
+  // One continuous clock (0 to 1, over and over): every idle motion is a sine of it, so the loop never
+  // jumps or reverses. It moves on a few times less often than the screen redraws, and only in view.
+  const idle = useIdleClock(7000, { delay: delay + BLOOM_MS * 0.8 });
   useEffect(() => {
     if (reduceMotion) {
       t.value = 1;
@@ -49,9 +52,7 @@ export function BloomFlower({ size = 160, color, delay = 150, edge }: { size?: n
     }
     t.value = 0;
     t.value = withDelay(delay, withTiming(1, { duration: BLOOM_MS, easing: Easing.linear }));
-    // One continuous clock (0 to 1, over and over): every idle motion is a sine of it, so the loop never jumps or reverses.
-    idle.value = withDelay(delay + BLOOM_MS * 0.8, withRepeat(withTiming(1, { duration: 7000, easing: Easing.linear }), -1, false));
-  }, [delay, reduceMotion, t, idle]);
+  }, [delay, reduceMotion, t]);
 
   const cx = size / 2;
   const cy = size / 2;

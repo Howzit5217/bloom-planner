@@ -1,8 +1,9 @@
 import { Canvas, type Transforms3d } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useState } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import { Easing, useDerivedValue, useSharedValue, withDelay, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
+import { Easing, useDerivedValue, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/theme/theme';
+import { useIdleClock } from '../idle';
 import { FlowerHead } from './FlowerHead';
 import { SPRIG_COLORS } from './FlowerSprigs';
 import { rng } from './shapes';
@@ -109,12 +110,12 @@ export function FlowerAccent({ arrangement, width, height, style }: { arrangemen
   const [seed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
   const spots = useMemo(() => makeSpots(arrangement, width, height, seed, SPRIG_COLORS(c)), [arrangement, width, height, seed, c]);
   const grow = useSharedValue(reduceMotion ? 2 : 0);
-  const clock = useSharedValue(0);
+  // Swaying a few times less often than the screen redraws, and only while the page is in view.
+  const clock = useIdleClock(6000);
   useEffect(() => {
     if (reduceMotion) return;
     grow.value = withDelay(250, withTiming(2, { duration: 2000, easing: Easing.linear }));
-    clock.value = withRepeat(withTiming(1, { duration: 6000, easing: Easing.linear }), -1, false);
-  }, [grow, clock, reduceMotion]);
+  }, [grow, reduceMotion]);
   return (
     <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[{ width, height }, style]}>
       <Canvas style={{ width, height }}>

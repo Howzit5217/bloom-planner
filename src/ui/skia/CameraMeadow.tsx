@@ -1,4 +1,4 @@
-import { BlurMask, Canvas, createPicture, Group, Image, LinearGradient, Mask, PaintStyle, Path, Picture, Rect, Skia, StrokeCap, TileMode, vec, type SkImage, type SkPath, type SkPicture, type SkRect, type SkSurface } from '@shopify/react-native-skia';
+import { BlurStyle, Canvas, ClipOp, createPicture, FilterMode, Group, LinearGradient, MipmapMode, PaintStyle, Picture, Rect, Skia, StrokeCap, StrokeJoin, TileMode, vec, type SkCanvas, type SkImage, type SkPath, type SkPicture, type SkRect, type SkRSXform, type SkSurface } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
 import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -10,8 +10,8 @@ import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudsOf, color, drawBlade, drawHaze, drawMistBank, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, hazeFade, mistBanks, shineOf, type MistBank } from './Meadow';
 import { cloudLight } from './cloudShader';
-import { fallOf, Precipitation } from './Precipitation';
-import { fieldSprig, geometry, type Sprig } from './sprigLayout';
+import { fallOf, useFalling, type Fall } from './Precipitation';
+import { fieldSprig, geometry, headOf, type Sprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
 import { rng } from './shapes';
 import { useBloomFactor } from '../bloom';
@@ -24,17 +24,52 @@ import { cameraMatrix, tiltAt, type CameraFrame } from '../camera';
 const LIVE_MIN_R = 7;
 const LIVE_MAX = 56;
 
+/**
+ * The scene's canvases draw at most two device pixels a point, scaled up to the screen: the still
+ * picture and the clouds are no sharper than that anyway, and on a three-a-point phone screen it is
+ * well under half the pixels to fill on every frame of a scroll.
+ */
+const UPSCALE = Math.max(1, PixelRatio.get() / 2);
+const CANVAS_DENSITY = PixelRatio.get() / UPSCALE;
+
 interface Scene {
   /** Sky, grass and the far flowers, still. */
   picture: SkPicture;
-  /** The near flowers, each drawn on its own about its base, to sway. */
-  live: Array<{ s: Sprig; picture: SkPicture }>;
+  /** The near flowers, to sway: drawn once, side by side, into one image. */
+  near: Near | null;
+  /** The near flowers drawn in place and still, if they couldn't be drawn into an image. */
+  nearStill: SkPicture | null;
   /** The clouds, each drawn on its own, to drift across the sky. */
   clouds: Drifter[];
   /** Banks of mist or fog, each the picture's width (and wrapping round), to drift over the field. */
-  mists: Array<{ b: MistBank; picture: SkPicture; image: SkImage | null }>;
+  mists: Mist[];
   /** A storm's lightning bolts, one of them at each strike. */
   bolts: SkPath[];
+}
+
+interface Mist {
+  b: MistBank;
+  picture: SkPicture;
+  image: SkImage | null;
+  /** The whole image, and where it goes (about the bank's middle, before it drifts). */
+  src: SkRect | null;
+  dst: SkRect;
+}
+
+/**
+ * The near flowers in one image (an atlas), so a frame is one draw of it that places, tilts and
+ * sways every flower: drawing them as pictures took hundreds of shapes a frame, all at new angles.
+ */
+interface Near {
+  atlas: SkImage;
+  /** Each flower's spot in the image, in pixels. */
+  sprites: SkRect[];
+  /** Five numbers a flower: its base on the ground (scene points), its sway's phase, and its base in its spot (pixels). */
+  spots: number[];
+  /** Where each flower goes this frame: set afresh each frame on the UI thread (drawing copies them). */
+  xforms: SkRSXform[];
+  /** Image pixels a point. */
+  scale: number;
 }
 
 interface Drifter {
@@ -49,6 +84,11 @@ interface Drifter {
   s: number;
   /** Points a second: the bigger (nearer) ones a little faster, all of them faster in a storm. */
   speed: number;
+  /** How far it reaches left of its middle, and how far it goes before it's back where it started. */
+  reach: number;
+  lap: number;
+  /** Where its image goes, about its middle. */
+  rect: SkRect;
 }
 
 /**
@@ -89,7 +129,7 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
   const sky = look.sun ?? look.moon;
   const lightX = sky ? f.pad + sky.x * f.W : f.picW / 2;
   const light = fieldLight(look, f.picW, lightX);
-  let live: Scene['live'] = [];
+  let live: Sprig[] = [];
   // The live (near, swaying) flowers are drawn without haze: it's all behind them.
   const paintNear = sprigPainter(c, look, light);
   const picture = createPicture((canvas) => {
@@ -149,16 +189,18 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
     let cut = sprigs.length;
     while (cut > 0 && sprigs.length - cut < LIVE_MAX && sprigs[cut - 1].r >= LIVE_MIN_R) cut--;
     for (const sp of sprigs.slice(0, cut)) paintSprig(canvas, sp);
-    live = sprigs.slice(cut).map((sp) => ({
-      s: sp,
-      picture: createPicture((cv) => paintNear(cv, { ...sp, x: 0, y: 0 }), Skia.XYWHRect(-sp.r * 6 - sp.len, -sp.len - sp.r * 3, (sp.r * 6 + sp.len) * 2, sp.len + sp.r * 4)),
-    }));
+    live = sprigs.slice(cut);
 
     // Rain and snow fall live over the top (Precipitation), and the fog drifts: not frozen into this picture.
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c, { falling: false, banks: false });
     // The sun last, bright over everything that dims the scene.
     drawSunDisc(canvas, hz, f.pad, f.W, look);
   }, Skia.XYWHRect(0, 0, f.picW, f.picH));
+  // The near flowers' image, as sharp as the nearest of them is drawn on screen, the camera tilted or not.
+  const tilts = [0, 0.5, 1].map((p) => cameraMatrix(f, tiltAt(f, p)));
+  const nearest = live.reduce((most, sp) => Math.max(most, ...tilts.map((m) => 1 / Math.max(0.2, m[7] * sp.y + m[8]))), 1);
+  const near = nearAtlas(live, paintNear, Math.min(3, CANVAS_DENSITY * nearest));
+  const nearStill = near || !live.length ? null : createPicture((cv) => live.forEach((sp) => paintNear(cv, sp)), Skia.XYWHRect(0, 0, f.picW, f.picH));
   // The clouds, from their own sequence so the field stays as it was.
   const cloudRand = rng(seed ^ 0x2545f491);
   const cloudLit = cloudLight(look);
@@ -189,16 +231,93 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       s: k.s,
       // The bigger (nearer) ones a little faster.
       speed: (2 + Math.min(0.25, k.s / f.W) * 32) * wind,
+      reach: -CLOUD_BOUNDS.left * k.s,
+      lap: f.picW + CLOUD_BOUNDS.width * k.s,
+      rect: bounds,
     };
   });
   const mists = mistBanks(look, rng(seed ^ 0x51ed2705), f.cy, f.picH).map((b) => {
     const r = Skia.XYWHRect(0, -b.h, f.picW, b.h * 2);
     const pic = createPicture((cv) => drawMistBank(cv, f.picW, b, look), r);
     // Soft as it is, a point a pixel is plenty.
-    return { b, picture: pic, image: pictureImage(pic, r, 1) };
+    const image = pictureImage(pic, r, 1);
+    return { b, picture: pic, image, src: image ? Skia.XYWHRect(0, 0, image.width(), image.height()) : null, dst: r };
   });
   const bolts = look.lightning ? [0, 1, 2, 3, 4].map((i) => bolt(rng(seed + i * 977), f)) : [];
-  return { picture, live, clouds, mists, bolts };
+  return { picture, near, nearStill, clouds, mists, bolts };
+}
+
+/**
+ * The near flowers drawn once into one image, each in its own spot (`scale` pixels a point), packed
+ * in rows tallest first. Each is lit where it stands; its sway and the camera's tilt come later, as
+ * it's drawn. Null if it can't be made (the flowers are then drawn still, in place).
+ */
+function nearAtlas(sprigs: Sprig[], paint: (cv: SkCanvas, s: Sprig) => void, scale: number): Near | null {
+  if (!sprigs.length) return null;
+  const ROW = 2048;
+  const GAP = 2;
+  // Each flower's box about its base: the head at the top of the stem, the leaves out to the sides.
+  const boxes = sprigs.map((s) => {
+    const g = geometry(s);
+    const head = headOf(s) * 1.25 + 1;
+    const side = Math.max(head, s.r * 2.4) + 1;
+    const x0 = Math.min(0, g.ctrl.x, g.top.x) - side;
+    const x1 = Math.max(0, g.ctrl.x, g.top.x) + side;
+    const y0 = Math.min(g.ctrl.y, g.top.y) - head;
+    const y1 = s.r * 0.6 + 1;
+    return { x0, y0, w: Math.ceil((x1 - x0) * scale), h: Math.ceil((y1 - y0) * scale) };
+  });
+  const order = boxes.map((_, i) => i).sort((a, b) => boxes[b].h - boxes[a].h);
+  const at: Array<{ x: number; y: number }> = [];
+  let x = 0;
+  let y = 0;
+  let row = 0;
+  let width = 0;
+  for (const i of order) {
+    const b = boxes[i];
+    if (x > 0 && x + b.w > ROW) {
+      x = 0;
+      y += row + GAP;
+      row = 0;
+    }
+    at[i] = { x, y };
+    x += b.w + GAP;
+    width = Math.max(width, x);
+    row = Math.max(row, b.h);
+  }
+  const height = y + row;
+  if (width > 4096 || height > 4096) return null;
+  try {
+    const surface = Platform.OS === 'web' ? Skia.Surface.Make(width, height) : Skia.Surface.MakeOffscreen(width, height);
+    if (!surface) return null;
+    const canvas = surface.getCanvas();
+    const sprites = sprigs.map((s, i) => {
+      const b = boxes[i];
+      const spot = Skia.XYWHRect(at[i].x, at[i].y, b.w, b.h);
+      canvas.save();
+      canvas.clipRect(spot, ClipOp.Intersect, true);
+      canvas.translate(at[i].x - b.x0 * scale, at[i].y - b.y0 * scale);
+      canvas.scale(scale, scale);
+      // Drawn where it stands, so it's lit as it is there.
+      canvas.translate(-s.x, -s.y);
+      paint(canvas, s);
+      canvas.restore();
+      return spot;
+    });
+    surface.flush();
+    const atlas = surface.makeImageSnapshot().makeNonTextureImage();
+    surface.dispose();
+    if (!atlas) return null;
+    return {
+      atlas,
+      sprites,
+      spots: sprigs.flatMap((s, i) => [s.x, s.y, s.phase, -boxes[i].x0 * scale, -boxes[i].y0 * scale]),
+      xforms: sprigs.map(() => Skia.RSXform(1, 0, 0, 0)),
+      scale,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** A lightning bolt from the cloud down to the horizon, jagged, with a branch or two off it. */
@@ -224,25 +343,6 @@ function bolt(rand: () => number, f: CameraFrame): SkPath {
   return b.build();
 }
 
-/** A bank of fog drifting across, coming round again (it tiles across the picture's width). */
-function DriftMist({ m, clock, span }: { m: Scene['mists'][number]; clock: SharedValue<number>; span: number }) {
-  const transform = useDerivedValue(() => [{ translateX: -(((((clock.value / 1000) * m.b.speed) % span) + span) % span) }, { translateY: m.b.y }]);
-  const piece = (x: number) =>
-    m.image ? (
-      <Image image={m.image} x={x} y={-m.b.h} width={span} height={m.b.h * 2} fit="fill" />
-    ) : (
-      <Group transform={[{ translateX: x }]}>
-        <Picture picture={m.picture} />
-      </Group>
-    );
-  return (
-    <Group transform={transform}>
-      {piece(0)}
-      {piece(span)}
-    </Group>
-  );
-}
-
 /**
  * How bright a storm's lightning is at time `t` (ms), 0..1, and which bolt: now and then a strike, a
  * quick flash and a second, fainter one, then nothing for a while. Never more than two flashes a
@@ -259,97 +359,6 @@ function flashAt(t: number) {
   const first = dt >= 0 && dt < 110 ? 1 - dt / 110 : 0;
   const second = dt >= 220 && dt < 700 ? 0.55 * (1 - (dt - 220) / 480) : 0;
   return { strength: Math.max(first, second), which: k % 5 };
-}
-
-/** A storm's lightning: the sky flashing, and the bolt itself while it does. */
-function Lightning({ bolts, clock, f }: { bolts: SkPath[]; clock: SharedValue<number>; f: CameraFrame }) {
-  const sky = useDerivedValue(() => flashAt(clock.value).strength * 0.28);
-  return (
-    <Group>
-      <Rect x={0} y={0} width={f.picW} height={f.cy} color="#E8ECFF" opacity={sky} />
-      {bolts.map((p, i) => (
-        <Bolt key={i} path={p} index={i} clock={clock} />
-      ))}
-    </Group>
-  );
-}
-
-function Bolt({ path, index, clock }: { path: SkPath; index: number; clock: SharedValue<number> }) {
-  const shown = useDerivedValue(() => {
-    const f = flashAt(clock.value);
-    return f.which === index ? Math.min(1, f.strength * 1.4) : 0;
-  });
-  return (
-    <Group opacity={shown}>
-      <Path path={path} style="stroke" strokeWidth={5} color="#B8C4FF" strokeCap="round" strokeJoin="round" opacity={0.5}>
-        <BlurMask blur={5} style="normal" />
-      </Path>
-      <Path path={path} style="stroke" strokeWidth={1.6} color="#FFFFFF" strokeCap="round" strokeJoin="round" />
-    </Group>
-  );
-}
-
-/**
- * The near flowers, each standing upright where its base meets the ground on screen. The camera's
- * tilt squashes the ground top to bottom up close; a flower takes only the tilt's scale across there
- * (the same both ways), so it keeps its shape, and sways from its base on its own slow rhythm,
- * further and quicker in the wind (`gust`). All of them in one picture made afresh each frame on the
- * UI thread: one piece of work a frame, where a moving part for each flower was dozens, and it
- * kept the page from scrolling smoothly.
- */
-function SwayField({ live, clock, matrix, gust }: { live: Scene['live']; clock: SharedValue<number>; matrix: SharedValue<number[]>; gust: number }) {
-  const quick = 1 + Math.min(1, gust / 2);
-  const reach = 0.05 * (1 + gust);
-  const field = useDerivedValue(() => {
-    const m = matrix.value;
-    const t = clock.value;
-    return createPicture((cv) => {
-      for (let i = 0; i < live.length; i++) {
-        const { s, picture } = live[i];
-        // The camera's matrix has no x in its bottom row (m[6]) or in y's (m[3]).
-        const w = m[7] * s.y + m[8];
-        const period = (4200 + s.phase * 2600) / quick;
-        cv.save();
-        cv.translate((m[0] * s.x + m[1] * s.y + m[2]) / w, (m[4] * s.y + m[5]) / w);
-        cv.scale(1 / w, 1 / w);
-        cv.rotate((Math.sin((t / period + s.phase) * Math.PI * 2) * reach * 180) / Math.PI, 0, 0);
-        cv.drawPicture(picture);
-        cv.restore();
-      }
-    });
-  });
-  return <Picture picture={field} />;
-}
-
-/**
- * A cloud drifting slowly across the sky, in the scene (so it tilts with the camera), coming round
- * again off the far side.
- */
-function DriftCloud({ k, clock, span }: { k: Drifter; clock: SharedValue<number>; span: number }) {
-  const reach = -CLOUD_BOUNDS.left * k.s;
-  const lap = span + CLOUD_BOUNDS.width * k.s;
-  const roundAt = (t: number) => {
-    'worklet';
-    return Math.floor((k.x + reach + (t / 1000) * k.speed) / lap);
-  };
-  const transform = useDerivedValue(() => {
-    const at = (((k.x + reach + (clock.value / 1000) * k.speed) % lap) + lap) % lap;
-    return [{ translateX: at - reach }, { translateY: k.y }];
-  });
-  // Off past the far side it comes round again as another cloud (the change is out of sight).
-  const [round, setRound] = useState(() => roundAt(clock.get()));
-  useAnimatedReaction(
-    () => roundAt(clock.value),
-    (now, before) => {
-      if (before != null && now !== before) scheduleOnRN(setRound, now);
-    },
-  );
-  const { picture, image } = k.design(round);
-  return (
-    <Group transform={transform}>
-      {image ? <Image image={image} x={CLOUD_BOUNDS.left * k.s} y={CLOUD_BOUNDS.top * k.s} width={CLOUD_BOUNDS.width * k.s} height={CLOUD_BOUNDS.height * k.s} fit="fill" /> : <Picture picture={picture} />}
-    </Group>
-  );
 }
 
 /** The web's one GPU surface the clouds are drawn on in turn (a new one each would soon run out). */
@@ -442,6 +451,142 @@ function fadeStops(height: number, solid: number) {
   return { colors, positions };
 }
 
+/** A cloud's time round (its lap across the sky) at time `t`, ms: it's another cloud each time round. */
+function roundOf(k: Pick<Drifter, 'x' | 'reach' | 'speed' | 'lap'>, t: number) {
+  'worklet';
+  return Math.floor((k.x + k.reach + (t / 1000) * k.speed) / k.lap);
+}
+
+const roundsAt = (scene: Scene, t: number) => scene.clouds.map((k) => roundOf(k, t));
+
+/** What's drawn of a cloud just now: the cloud of its current time round. */
+interface Shown {
+  image: SkImage | null;
+  src: SkRect | null;
+  picture: SkPicture;
+}
+
+/**
+ * The sky and field as they are at this moment, as the level camera sees them (the tilt is applied
+ * as it's drawn): the still picture (fading in over the one before while it changes), the fog and
+ * the clouds drifting, a storm's lightning. One picture a frame, drawn on both canvases: a part for
+ * each cloud and bank of fog, on each canvas, was dozens of pieces of work a frame.
+ */
+function useSkyPicture(scene: Scene, f: CameraFrame, cur: SkImage | null, prev: SkImage | null, blend: SharedValue<number>, clock: SharedValue<number>, shown: Shown[], storm: boolean): SharedValue<SkPicture> {
+  const full = useMemo(() => Skia.XYWHRect(0, 0, f.picW, f.picH), [f]);
+  const curSrc = useMemo(() => (cur ? Skia.XYWHRect(0, 0, cur.width(), cur.height()) : null), [cur]);
+  const prevSrc = useMemo(() => (prev ? Skia.XYWHRect(0, 0, prev.width(), prev.height()) : null), [prev]);
+  const clouds = useMemo(() => scene.clouds.map(({ x, y, reach, speed, lap, rect }) => ({ x, y, reach, speed, lap, rect })), [scene]);
+  const { picture, nearStill, mists, bolts } = scene;
+  const span = f.picW;
+  const skyH = f.cy;
+  return useDerivedValue(() => {
+    const t = clock.value;
+    const fade = blend.value;
+    return createPicture((cv) => {
+      const paint = Skia.Paint();
+      if (prev && prevSrc) cv.drawImageRectOptions(prev, prevSrc, full, FilterMode.Linear, MipmapMode.None, paint);
+      if (cur && curSrc) {
+        paint.setAlphaf(fade);
+        cv.drawImageRectOptions(cur, curSrc, full, FilterMode.Linear, MipmapMode.None, paint);
+        paint.setAlphaf(1);
+      } else cv.drawPicture(picture);
+      // Banks of fog drifting across, each coming round again (it tiles across the picture's width).
+      for (let i = 0; i < mists.length; i++) {
+        const m = mists[i];
+        const off = -(((((t / 1000) * m.b.speed) % span) + span) % span);
+        for (let piece = 0; piece < 2; piece++) {
+          cv.save();
+          cv.translate(off + piece * span, m.b.y);
+          if (m.image && m.src) cv.drawImageRectOptions(m.image, m.src, m.dst, FilterMode.Linear, MipmapMode.None, paint);
+          else cv.drawPicture(m.picture);
+          cv.restore();
+        }
+      }
+      // The clouds drifting slowly across, each coming round again off the far side (as another cloud).
+      for (let i = 0; i < clouds.length; i++) {
+        const k = clouds[i];
+        const d = shown[i];
+        if (!d) continue;
+        const at = (((k.x + k.reach + (t / 1000) * k.speed) % k.lap) + k.lap) % k.lap;
+        cv.save();
+        cv.translate(at - k.reach, k.y);
+        if (d.image && d.src) cv.drawImageRectOptions(d.image, d.src, k.rect, FilterMode.Linear, MipmapMode.None, paint);
+        else cv.drawPicture(d.picture);
+        cv.restore();
+      }
+      // A storm's lightning: the sky flashing, and the bolt itself while it does.
+      if (storm) {
+        const flash = flashAt(t);
+        if (flash.strength > 0) {
+          const lit = Skia.Paint();
+          lit.setColor(Skia.Color('#E8ECFF'));
+          lit.setAlphaf(flash.strength * 0.28);
+          cv.drawRect(Skia.XYWHRect(0, 0, span, skyH), lit);
+          const path = bolts[flash.which];
+          if (path) {
+            const shine = Math.min(1, flash.strength * 1.4);
+            const stroke = (color: string, width: number, alpha: number) => {
+              const line = Skia.Paint();
+              line.setAntiAlias(true);
+              line.setStyle(PaintStyle.Stroke);
+              line.setStrokeWidth(width);
+              line.setStrokeCap(StrokeCap.Round);
+              line.setStrokeJoin(StrokeJoin.Round);
+              line.setColor(Skia.Color(color));
+              line.setAlphaf(alpha);
+              return line;
+            };
+            const glow = stroke('#B8C4FF', 5, 0.5 * shine);
+            glow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, 5, true));
+            cv.drawPath(path, glow);
+            cv.drawPath(path, stroke('#FFFFFF', 1.6, shine));
+          }
+        }
+      }
+      if (nearStill) cv.drawPicture(nearStill);
+    });
+  });
+}
+
+/**
+ * The near flowers, each standing upright where its base meets the ground on screen. The camera's
+ * tilt squashes the ground top to bottom up close; a flower takes only the tilt's scale across there
+ * (the same both ways), so it keeps its shape, and sways from its base on its own slow rhythm,
+ * further and quicker in the wind (`gust`). All of them in one draw of their image a frame.
+ */
+function useNearPicture(near: Near | null, matrix: SharedValue<number[]>, clock: SharedValue<number>, gust: number, empty: SkPicture): SharedValue<SkPicture> {
+  const quick = 1 + Math.min(1, gust / 2);
+  const reach = 0.05 * (1 + gust);
+  return useDerivedValue(() => {
+    if (!near) return empty;
+    const m = matrix.value;
+    const t = clock.value;
+    const { spots, xforms, scale } = near;
+    for (let i = 0; i < xforms.length; i++) {
+      const x = spots[i * 5];
+      const y = spots[i * 5 + 1];
+      const phase = spots[i * 5 + 2];
+      const ox = spots[i * 5 + 3];
+      const oy = spots[i * 5 + 4];
+      // The camera's matrix has no x in its bottom row (m[6]) or in y's (m[3]).
+      const w = m[7] * y + m[8];
+      const period = (4200 + phase * 2600) / quick;
+      const a = Math.sin((t / period + phase) * Math.PI * 2) * reach;
+      const k = 1 / (w * scale);
+      const sc = k * Math.cos(a);
+      const ss = k * Math.sin(a);
+      // Turned and scaled about its base, which lands where the ground is on screen.
+      xforms[i].set(sc, ss, (m[0] * x + m[1] * y + m[2]) / w - (sc * ox - ss * oy), (m[4] * y + m[5]) / w - (ss * ox + sc * oy));
+    }
+    return createPicture((cv) => cv.drawAtlas(near.atlas, near.sprites, xforms, Skia.Paint()));
+  });
+}
+
+/** A canvas drawn at CANVAS_DENSITY and scaled up to fill `width` x `height` on screen. */
+const upscaled = (width: number, height: number) => ({ width: Math.ceil(width / UPSCALE), height: Math.ceil(height / UPSCALE), transform: [{ scale: UPSCALE }], transformOrigin: 'top left' }) as const;
+const DOWN = [{ scale: 1 / UPSCALE }];
+
 /**
  * Home's sky and field, through the camera; `tilt` is how far down it looks, 0 (level) to 1. The
  * near flowers sway while `animate` is on (the page in view), at about 30 frames a second, and not
@@ -494,32 +639,48 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
       since.value = 0;
     }
   }, false);
-  // Rain or snow falls over the scene, and the clouds drift (held still with reduced motion).
+  // Off past the far side a cloud comes round again as another one (the change is out of sight):
+  // which time round each is on, kept up to date from the UI thread as they come round.
+  const [cloudRounds, setCloudRounds] = useState(() => ({ scene, at: roundsAt(scene, clock.get()) }));
+  const rounds = cloudRounds.scene === scene ? cloudRounds.at : roundsAt(scene, clock.get());
+  if (cloudRounds.scene !== scene) setCloudRounds({ scene, at: rounds });
+  const drift = useMemo(() => scene.clouds.map(({ x, reach, speed, lap }) => ({ x, reach, speed, lap })), [scene]);
+  const nextRounds = () => setCloudRounds({ scene, at: roundsAt(scene, clock.get()) });
+  useAnimatedReaction(
+    () => {
+      let sum = 0;
+      for (let i = 0; i < drift.length; i++) sum += roundOf(drift[i], clock.value);
+      return sum;
+    },
+    (now, before) => {
+      if (before != null && now !== before) scheduleOnRN(nextRounds);
+    },
+  );
+  const cloudsShown = useMemo<Shown[]>(
+    () =>
+      scene.clouds.map((k, i) => {
+        const d = k.design(rounds[i]);
+        return { image: d.image, src: d.image ? Skia.XYWHRect(0, 0, d.image.width(), d.image.height()) : null, picture: d.picture };
+      }),
+    [scene, rounds],
+  );
+  // Rain, snow or hail falls over the scene, and the clouds drift (held still with reduced motion).
   const fall = fallOf(look);
-  const moving = animate && !reduceMotion && (scene.live.length > 0 || !!fall || scene.clouds.length > 0 || scene.mists.length > 0);
+  const falls = useMemo<Fall[]>(() => [...(fall ? [fall] : []), ...(look.hail ? (['hail'] as const) : [])], [fall, look.hail]);
+  const rain = useFalling(falls, look.fall, frame.W, frame.H, clock, look.wind);
+  const moving = animate && !reduceMotion && (!!scene.near || falls.length > 0 || scene.clouds.length > 0 || scene.mists.length > 0);
   // Lightning only while the scene moves (held still, a flash could stay lit), never with reduced motion.
   const storm = moving && scene.bolts.length > 0;
   const gust = Math.min(2, look.wind / 20);
   useEffect(() => {
     ticker.setActive(moving);
   }, [moving, ticker]);
+  const empty = useMemo(() => createPicture(() => {}), []);
+  const skyNow = useSkyPicture(scene, frame, layers.cur, layers.prev, blend, clock, cloudsShown, storm);
+  const nearNow = useNearPicture(scene.near, matrix, clock, gust, empty);
   const scenery = (
     <Group matrix={matrix}>
-      {layers.prev ? <Image image={layers.prev} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : null}
-      {image ? (
-        <Group opacity={blend}>
-          <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" />
-        </Group>
-      ) : (
-        <Picture picture={scene.picture} />
-      )}
-      {scene.mists.map((m, i) => (
-        <DriftMist key={`m${i}`} m={m} clock={clock} span={frame.picW} />
-      ))}
-      {scene.clouds.map((k, i) => (
-        <DriftCloud key={i} k={k} clock={clock} span={frame.picW} />
-      ))}
-      {storm ? <Lightning bolts={scene.bolts} clock={clock} f={frame} /> : null}
+      <Picture picture={skyNow} />
     </Group>
   );
   const fadeH = (topFade?.height ?? 0) + 1;
@@ -530,30 +691,33 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   return (
     <>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.viewH }}>
-        <Canvas style={{ width: frame.W, height: frame.viewH }}>
-          {scenery}
-          {scene.live.length ? <SwayField live={scene.live} clock={clock} matrix={matrix} gust={gust} /> : null}
-          {fall ? <Precipitation kind={fall} level={look.fall} width={frame.W} height={frame.H} clock={clock} wind={look.wind} /> : null}
-          {look.hail ? <Precipitation kind="hail" level={look.fall} width={frame.W} height={frame.H} clock={clock} wind={look.wind} /> : null}
-        </Canvas>
+        <View style={upscaled(frame.W, frame.viewH)}>
+          <Canvas style={{ flex: 1 }}>
+            <Group transform={DOWN}>
+              {scenery}
+              {scene.near ? <Picture picture={nearNow} /> : null}
+              {falls.length ? <Picture picture={rain} /> : null}
+            </Group>
+          </Canvas>
+        </View>
       </View>
       {children}
       {topFade ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, width: frame.W, height: fadeH }, shown]}>
-          <Canvas style={{ width: frame.W, height: fadeH }}>
-            <Mask
-              mode="alpha"
-              mask={
-                <Rect x={0} y={0} width={frame.W} height={fadeH}>
+          <View style={upscaled(frame.W, fadeH)}>
+            <Canvas style={{ flex: 1 }}>
+              <Group transform={DOWN}>
+                {scenery}
+                {falls.length ? <Picture picture={rain} /> : null}
+                {/* Fading out downward: what's drawn is kept only as much as this is opaque. It covers
+                    the whole canvas (a sliver taller than the fade, rounded up to whole pixels), clear
+                    past the fade's end, or that sliver showed as a line across the cards. */}
+                <Rect x={0} y={0} width={frame.W + UPSCALE * 2} height={fadeH + UPSCALE * 2} blendMode="dstIn">
                   <LinearGradient start={vec(0, 0)} end={vec(0, fadeH)} colors={stops.colors} positions={stops.positions} />
                 </Rect>
-              }
-            >
-              {scenery}
-              {fall ? <Precipitation kind={fall} level={look.fall} width={frame.W} height={frame.H} clock={clock} wind={look.wind} /> : null}
-              {look.hail ? <Precipitation kind="hail" level={look.fall} width={frame.W} height={frame.H} clock={clock} wind={look.wind} /> : null}
-            </Mask>
-          </Canvas>
+              </Group>
+            </Canvas>
+          </View>
         </Animated.View>
       ) : null}
     </>

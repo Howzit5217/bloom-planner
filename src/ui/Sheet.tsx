@@ -117,7 +117,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Prop
           </GestureDetector>
           {scroll ? (
             <View style={{ flexShrink: 1 }}>
-              <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 8, gap: 16 }}>
+              <Animated.ScrollView ref={scrollRef} onScroll={onScroll} onContentSizeChange={rail.onContentSizeChange} onLayout={rail.onLayout} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 8, gap: 16 }}>
                 {children}
               </Animated.ScrollView>
               <ScrollRail rail={rail} scrollRef={scrollRef} />

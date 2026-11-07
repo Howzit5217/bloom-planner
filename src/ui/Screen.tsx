@@ -20,6 +20,7 @@ import { Meadow } from './skia/Meadow';
 import { Seedling } from './skia/Seedling';
 import { TAB_BAR_SPACE } from './TabBar';
 import { useGlide } from './glide';
+import { PageFocusProvider } from './idle';
 import { useT } from '@/i18n';
 
 /** Whether the app has shown its first page yet (that one doesn't slide in). */
@@ -91,23 +92,26 @@ export function PaperSheet({ children }: { children: ReactNode }) {
   // Wider than the app, the meadow behind the whole window shows above the sheet instead.
   const wide = useWide();
   const live = useLive();
+  const focused = useIsFocused();
   // Out of sight on the web, nothing at all, not even the empty sheet: the page stays behind the
   // others, and on a wide screen Home is see-through, so its sheet showed through Home.
   if (!live) return <View style={{ flex: 1 }} />;
   return (
-    <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : c.canvas }}>
-      <SkyStatusBar />
-      {wide ? null : (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-          {/* The sun and moon keep to the strip of sky under the status bar, on their paths. */}
-          <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} skyTop={insets.top + 15} />
+    <PageFocusProvider value={focused}>
+      <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : c.canvas }}>
+        <SkyStatusBar />
+        {wide ? null : (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
+            {/* The sun and moon keep to the strip of sky under the status bar, on their paths. */}
+            <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} skyTop={insets.top + 15} />
+          </View>
+        )}
+        <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>
+          {children}
+          <EdgeFade edge="top" color={c.canvas} height={16} />
         </View>
-      )}
-      <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>
-        {children}
-        <EdgeFade edge="top" color={c.canvas} height={16} />
       </View>
-    </View>
+    </PageFocusProvider>
   );
 }
 
@@ -349,6 +353,8 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
     <Animated.ScrollView
         ref={scrollRef}
         onScroll={onScroll}
+        onContentSizeChange={rail.onContentSizeChange}
+        onLayout={rail.onLayout}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -391,31 +397,33 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
     </>
   );
   return (
-    <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
-      <SkyStatusBar />
-      {wide ? (
-        <>
-          {layered}
-          {/* On a wide screen the meadow is behind the whole window: the column's fade is a gradient
-              in the sky's colour (or the field's, once the camera looks down). */}
-          <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
-            <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, fieldFade]}>
-              <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+    <PageFocusProvider value={inView}>
+      <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
+        <SkyStatusBar />
+        {wide ? (
+          <>
+            {layered}
+            {/* On a wide screen the meadow is behind the whole window: the column's fade is a gradient
+                in the sky's colour (or the field's, once the camera looks down). */}
+            <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
+              <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, fieldFade]}>
+                <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+              </Animated.View>
+              <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, skyFade]}>
+                <EdgeFade edge="top" color={look.top} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+              </Animated.View>
             </Animated.View>
-            <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, skyFade]}>
-              <EdgeFade edge="top" color={look.top} height={insets.top + TOP_FADE} solid={insets.top + 4} />
-            </Animated.View>
-          </Animated.View>
-        </>
-      ) : (
-        // Once the page moves, cards scroll up under a tall, eased fade into the scene itself (the
-        // sky, or the field once the camera looks down), solid behind the clock and battery.
-        <CameraMeadow frame={frame} tilt={tilt} animate={inView} topFade={{ height: insets.top + TOP_FADE, solid: insets.top + 4, shown: fadeIn }}>
-          {layered}
-        </CameraMeadow>
-      )}
-      {bottomExtra}
-    </View>
+          </>
+        ) : (
+          // Once the page moves, cards scroll up under a tall, eased fade into the scene itself (the
+          // sky, or the field once the camera looks down), solid behind the clock and battery.
+          <CameraMeadow frame={frame} tilt={tilt} animate={inView} topFade={{ height: insets.top + TOP_FADE, solid: insets.top + 4, shown: fadeIn }}>
+            {layered}
+          </CameraMeadow>
+        )}
+        {bottomExtra}
+      </View>
+    </PageFocusProvider>
   );
 }
 

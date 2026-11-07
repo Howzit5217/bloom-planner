@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { PixelRatio, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { clearOf } from './color';
+import { usePageFocused } from './idle';
 import { lineHeightOf, T, type TVariant } from './T';
 
 /** How fast a line too long for its space slides, how long it rests at each end, and how wide its edges fade. */
@@ -33,15 +34,18 @@ export function ScrollText({ children, v = 'body', color, soft, behind, center, 
   const over = box > 0 ? Math.max(0, Math.ceil(full - box)) : 0;
   const x = useSharedValue(0);
   const reduced = useReducedMotion();
+  // Only on the page in view: every tab stays mounted, and lines sliding on hidden pages kept the
+  // whole app's layout busy, slowing Home's scrolling.
+  const focused = usePageFocused();
 
   useEffect(() => {
     cancelAnimation(x);
     x.value = 0;
-    if (over < 2 || reduced) return;
+    if (over < 2 || reduced || !focused) return;
     const move = { duration: (over / SPEED) * 1000, easing: Easing.inOut(Easing.quad) };
     x.value = withRepeat(withSequence(withDelay(REST, withTiming(-over, move)), withDelay(REST, withTiming(0, move))), -1, false);
     return () => cancelAnimation(x);
-  }, [over, reduced, x]);
+  }, [over, reduced, focused, x]);
 
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
   // Each edge fades only while text is running under it.

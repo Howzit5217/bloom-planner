@@ -642,7 +642,7 @@ export function Wizard() {
           const { y, height } = e.nativeEvent.layout;
           setRestBox((prev) => (atRest(prev.h, height) ? { y, h: height } : prev));
         }}>
-          <Animated.ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: BODY_BOTTOM, flexGrow: 1 }}>
+          <Animated.ScrollView ref={scrollRef} onScroll={onScroll} onContentSizeChange={rail.onContentSizeChange} onLayout={rail.onLayout} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: BODY_TOP, paddingBottom: BODY_BOTTOM, flexGrow: 1 }}>
             <Animated.View key={step} entering={reduceMotion ? FadeIn.duration(160) : (dir > 0 ? FadeInRight : FadeInLeft).duration(300)} style={{ flex: 1 }}>
               {step === 0 ? body : <View onLayout={(e) => setBodyH({ step, h: e.nativeEvent.layout.height })}>{body}</View>}
             </Animated.View>

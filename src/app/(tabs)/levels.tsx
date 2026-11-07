@@ -101,6 +101,8 @@ export default function Levels() {
         <Animated.FlatList
           ref={scrollRef}
           onScroll={onScroll}
+          onContentSizeChange={rail.onContentSizeChange}
+          onLayout={rail.onLayout}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           data={rows}
