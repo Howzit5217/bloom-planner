@@ -274,7 +274,7 @@ export function cloudsOf(look: SkyLook, rand: () => number, hz: number, fullW: n
   return Array.from({ length: count }, () => {
     const up = rand();
     const size = rand();
-    const big = size > 0.88 ? 0.26 + rand() * 0.14 : size > 0.55 ? 0.09 + rand() * 0.1 : 0.02 + rand() * 0.06;
+    const big = size > 0.88 ? 0.22 + rand() * 0.1 : size > 0.55 ? 0.09 + rand() * 0.1 : 0.03 + rand() * 0.05;
     const far = 1 - 0.5 * up;
     const s = Math.min(viewW * big * far * (1 + 0.5 * look.veil), hz * 0.45);
     // A big one low enough that most of it shows.

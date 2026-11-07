@@ -614,7 +614,7 @@ interface Shown {
  * the clouds drifting, a storm's lightning. One picture a frame, drawn on both canvases: a part for
  * each cloud and bank of fog, on each canvas, was dozens of pieces of work a frame.
  */
-function useSkyPicture(scene: Scene, f: CameraFrame, cur: SkImage | null, prev: SkImage | null, blend: SharedValue<number>, clock: SharedValue<number>, shown: Shown[], storm: boolean, soft: SkImage | null, tilt: SharedValue<number>): SharedValue<SkPicture> {
+function useSkyPicture(scene: Scene, f: CameraFrame, cur: SkImage | null, prev: SkImage | null, blend: SharedValue<number>, clock: SharedValue<number>, shown: Shown[], storm: boolean, soft: SkImage | null, tilt: SharedValue<number>, mip: MipmapMode): SharedValue<SkPicture> {
   const full = useMemo(() => Skia.XYWHRect(0, 0, f.picW, f.picH), [f]);
   const softSrc = useMemo(() => (soft ? Skia.XYWHRect(0, 0, soft.width(), soft.height()) : null), [soft]);
   const curSrc = useMemo(() => (cur ? Skia.XYWHRect(0, 0, cur.width(), cur.height()) : null), [cur]);
@@ -629,10 +629,10 @@ function useSkyPicture(scene: Scene, f: CameraFrame, cur: SkImage | null, prev: 
     const focus = soft ? focusAt(tilt.value) : 0;
     return createPicture((cv) => {
       const paint = Skia.Paint();
-      if (prev && prevSrc) cv.drawImageRectOptions(prev, prevSrc, full, FilterMode.Linear, MipmapMode.None, paint);
+      if (prev && prevSrc) cv.drawImageRectOptions(prev, prevSrc, full, FilterMode.Linear, mip, paint);
       if (cur && curSrc) {
         paint.setAlphaf(fade);
-        cv.drawImageRectOptions(cur, curSrc, full, FilterMode.Linear, MipmapMode.None, paint);
+        cv.drawImageRectOptions(cur, curSrc, full, FilterMode.Linear, mip, paint);
         paint.setAlphaf(1);
       } else cv.drawPicture(picture);
       // Looking down at the flowers, the far field goes softly out of focus.
@@ -945,7 +945,12 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   // The far field out of focus, for when the camera looks down (not while running through the time
   // away, each frame of which is on screen only a moment).
   const soft = useMemo(() => (image && !lapsing && !scene.placeholder ? keptSoft(scene, image, frame) : null), [scene, image, frame, lapsing]);
-  const skyNow = useSkyPicture(scene, frame, layers.cur, layers.prev, blend, clock, cloudsShown, storm, soft, tilt);
+  // Looking down, the camera squeezes the field below the screen to well under half its height: drawn
+  // from the full picture, the grass and the flowers there flickered as it moved, so it's drawn from
+  // smaller copies of it there (made once with the picture). Not for the run-through's frames, each on
+  // screen only a moment.
+  const mip = lapsing ? MipmapMode.None : MipmapMode.Linear;
+  const skyNow = useSkyPicture(scene, frame, layers.cur, layers.prev, blend, clock, cloudsShown, storm, soft, tilt, mip);
   const nearNow = useNearPicture(scene.near, matrix, clock, gust, empty);
   const motesNow = useMotePicture(moving ? scene.motes : null, matrix, clock, frame.picW, empty);
   // As it looks down, the camera eases in a little closer, toward the foot of the screen.

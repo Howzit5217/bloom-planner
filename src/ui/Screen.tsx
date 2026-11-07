@@ -1,15 +1,14 @@
 import * as Haptics from 'expo-haptics';
-import { useIsFocused } from 'expo-router';
+import { useIsFocused, useRoute } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Keyboard, Platform, RefreshControl, TextInput, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
-import Animated, { Easing, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, useNativeGesture, usePanGesture, useSimultaneousGestures } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
-import { SPRING } from '@/theme/tokens';
 import { EdgeFade } from './EdgeFade';
 import { useAppWidth, useWide } from './layout';
 import { ScrollRail, useScrollRail } from './ScrollRail';
@@ -19,6 +18,7 @@ import { CameraMeadow } from './skia/CameraMeadow';
 import { Meadow } from './skia/Meadow';
 import { Seedling } from './skia/Seedling';
 import { TAB_BAR_SPACE } from './TabBar';
+import { TAB_FADE_MS, TAB_ORDER, tabMove } from './tabMotion';
 import { useGlide } from './glide';
 import { PageFocusProvider } from './idle';
 import { useT } from '@/i18n';
@@ -26,26 +26,49 @@ import { useT } from '@/i18n';
 /** Whether the app has shown its first page yet (that one doesn't slide in). */
 let appOpened = false;
 
-/** Tab switch: content cross-fades with an 8px vertical slide. */
+/** How far a page's content slides in from the side of the tab picked. */
+const SLIDE = 32;
+/** The slide's spring: quick, settling without a bounce you'd see. */
+const SLIDE_SPRING = { damping: 24, stiffness: 240, mass: 1 } as const;
+
+/**
+ * A tab's content as the tab changes: the new page's slides in from the side of the tab picked (from
+ * the right going right, from the left going left) as it fades in, and the old page's slides the
+ * other way as it fades out, while the pages themselves cross-fade (tabMotion.ts). A page opened over
+ * the tabs, and coming back from one, moves nothing; nor does the page the app opens on.
+ */
 export function FocusFade({ children }: { children: ReactNode }) {
   const focused = useIsFocused();
-  // The page the app opens on is simply there: sliding in after the splash looked like a jump.
-  const [opening] = useState(() => focused && !appOpened);
-  const p = useSharedValue(opening ? 1 : 0);
-  const skip = useRef(opening);
+  const index = TAB_ORDER.indexOf(useRoute().name as (typeof TAB_ORDER)[number]);
+  // The last change of tab this page has seen. A page first shown by a change of tab counts it as not
+  // seen yet, whether it's made before the tab bar hears of the change or after.
+  const seen = useRef(appOpened && index >= 0 && tabMove.to === index ? tabMove.seq - 1 : tabMove.seq);
+  const x = useSharedValue(0);
+  const o = useSharedValue(1);
   useEffect(() => {
     appOpened = true;
   }, []);
   useEffect(() => {
-    if (!focused) return;
-    if (skip.current) {
-      skip.current = false;
-      return;
+    const moved = tabMove.seq !== seen.current;
+    seen.current = tabMove.seq;
+    if (focused) {
+      if (moved && index >= 0 && tabMove.to === index) {
+        const from = Math.sign(index - tabMove.from) || 1;
+        x.value = from * SLIDE;
+        o.value = 0;
+        x.value = withSpring(0, SLIDE_SPRING);
+        o.value = withTiming(1, { duration: 240, easing: Easing.out(Easing.cubic) });
+      } else {
+        x.value = 0;
+        o.value = 1;
+      }
+    } else if (moved && index >= 0 && tabMove.from === index) {
+      const to = Math.sign(tabMove.to - index) || 1;
+      x.value = withTiming(-to * SLIDE * 0.6, { duration: 200, easing: Easing.in(Easing.quad) });
+      o.value = withTiming(0, { duration: 160, easing: Easing.in(Easing.quad) });
     }
-    p.value = 0;
-    p.value = withSpring(1, SPRING);
-  }, [focused, p]);
-  const a = useAnimatedStyle(() => ({ flex: 1, opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 8 }] }));
+  }, [focused, index, x, o]);
+  const a = useAnimatedStyle(() => ({ flex: 1, opacity: o.value, transform: [{ translateX: x.value }] }));
   return <Animated.View style={a}>{children}</Animated.View>;
 }
 
@@ -56,6 +79,8 @@ const HOLD = 78;
 const KEYBOARD_GAP = 48;
 /** Scrolling this many times the horizon's climb tilts the camera all the way down, so the scene moves slower than the cards. */
 const TILT_SCROLL = 1.8;
+/** How many frames behind the page Home's camera follows it: a little over one, so where the page was then is always known. */
+const FOLLOW_FRAMES = 1.25;
 /** A pulled page settles back up without overshooting past the top. */
 const SETTLE = { damping: 22, stiffness: 200, mass: 1, overshootClamping: true } as const;
 /** Where the paper pages' sheet starts, below the safe area: the meadow strip shows above it. */
@@ -75,11 +100,23 @@ function SkyStatusBar() {
  * Whether this page draws its pictures now. On the web each drawing canvas takes one of the
  * browser's few graphics contexts (about sixteen) and the oldest are dropped past that, which blanked
  * Home's drawings once every tab had been opened. So there a page out of sight lets go of its
- * drawings and makes them afresh when it's back. In the app every page keeps them.
+ * drawings and makes them afresh when it's back (only once the pages have cross-faded, or the old
+ * page went blank under the new one). In the app every page keeps them.
  */
 function useLive(): boolean {
   const focused = useIsFocused();
-  return Platform.OS !== 'web' || focused;
+  const [fading, setFading] = useState(false);
+  const [was, setWas] = useState(focused);
+  if (was !== focused) {
+    setWas(focused);
+    setFading(!focused);
+  }
+  useEffect(() => {
+    if (!fading) return;
+    const id = setTimeout(() => setFading(false), TAB_FADE_MS + 60);
+    return () => clearTimeout(id);
+  }, [fading]);
+  return Platform.OS !== 'web' || focused || fading;
 }
 
 /**
@@ -188,12 +225,36 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
     const k = Math.min(1, Math.max(0, y / tiltScroll));
     return k * k * (3 - 2 * k) * 0.35 + k * 0.65;
   };
-  useAnimatedReaction(
-    () => rail.y.value,
-    (y) => {
-      if (meadow) tilt.value = tiltAt(y);
-    },
-  );
+  // The camera moves once a frame, just before the scene is drawn, to where the page was a moment
+  // ago (a frame and a bit), worked out from where it was at the last two scroll events either side.
+  // Moved by each scroll event instead, it kept step while a finger dragged (Android hears of a drag
+  // before the frame is drawn) but fell a frame behind once the page coasted on (it hears of each
+  // step of that only after), so it stopped for a frame and jumped every time a finger let go or
+  // caught the page. Always the same moment behind, it moves as evenly as the page does, however the
+  // events fall, and toward the end of a coast, when they come only every few frames, it slows
+  // smoothly instead of in steps.
+  const prevY = useSharedValue(0);
+  const prevAt = useSharedValue(0);
+  const lastY = useSharedValue(0);
+  const lastAt = useSharedValue(-1e9);
+  // The screen's time a frame, ms (about 8 at 120 Hz).
+  const frameMs = useSharedValue(16.7);
+  const follow = useFrameCallback((info) => {
+    const dt = info.timeSincePreviousFrame;
+    if (dt != null && dt > 4 && dt < 40) frameMs.value += (dt - frameMs.value) * 0.1;
+    const at = performance.now() - frameMs.value * FOLLOW_FRAMES;
+    let y = rail.y.value;
+    if (at < lastAt.value) {
+      const span = lastAt.value - prevAt.value;
+      const k = span > 0 ? Math.min(1, Math.max(0, (at - prevAt.value) / span)) : 1;
+      y = prevY.value + (lastY.value - prevY.value) * k;
+    }
+    const next = tiltAt(y);
+    if (next !== tilt.value) tilt.value = next;
+  }, false);
+  useEffect(() => {
+    follow.setActive(meadow && inView);
+  }, [follow, meadow, inView]);
   // Back on a page: on the web its scroller was let go while out of sight and comes back at the top, so
   // the rail starts there again too; and Home's camera looks where Home is, whatever happened meanwhile.
   useEffect(() => {
@@ -342,6 +403,14 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   const pulledDown = useAnimatedStyle(() => ({ transform: [{ translateY: pullY.value }] }));
   const onScroll = useAnimatedScrollHandler((e) => {
     rail.track(e);
+    // Where the page was and when, for the camera (above). Moving off after a rest, it was still
+    // until about a frame before this.
+    const now = performance.now();
+    const fresh = now - lastAt.get() > frameMs.get() * 2.5;
+    prevAt.set(fresh ? now - frameMs.get() : lastAt.get());
+    prevY.set(lastY.get());
+    lastAt.set(now);
+    lastY.set(e.contentOffset.y);
     if (pullGrows && !refreshing) {
       const pull = Math.max(0, -e.contentOffset.y);
       shown.set(Math.min(1, pull / 30));
