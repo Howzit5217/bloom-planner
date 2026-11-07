@@ -85,7 +85,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
       const location: PlayLocation = { label, latitude, longitude, timezone, elevation, resolvedAt: new Date().toISOString(), climateYears: climate.years };
       setPhase({ k: 'result', r: { location, climate, rates: seasonRatesFromClimate(climate, preset, useApp.getState().settings.limits) }, unnamed });
     } catch {
-      setPhase({ k: 'failed', message: t("The weather history for that spot couldn't be loaded. Set your months by hand instead, and try again later from Settings.") });
+      setPhase({ k: 'failed', message: t("Couldn't load the weather history there. Set your months by hand, or try again later in Settings.") });
     }
   };
 
@@ -122,7 +122,7 @@ export function PlaceFinder({ preset, onAccept, onManual, allowSkip = true }: Pr
           {t('Reading the weather history for {place}…', { place: phase.label })}
         </T>
         <T v="small" soft center>
-          {t('Ten years of days, sorted into good and bad for planting. This takes a second or two.')}
+          {t('Ten years of days, sorted into good and bad for planting. This takes a moment.')}
         </T>
       </View>
     );

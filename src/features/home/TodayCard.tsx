@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { em, Rich } from '@/ui/Rich';
 import { useEffect, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { addDaysKey, fromKey, type DayKey } from '@/engine/dates';
@@ -150,13 +151,13 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const easyToday = isToday && dash.phase === 'active' && isEasyDay(rhythmPrefs, fromKey(dash.today));
   const plainTarget =
     isToday && cg && !cg.reached && !cg.passed && !dash.loggedToday
-      ? t("Today's target: {steps} steps · {flowers} flowers", { steps: fmt(roundNice(cg.stepsPerDay)), flowers: fmt(roundNice(cg.flowersPerDay)) })
+      ? t("Today's target: {steps} steps · {flowers} flowers", { steps: em(fmt(roundNice(cg.stepsPerDay)), 'steps'), flowers: em(fmt(roundNice(cg.flowersPerDay)), 'flowers') })
       : isToday && tg.isToday && dash.phase === 'active' && dash.plan.status === 'ok'
         ? tg.flowersIfRiding > 0
           ? dash.rates.bikes
-            ? t("Today's target: {steps} steps · {flowers} flowers if you ride", { steps: fmt(roundNice(tg.steps)), flowers: fmt(roundNice(tg.flowersIfRiding)) })
-            : t("Today's target: {steps} steps · {flowers} flowers", { steps: fmt(roundNice(tg.steps)), flowers: fmt(roundNice(tg.flowersIfRiding)) })
-          : t("Today's target: {steps} steps", { steps: fmt(roundNice(tg.steps)) })
+            ? t("Today's target: {steps} steps · {flowers} flowers if you ride", { steps: em(fmt(roundNice(tg.steps)), 'steps'), flowers: em(fmt(roundNice(tg.flowersIfRiding)), 'flowers') })
+            : t("Today's target: {steps} steps · {flowers} flowers", { steps: em(fmt(roundNice(tg.steps)), 'steps'), flowers: em(fmt(roundNice(tg.flowersIfRiding)), 'flowers') })
+          : t("Today's target: {steps} steps", { steps: em(fmt(roundNice(tg.steps)), 'steps') })
         : null;
   const targetLine = plainTarget && easyToday ? `${t('Easy day.')} ${plainTarget}` : plainTarget;
   // The forecast cut today down: say why, so a smaller target makes sense.
@@ -164,6 +165,8 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
   const rideBad = dash.rates.bikes && wt && wt.ride !== 'good';
   const weatherLine: { icon: IconName; text: string } | null = !wt
     ? null
+    : wt.walk === 'severe'
+      ? { icon: 'alert', text: t('Severe weather today. Stay safe: the plan asks for very little, and other days make up the difference.') }
     : wt.walk === 'hot'
       ? { icon: 'thermometer-high', text: t('Too hot for a long walk today, so the plan asks for less.') }
       : wt.walk === 'cold'
@@ -185,11 +188,8 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
           <T v="h2" accessibilityRole="header" style={{ flexShrink: 1 }}>
             {isToday ? t('Today') : fmtLongDay(date)}
           </T>
-          {isToday ? (
-            <T v="smallBold" soft>
-              {fmtLongDay(date)}
-            </T>
-          ) : (
+          {/* Today's date is in the tile at the top already: the card names a day only when it's another one. */}
+          {isToday ? null : (
             <Pressable accessibilityRole="button" onPress={() => onPickDay(dash.today)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 }}>
               <Icon name="arrow-left" size={18} color={c.leafDeep} />
               <T v="smallBold" color={c.leafDeep}>
@@ -243,9 +243,9 @@ function DayCard({ dash, date, levelUpRequest, onPickDay }: Props & { date: DayK
             />
             {!isToday && profile ? <DateField label={t('Day')} value={date} onChange={onPickDay} minimumDate={fromKey(profile.startDate)} maximumDate={fromKey(dash.today)} /> : null}
             {targetLine ? (
-              <T v="small" soft>
+              <Rich v="small" soft>
                 {targetLine}
-              </T>
+              </Rich>
             ) : null}
             {isToday && weatherLine ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

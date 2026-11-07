@@ -6,7 +6,7 @@ import type { BurnDown, BurnPoint, DailyBar, SeasonBar, TimelineItem } from '@/e
 import { fmt, fmtDate, fmtShort, fmtWeekday, listJoin, monthLabel, monthShort, roundNice } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { PETALS } from '@/theme/tokens';
-import { flowerPath } from '@/ui/skia/shapes';
+import { CENTRE_COLOR, CENTRE_R, flowerPath, leafPath, mixHex, stemPath } from '@/ui/skia/shapes';
 import { T } from '@/ui/T';
 import { t } from '@/i18n';
 
@@ -212,48 +212,88 @@ export function DailyBarsChart({ bars, width, stepsTarget, flowersTarget, bikes 
 }
 
 // ─── 3. Level timeline ───
+const smooth = (x: number) => {
+  const k = Math.min(1, Math.max(0, x));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * A level's plant at `growth` (0..1), standing on the line at (cx, ground): just leaves at first, a
+ * sprout's pair at the top of a short stem; then a taller stem with its leaves low down and a small
+ * flower opening at the top, growing and opening fully into the bloom of a level done.
+ */
+function plantShape(cx: number, ground: number, growth: number) {
+  const g = Math.min(1, Math.max(0, growth));
+  const k = smooth(g);
+  const height = 5 + 36 * k;
+  const top = { x: cx + 1.5 * k, y: ground - height };
+  const stem = stemPath(cx, ground, cx - 2, ground - height * 0.5, top.x, top.y, 3.2, 2);
+  const young = g < 0.35;
+  const leafLen = young ? 6 + 9 * (g / 0.35) : 12;
+  const at = young ? top : { x: cx - 0.6, y: ground - height * 0.32 };
+  const leaves = [
+    { x: at.x, y: at.y, angle: young ? -2.55 : -2.75, len: leafLen },
+    { x: at.x, y: at.y, angle: young ? -0.6 : -0.42, len: leafLen * (young ? 1 : 0.9) },
+  ];
+  const f = smooth((g - 0.35) / 0.65);
+  const head = g >= 0.35 ? { x: top.x, y: top.y, r: 7 + 10 * f, open: 0.45 + 0.55 * f, centre: f > 0.25 } : null;
+  return { stem, leaves, leaf: leafPath(1, 0.44), head };
+}
+
+/** One level's plant, growing up from the line when the card comes in, one after another along it. */
+function Plant({ cx, ground, growth, color, index, p, c }: { cx: number; ground: number; growth: number; color: string; index: number; p: SharedValue<number>; c: ReturnType<typeof useTheme>['c'] }) {
+  const shape = useMemo(() => plantShape(cx, ground, growth), [cx, ground, growth]);
+  const head = useMemo(() => (shape.head ? flowerPath(shape.head.x, shape.head.y, shape.head.r, shape.head.open) : null), [shape]);
+  const grow = useDerivedValue(() => {
+    const k = Math.min(1, Math.max(0, p.value * 1.6 - index * 0.06));
+    const e = k * k * (3 - 2 * k);
+    return [{ translateX: cx }, { translateY: ground }, { scale: 0.05 + 0.95 * e }, { translateX: -cx }, { translateY: -ground }];
+  });
+  const stemColor = mixHex(c.leaf, '#1E4A22', c.dark ? 0.12 : 0.22);
+  return (
+    <Group transform={grow}>
+      <Path path={shape.stem} color={stemColor} />
+      {shape.leaves.map((l, i) => (
+        <Group key={i} transform={[{ translateX: l.x }, { translateY: l.y }, { rotate: l.angle }, { scale: l.len }]}>
+          <Path path={shape.leaf} color={c.leaf} />
+        </Group>
+      ))}
+      {head && shape.head ? <Path path={head} color={color} /> : null}
+      {shape.head?.centre ? <Circle cx={shape.head.x} cy={shape.head.y} r={shape.head.r * CENTRE_R} color={CENTRE_COLOR} /> : null}
+    </Group>
+  );
+}
+
 export function LevelTimeline({ items }: { items: TimelineItem[] }) {
   const { c } = useTheme();
   const colors = PETALS(c).filter((x) => x !== c.petalWhite);
   const step = 70;
-  const H = 120;
-  const cy = 52;
+  const H = 136;
+  // The line the plants stand on, between the level above and the date below.
+  const ground = 98;
   const W = Math.max(step, items.length * step);
-  const p = useMountProgress(80, 1100);
-  const flowers = useMemo(
-    () =>
-      items.map((it, i) => {
-        const cx = i * step + step / 2;
-        const open = it.status === 'done' ? 1 : it.status === 'current' ? 0.5 : 0;
-        return { it, cx, path: flowerPath(cx, cy, it.status === 'future' ? 13 : 18, open), color: it.status === 'future' ? c.leaf : colors[it.level % colors.length] };
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, c],
-  );
-  const reveal = useDerivedValue(() => p.value * W);
-  const clip = useDerivedValue(() => Skia.XYWHRect(0, 0, reveal.value, H));
+  const p = useMountProgress(80, 1300);
   const currentIndex = Math.max(0, items.findIndex((i) => i.status === 'current'));
+  const current = items[currentIndex];
+  // The line is green as far as you've come: through the levels done and part way to the next.
+  const reached = step / 2 + (currentIndex + (current && current.status === 'current' ? (current.growth - 0.4) / 0.6 : 0)) * step;
+  const reveal = useDerivedValue(() => step / 2 + (Math.min(W - step / 2, reached) - step / 2) * Math.min(1, p.value * 1.3));
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentOffset={{ x: Math.max(0, currentIndex * step - step), y: 0 }}>
       <View style={{ width: W, height: H }} accessible accessibilityLabel={t('Level timeline from {from} to {to}', { from: items[0]?.level ?? '', to: items[items.length - 1]?.level ?? '' })}>
         <Canvas style={{ position: 'absolute', width: W, height: H }}>
-          <Line p1={vec(step / 2, cy)} p2={vec(W - step / 2, cy)} color={c.leafPale} strokeWidth={6} strokeCap="round" />
-          <Group clip={clip}>
-            <Line p1={vec(step / 2, cy)} p2={vec(Math.max(step / 2, currentIndex * step + step / 2), cy)} color={c.leaf} strokeWidth={6} strokeCap="round" />
-            {flowers.map((f) => (
-              <Group key={f.it.level}>
-                <Path path={f.path} color={f.color} opacity={f.it.status === 'future' ? 0.85 : 1} />
-                {f.it.status !== 'future' ? <Circle cx={f.cx} cy={cy} r={f.it.status === 'done' ? 5 : 4} color={c.petalYellow} /> : null}
-              </Group>
-            ))}
-          </Group>
+          <Line p1={vec(step / 2, ground)} p2={vec(W - step / 2, ground)} color={c.leafPale} strokeWidth={6} strokeCap="round" />
+          <Line p1={vec(step / 2, ground)} p2={useDerivedValue(() => vec(reveal.value, ground))} color={c.leaf} strokeWidth={6} strokeCap="round" />
+          {items.map((it, i) => (
+            <Plant key={it.level} cx={i * step + step / 2} ground={ground - 2} growth={it.growth} color={colors[it.level % colors.length]} index={i} p={p} c={c} />
+          ))}
         </Canvas>
         {items.map((it, i) => (
           <View key={it.level} style={{ position: 'absolute', left: i * step, width: step, top: 0, alignItems: 'center' }}>
             <T v="smallBold" color={it.status === 'current' ? c.leafDeep : undefined}>
               {it.level}
             </T>
-            <View style={{ height: 66 }} />
+            <View style={{ height: ground - 12 }} />
             <T v="caption" soft center style={{ fontSize: 11 }}>
               {it.date ? `${it.projected ? '~' : ''}${fmtShort(it.date)}` : ''}
             </T>

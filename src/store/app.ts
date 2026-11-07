@@ -50,6 +50,8 @@ export interface Settings {
   notifications: NotificationPrefs;
   /** The weather alerts: the morning forecast, high UV, rain on the way, and hard days ahead. */
   weatherAlerts: WeatherAlertPrefs;
+  /** The place follows the phone while the app is open (services/followLocation). */
+  followLocation: boolean;
   dismissed: Record<string, boolean>;
   updates: { enabled: boolean; lastCheck: string | null; latest: AppUpdateInfo | null; dismissedVersion: string | null };
   /** Beta builds only: take new test builds (GitHub pre-releases) as well as releases. */
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
     lastMilestoneLevel: null,
   },
   weatherAlerts: DEFAULT_WEATHER_ALERTS,
+  followLocation: false,
   dismissed: {},
   updates: { enabled: true, lastCheck: null, latest: null, dismissedVersion: null },
   dev: { betaUpdates: true },
@@ -141,6 +144,8 @@ interface AppState {
   setRates: (rates: Rates) => Promise<void>;
   setSeasonRates: (rates: SeasonRate[]) => Promise<void>;
   setLocationAndClimate: (location: PlayLocation | null, climate: ClimateCache | null) => Promise<void>;
+  /** Following the phone: the place moves (and its forecast with it); its weather history and months stay. */
+  moveLocation: (to: { latitude: number; longitude: number; label: string; timezone: string }) => Promise<void>;
   setPreset: (preset: ThresholdPreset) => Promise<void>;
   setLimits: (limits: TempLimits) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -281,6 +286,15 @@ export const useApp = create<AppState>((set, get) => ({
     // A new place: its forecast now, not at the next start.
     void useForecast.getState().refresh(location);
     if (climate) await get().setSeasonRates(seasonRatesFromClimate(climate, get().settings.preset, get().settings.limits));
+  },
+
+  moveLocation: async ({ latitude, longitude, label, timezone }) => {
+    const prev = get().location;
+    if (!prev) return;
+    const location: PlayLocation = { ...prev, latitude, longitude, label, timezone, elevation: null };
+    await db.kvSet('location', location);
+    set({ location });
+    void useForecast.getState().refresh(location);
   },
 
   setLimits: async (limits) => {

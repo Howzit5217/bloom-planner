@@ -51,6 +51,14 @@ describe('weather alerts', () => {
     expect(cold.filter((a) => a.kind === 'cold')).toMatchObject([{ date: TODAY, title: 'Cold Day Tomorrow' }]);
   });
 
+  it('warns of severe weather the evening before, ahead of an ordinary storm', () => {
+    const out = plan({ days: [day(TODAY), day(TOMORROW, { code: 96 })], hours: [] });
+    expect(out.filter((a) => a.kind === 'storm')).toEqual([]);
+    expect(out.filter((a) => a.kind === 'severe')).toMatchObject([
+      { date: TODAY, hour: 19, title: 'Severe Weather Tomorrow', body: 'Thunderstorms with hail in the forecast for tomorrow. Stay safe: the plan asks for very little that day.' },
+    ]);
+  });
+
   it('leaves out what has already gone by today, and each kind that is turned off', () => {
     const forecast = { days: [day(TODAY, { uvMax: 7 }), day(TOMORROW)], hours: [...hours(TODAY, (h) => ({ uv: h >= 12 ? 7 : 1 })), ...hours(TOMORROW)] };
     const noon = new Date(2026, 6, 1, 12, 0);

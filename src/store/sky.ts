@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
 import { create } from 'zustand';
-import { defaultSunTimes, skyLook, solarDay, sunTimes, weatherFromCode, type SkyLook } from '@/engine/sky';
-import { lapseSteps } from '@/engine/skyClock';
+import { defaultPlace, fallLevelFromCode, skyLook, weatherFromCode, type SkyLook } from '@/engine/sky';
+import { LAPSE_STEP_MS, lapseSteps } from '@/engine/skyClock';
 import { fetchCurrentWeather } from '@/services/climateApi';
 import * as db from '@/storage/db';
 import { useApp } from './app';
@@ -11,6 +11,8 @@ import { useApp } from './app';
 interface Weather {
   code: number;
   cloudCover: number | null;
+  /** Snow on the ground, metres (missing from weather saved before 1.8.1). */
+  snowDepth?: number | null;
   at: number;
   latitude: number;
   longitude: number;
@@ -50,16 +52,14 @@ export const useWeather = create<WeatherState>((set, get) => ({
   },
 }));
 
-/** A step of the run-through, this far apart. */
-const LAPSE_STEP_MS = 150;
 
 /**
  * The time the sky shows, one for the whole app: now, moved on every five minutes; but when the app
  * comes back after a while, the sky runs quickly through the time in between (the sun across the
- * sky, dusk into night) for a couple of seconds, from how it was left to how it is now, rather than
- * jumping. With reduced motion it moves straight on.
+ * sky, dusk into night) for a few seconds, from how it was left to how it is now, rather than
+ * jumping. With reduced motion it moves straight on. `lapsing` is on while it runs through.
  */
-export const useSkyClock = create<{ shown: number }>(() => ({ shown: Date.now() }));
+export const useSkyClock = create<{ shown: number; lapsing: boolean }>(() => ({ shown: Date.now(), lapsing: false }));
 
 let lapse: ReturnType<typeof setInterval> | null = null;
 let clockStarted = false;
@@ -71,13 +71,15 @@ function catchUp(to: number) {
   lapse = null;
   const steps = still ? [to] : lapseSteps(useSkyClock.getState().shown, to);
   if (steps.length === 1) {
-    useSkyClock.setState({ shown: to });
+    useSkyClock.setState({ shown: to, lapsing: false });
     return;
   }
   let i = 0;
+  useSkyClock.setState({ lapsing: true });
   lapse = setInterval(() => {
-    useSkyClock.setState({ shown: steps[i++] });
-    if (i >= steps.length && lapse) {
+    const last = i === steps.length - 1;
+    useSkyClock.setState({ shown: steps[i++], lapsing: !last });
+    if (last && lapse) {
       clearInterval(lapse);
       lapse = null;
     }
@@ -105,9 +107,9 @@ function startSkyClock() {
 }
 
 /**
- * The sky right now (see useSkyClock for "now"): the time of day at the play location (sunrise and
- * sunset worked out on the device) and its current weather. Without a location, the default day
- * (6:30 to 18:30) and a clear sky.
+ * The sky right now (see useSkyClock for "now"): where the sun stands at the play location (worked
+ * out on the device) and its current weather. Without a location, a mid-northern place on the
+ * phone's own clock (defaultPlace) and a clear sky.
  */
 export function useSkyLook(): SkyLook {
   const location = useApp((s) => s.location);
@@ -127,11 +129,10 @@ export function useSkyLook(): SkyLook {
     };
   }, [refresh, location]);
   return useMemo(() => {
-    const date = new Date(now);
-    // The play location's own date, which can differ from the phone's near midnight.
-    const sun = location ? sunTimes(location.latitude, location.longitude, solarDay(now, location.longitude)) : defaultSunTimes(date);
-    const live = location && weather && now - weather.at < STALE && Math.abs(weather.latitude - location.latitude) < 0.05 ? weatherFromCode(weather.code, weather.cloudCover) : 'clear';
-    // The seasons (the sun's path, the ground's colours) are the play location's, or a mid-northern place's.
-    return skyLook(now, sun, live, location?.latitude);
+    const current = location && weather && now - weather.at < STALE && Math.abs(weather.latitude - location.latitude) < 0.05 ? weather : null;
+    const live = current ? weatherFromCode(current.code, current.cloudCover) : 'clear';
+    // The sun's path and the seasons' colours are the play location's, or a mid-northern place's.
+    const snowCm = current?.snowDepth != null ? current.snowDepth * 100 : null;
+    return skyLook(now, location ?? defaultPlace(now), live, fallLevelFromCode(current?.code), snowCm);
   }, [now, location, weather]);
 }

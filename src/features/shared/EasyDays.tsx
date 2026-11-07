@@ -27,7 +27,7 @@ export function EasyDays({ value, onChange }: { value: RhythmPrefs; onChange: (p
   };
   return (
     <View style={{ gap: 10 }}>
-      <Toggle label={t('Vary the Days')} hint={t('Easy days ask for about 60% of a usual day and the others a little more, so each week comes out the same. Every day differs a little.')} value={value.vary} onChange={(vary) => onChange({ ...value, vary })} />
+      <Toggle label={t('Vary the Days')} hint={t('Easy days ask for about 60% of a usual day and the others a little more, so each week comes out the same.')} value={value.vary} onChange={(vary) => onChange({ ...value, vary })} />
       <Reveal open={value.vary} gap={10}>
         <View style={{ gap: 6 }}>
           <T v="smallBold">{t('Easy days')}</T>

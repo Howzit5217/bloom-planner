@@ -2,6 +2,7 @@
 // riding; beyond that, each month's share of good days from ten years of history. Heat and cold are
 // judged on the feels-like high, so humidity and wind (chill) count as well as the thermometer, and
 // the same two limits hold for walking and for riding.
+import { severeOf, severeShare } from './severe';
 import type { TempLimits, Thresholds } from './climate';
 import type { DayWeights } from './plan';
 
@@ -39,7 +40,7 @@ export const DEFAULT_LIMITS: TempLimits = { hot: 35, cold: 2 };
 export const walkFallback = (indoor: boolean) => (indoor ? 0.75 : 0.4);
 
 /** 'wet': a downpour (or, riding, more rain than the preset allows); 'rain': walking, rain likely to come. */
-export type DayVerdict = 'good' | 'hot' | 'wet' | 'rain' | 'snow' | 'storm' | 'wind' | 'cold' | 'dark';
+export type DayVerdict = 'good' | 'hot' | 'wet' | 'rain' | 'snow' | 'storm' | 'wind' | 'cold' | 'dark' | 'severe';
 
 export interface ForecastWeights {
   walk: DayWeights;
@@ -79,6 +80,7 @@ export function rainShare(mm: number, indoor: boolean): number {
  * likely to come cuts it down.
  */
 export function walkVerdict(d: ForecastWeatherDay, limits: TempLimits): DayVerdict {
+  if (severeOf(d).length) return 'severe';
   if ((d.code ?? 0) >= 95) return 'storm';
   if ((d.snow ?? 0) > 3) return 'snow';
   if ((d.precip ?? 0) > DOWNPOUR_MM) return 'wet';
@@ -92,17 +94,19 @@ export function walkVerdict(d: ForecastWeatherDay, limits: TempLimits): DayVerdi
 /**
  * A walking day's weight: the rain's share of a normal day, counted for its chance (a 40% chance of a
  * downpour takes 40% of what a certain one would), or the fallback on a stormy, snowy, hot or cold
- * day. The plan gives a lighter day less to do and the others the difference, so the steps still
+ * day, and very little on a day of severe weather (severe.ts). The plan gives a lighter day less to do and the others the difference, so the steps still
  * get done by the goal date without asking the impossible of a wet day.
  */
 export function walkWeight(d: ForecastWeatherDay, limits: TempLimits, indoor: boolean): number {
   const v = walkVerdict(d, limits);
+  if (v === 'severe') return severeShare(indoor);
   if (v !== 'good' && v !== 'rain' && v !== 'wet') return walkFallback(indoor);
   return 1 - (1 - rainShare(d.precip ?? 0, indoor)) * rainChance(d);
 }
 
 /** A day for riding: the weather preset (rain, snow, wind, daylight) plus the hot and cold limits. */
 export function rideVerdict(d: ForecastWeatherDay, th: Thresholds, limits: TempLimits): DayVerdict {
+  if (severeOf(d).length) return 'severe';
   if ((d.code ?? 0) >= 95) return 'storm';
   if ((d.snow ?? 0) > th.maxSnow) return 'snow';
   if ((d.precip ?? 0) > th.maxPrecip) return 'wet';

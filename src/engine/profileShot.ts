@@ -158,6 +158,7 @@ export function nameOnShot(saved: string, lines: string[]): boolean {
     const words = line.split(/\s+/).filter(Boolean);
     const bits = [line, dropBadge(line.split(/account\s*id/i)[0]), ...words, ...words.slice(1).map((w, k) => `${words[k]} ${w}`)];
     if (bits.some((b) => b.trim() && sameName(saved, b))) return true;
+    if (nameWithin(saved, line)) return true;
   }
   return false;
 }
@@ -248,6 +249,23 @@ export function levelFromTargets(shot: ProfileShot, req: ReqFn, maxLevel: number
 
 const squash = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
 
+/**
+ * Letters text recognition mixes up, made the same: 0 and o, 1, i and l, 5 and s, 8 and b, 2 and z,
+ * 6 and g, rn and m, vv and w, cl and d.
+ */
+const LOOKALIKE: Array<[RegExp, string]> = [
+  [/rn/g, 'm'],
+  [/vv/g, 'w'],
+  [/cl/g, 'd'],
+  [/0/g, 'o'],
+  [/[1il|!]/g, 'l'],
+  [/5/g, 's'],
+  [/8/g, 'b'],
+  [/2/g, 'z'],
+  [/6/g, 'g'],
+];
+const shape = (s: string) => LOOKALIKE.reduce((t, [re, to]) => t.replace(re, to), squash(s));
+
 function distance(a: string, b: string): number {
   const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)]);
   for (let j = 1; j <= b.length; j++) d[0][j] = j;
@@ -256,14 +274,32 @@ function distance(a: string, b: string): number {
   return d[a.length][b.length];
 }
 
-/** Whether the screenshot's name is the player's, allowing for a letter misread by OCR. */
+/**
+ * Whether the screenshot's name is the player's, allowing for a letter or two misread by OCR
+ * (look-alike letters don't count against it).
+ */
 export function sameName(saved: string, seen: string): boolean {
-  const a = squash(saved);
-  const b = squash(seen);
+  const a = shape(saved);
+  const b = shape(seen);
   if (!a || !b) return false;
   if (a === b) return true;
   const slack = a.length >= 8 ? 2 : a.length >= 4 ? 1 : 0;
   return distance(a, b) <= slack;
+}
+
+/**
+ * Whether the name is inside a run of text OCR ran together ("lv110blossom42account"), allowing
+ * the same misreads: some stretch of it about the name's length matches.
+ */
+function nameWithin(saved: string, text: string): boolean {
+  const a = shape(saved);
+  const b = shape(text);
+  if (a.length < 4 || b.length <= a.length) return false;
+  if (b.includes(a)) return true;
+  const slack = a.length >= 8 ? 2 : 1;
+  for (let len = a.length - 1; len <= a.length + 1; len++)
+    for (let i = 0; i + len <= b.length; i++) if (distance(a, b.slice(i, i + len)) <= slack) return true;
+  return false;
 }
 
 /**

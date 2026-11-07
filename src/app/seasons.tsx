@@ -22,7 +22,7 @@ export default function Seasons() {
   return (
     <SubScreen title={t('Your Months')}>
       <T v="body" soft>
-        {t("Days you'd realistically ride, by month. This stops the planner promising you a January you can't ride.")}
+        {t("Days you'd really ride, by month, so the plan never counts on a January you can't ride.")}
       </T>
       <MonthBars rates={values} width={width - 32} height={90} />
       <SeasonSliders values={values} onChange={setValues} />

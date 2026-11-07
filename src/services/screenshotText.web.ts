@@ -38,7 +38,9 @@ function loadImage(uri: string): Promise<HTMLImageElement> {
 /**
  * Clean copies of the screenshot for the reader, large enough to read, with the contrast
  * stretched: in grey, the same inverted (the game puts dark text on light and white on green), and
- * the blue channel inverted, where the blue name and the white text stand out from the green.
+ * the blue channel inverted, where the blue name and the white text stand out from the green. Then
+ * the top half on its own (where the player's name is), in the red and green channels as well, so a
+ * name in another colour, or a faint one, still reads.
  */
 async function cleanCopies(uri: string): Promise<string[]> {
   const img = await loadImage(uri);
@@ -54,9 +56,13 @@ async function cleanCopies(uri: string): Promise<string[]> {
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;
   const grey = new Uint8ClampedArray(w * h);
+  const red = new Uint8ClampedArray(w * h);
+  const green = new Uint8ClampedArray(w * h);
   const blue = new Uint8ClampedArray(w * h);
   for (let i = 0; i < w * h; i++) {
     grey[i] = Math.round(0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]);
+    red[i] = px[i * 4];
+    green[i] = px[i * 4 + 1];
     blue[i] = px[i * 4 + 2];
   }
   // Stretch the middle 96% of a channel's tones over the full range.
@@ -75,11 +81,18 @@ async function cleanCopies(uri: string): Promise<string[]> {
   const blueRange = range(blue);
   const out: string[] = [];
   const copies = [
-    { ch: grey, ...greyRange, invert: false },
-    { ch: grey, ...greyRange, invert: true },
-    { ch: blue, ...blueRange, invert: true },
+    { ch: grey, ...greyRange, invert: false, top: false },
+    { ch: grey, ...greyRange, invert: true, top: false },
+    { ch: blue, ...blueRange, invert: true, top: false },
+    { ch: grey, ...greyRange, invert: true, top: true },
+    { ch: red, ...range(red), invert: true, top: true },
+    { ch: green, ...range(green), invert: true, top: true },
   ];
-  for (const { ch, lo, hi, invert } of copies) {
+  const half = document.createElement('canvas');
+  half.width = w;
+  half.height = Math.round(h / 2);
+  const halfCtx = half.getContext('2d')!;
+  for (const { ch, lo, hi, invert, top } of copies) {
     for (let i = 0; i < w * h; i++) {
       let v = ((ch[i] - lo) / (hi - lo)) * 255;
       if (invert) v = 255 - v;
@@ -87,7 +100,12 @@ async function cleanCopies(uri: string): Promise<string[]> {
       px[i * 4 + 3] = 255;
     }
     ctx.putImageData(data, 0, 0);
-    out.push(canvas.toDataURL('image/png'));
+    if (!top) {
+      out.push(canvas.toDataURL('image/png'));
+      continue;
+    }
+    halfCtx.drawImage(canvas, 0, 0, w, half.height, 0, 0, w, half.height);
+    out.push(half.toDataURL('image/png'));
   }
   return out;
 }

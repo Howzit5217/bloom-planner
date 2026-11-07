@@ -286,7 +286,7 @@ export function Wizard() {
               </Animated.View>
               <Animated.View entering={reduceMotion ? undefined : FadeInUp.delay(1080).duration(480)}>
                 <T v="body" center style={{ maxWidth: 340 }}>
-                  {t("Enter your level and your goal. Every day you'll see whether you're on pace, and exactly what it'll take.")}
+                  {t("Enter your level and goal. Each day shows whether you're on pace and exactly what it takes.")}
                 </T>
               </Animated.View>
             </View>
@@ -391,7 +391,7 @@ export function Wizard() {
                     label={t('Total recorded steps (optional)')}
                     value={lifetime}
                     onChange={setLifetime}
-                    hint={t('Your steps for this level are already done. Up to level 100 the game counts lifetime steps, so your total shows how far ahead you are.')}
+                    hint={t("This level's steps are done. Up to level 100 the game counts lifetime steps, so your total shows how far ahead you are.")}
                     size="md"
                   />
                 ) : null}
@@ -529,7 +529,7 @@ export function Wizard() {
             <Title sub={t('What the plan works around, for walking and riding. Settings can change any of it later.')}>{t('Weather and Easy Days')}</Title>
             <WeatherLimits unit={tempUnit} onUnit={setTempUnit} limits={limits} onLimits={setLimits} />
             <T v="caption" soft>
-              {t('Feels-like temperatures, so humidity and wind count too. Days hotter or colder than these, and rain, snow or storms in the forecast, get less walking and riding in the plan; the good days get more.')}
+              {t('Feels-like temperatures, so humidity and wind count too. Hotter or colder days, and rain, snow or storms, get less in the plan; good days get more.')}
             </T>
             <EasyDays value={rhythm} onChange={setRhythm} />
           </View>

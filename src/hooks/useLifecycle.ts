@@ -1,4 +1,5 @@
 import * as Network from 'expo-network';
+import { followLocation } from '@/services/followLocation';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { msUntilMidnight, todayKey } from '@/engine/dates';
@@ -40,9 +41,11 @@ export function useLifecycle() {
         clearTimeout(timer);
         arm();
         void housekeeping();
+        void followLocation(true);
       }
     });
     void housekeeping();
+    void followLocation(true);
     // A downloaded update has done its job once the app starts again.
     clearDownloadedUpdates();
     // Left open on the screen, the app still looks for a new version every hour, so its popup
@@ -50,6 +53,8 @@ export function useLifecycle() {
     const poll = setInterval(() => {
       if (AppState.currentState !== 'active') return;
       void checkAppUpdateIfDue();
+      // Following the phone: where it is now.
+      void followLocation();
       // And the weather alerts from a fresh forecast once the last is an hour old.
       if (weatherAlertsDue()) void scheduleNotifications();
     }, POLL_EVERY);

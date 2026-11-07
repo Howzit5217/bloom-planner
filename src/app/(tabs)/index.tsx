@@ -3,6 +3,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { fmt, fmtHours } from '@/engine/format';
+import { newsLine } from '@/engine/releaseNotes';
+import { severeName } from '@/engine/severe';
 import { HomeHeader, MilestoneCard, PaceCard, RingsCard, showsMilestoneCard, showsTimeCard, showsWeekCard, StreakCard, TimeCard, WeekCard } from '@/features/home/Cards';
 import { CustomGoalCard, NewGoalCard, showsCustomGoal, showsNewGoal } from '@/features/home/NewGoal';
 import { keptExtremeKey } from '@/features/shared/Difficulty';
@@ -65,7 +67,7 @@ export default function Home() {
           icon="gift"
           tone="nectar"
           title={t('Version {version} Is Ready', { version: latest!.version })}
-          text={latest!.notes ? (latest!.notes.split('\n').find((l) => l.trim())?.replace(/^[#*\-\s]+/, '') ?? t('A new version is available.')) : t('A new version is available.')}
+          text={newsLine(latest!.notes) ?? t('A new version is available.')}
           action={{
             // Android: downloads in the app (with its progress) and opens the installer, so it's one
             // tap on Install; the same download as the popup's.
@@ -77,6 +79,22 @@ export default function Home() {
             },
           }}
           onDismiss={fold('update', () => void updateSettings({ updates: { ...settings.updates, dismissedVersion: latest!.version } }))}
+        />
+      ),
+    });
+  // Severe weather today or tomorrow: what's coming, and that the plan already asks less of that day.
+  const severeDay = dash.week.slice(0, 2).find((d) => d.severe.length && !d.logged);
+  const severeKey = severeDay ? `severe-${severeDay.date}` : '';
+  if (severeDay && !dismissed[severeKey])
+    banners.push({
+      key: 'severe',
+      node: (
+        <Banner
+          icon="alert"
+          tone="alert"
+          title={severeDay.date === dash.today ? t('Severe Weather Today') : t('Severe Weather Tomorrow')}
+          text={t('{what} in the forecast. Stay safe: that day asks for very little, and other days make up the difference.', { what: severeName(severeDay.severe[0], t) })}
+          onDismiss={fold('severe', () => dismiss(severeKey))}
         />
       ),
     });
@@ -94,8 +112,8 @@ export default function Home() {
           title={t('An Honest Heads-Up')}
           text={
             dash.impossible.everyDay
-              ? t('This now needs about {steps} steps every day, more than anyone can keep up day after day. A later date would work.', { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000) })
-              : t("This needs {steps} steps a day at its busiest. That's about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })
+              ? t('This now needs about {steps} steps every day, more than anyone can keep up. A later date would work.', { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000) })
+              : t("This needs {steps} steps a day at its busiest, about {time} of walking. A later date would be kinder.", { steps: fmt(Math.round(dash.impossible.stepsPerDay / 1000) * 1000), time: fmtHours(dash.impossible.walkHours) })
           }
           action={{ label: t('Change the goal'), onPress: () => router.push('/settings') }}
           onDismiss={fold('impossible', () => dismiss(impossibleKey))}

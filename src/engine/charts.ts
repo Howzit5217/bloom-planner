@@ -74,17 +74,29 @@ export interface TimelineItem {
   status: TimelineStatus;
   date: DayKey | null;
   projected: boolean;
+  /**
+   * How grown its flower is, 0..1: a level done is in full bloom; the one under way grows with how far
+   * through it you are (from a young plant with a small flower opening); the next is a sprout, and the
+   * ones after it just in leaf.
+   */
+  growth: number;
 }
+
+/** How grown the level under way is: from 0.4 (a young plant) up to 1, by how far through it you are. */
+export const growthOf = (through: number) => 0.4 + 0.6 * Math.min(1, Math.max(0, through));
 
 /** §6.4.3 Every level from the setup level to the goal. */
 export function levelTimeline(dash: Dashboard, profile: Profile): TimelineItem[] {
   const items: TimelineItem[] = [];
   const proj = new Map(dash.projected.map((p) => [p.level, p.date]));
+  // How far through the level under way: its steps and flowers, both needed.
+  const through = (dash.rings.steps.fraction + dash.rings.flowers.fraction) / 2;
   for (let L = profile.currentLevel; L <= dash.goal.level; L++) {
     if (L <= dash.current.level) {
-      items.push({ level: L, status: L === dash.current.level ? 'current' : 'done', date: L === profile.currentLevel ? profile.startDate : dash.replay.reachedOn[L] ?? null, projected: false });
+      const current = L === dash.current.level;
+      items.push({ level: L, status: current ? 'current' : 'done', date: L === profile.currentLevel ? profile.startDate : dash.replay.reachedOn[L] ?? null, projected: false, growth: current ? growthOf(through) : 1 });
     } else {
-      items.push({ level: L, status: 'future', date: proj.get(L) ?? null, projected: true });
+      items.push({ level: L, status: 'future', date: proj.get(L) ?? null, projected: true, growth: L === dash.current.level + 1 ? 0.24 : 0.12 });
     }
   }
   return items;

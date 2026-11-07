@@ -103,7 +103,7 @@ export function GoalVerdict({ check, earliest, onUseDate, onKeep, difficulty }: 
         </View>
         <T v="small">{explain(check)}</T>
         {/* A day like that can happen; every day can't, so there's no keeping this one. */}
-        {pastPossible(check) ? <T v="small">{t("That's about {steps} steps every day. One day like that is possible, but not day after day, so this goal can't be kept.", { steps: fmt(roundNice(check.plan!.avgStepsPerDay)) })}</T> : null}
+        {pastPossible(check) ? <T v="small">{t("That's about {steps} steps every day: fine once, not day after day, so this goal can't be kept.", { steps: fmt(roundNice(check.plan!.avgStepsPerDay)) })}</T> : null}
         {datey ? (
           earliest === undefined ? (
             <T v="small" soft>

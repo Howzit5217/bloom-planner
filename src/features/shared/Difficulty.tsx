@@ -1,4 +1,5 @@
 import { Canvas, Circle } from '@shopify/react-native-skia';
+import { em, Rich } from '@/ui/Rich';
 import { View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import type { Difficulty, PlanDifficulty } from '@/engine/difficulty';
@@ -62,9 +63,9 @@ export function DifficultyPill({ d, onPanel, wide }: { d: PlanDifficulty; onPane
           <T v="bodyBold" color={onPanel ? c.onPanel : undefined}>
             {t(DIFFICULTY_NAMES[d.level])}
           </T>
-          <T v="small" soft={!onPanel} color={onPanel ? c.onPanelSoft : undefined}>
-            {t('About {time} on the move a day', { time })}
-          </T>
+          <Rich v="small" soft={!onPanel} color={onPanel ? c.onPanelSoft : undefined}>
+            {t('About {time} on the move a day', { time: em(time) })}
+          </Rich>
         </View>
       </View>
     );
@@ -78,9 +79,9 @@ export function DifficultyPill({ d, onPanel, wide }: { d: PlanDifficulty; onPane
         <T v="smallBold" color={onPanel ? c.onPanel : undefined}>
           {t(DIFFICULTY_NAMES[d.level])}
         </T>
-        <T v="caption" color={onPanel ? c.onPanelSoft : c.inkSoft}>
-          {t('About {time} on the move a day', { time })}
-        </T>
+        <Rich v="caption" color={onPanel ? c.onPanelSoft : c.inkSoft}>
+          {t('About {time} on the move a day', { time: em(time) })}
+        </Rich>
       </View>
     </View>
   );

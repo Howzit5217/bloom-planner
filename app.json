@@ -12,7 +12,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "io.github.howzit5217.bloomplanner",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Bloom Planner looks up your location once, to read the weather history where you plant. Only the coordinates are sent, to Open-Meteo."
+        "NSLocationWhenInUseUsageDescription": "Bloom Planner uses your location to read the weather where you plant and, with Follow Your Location on, to keep it where you are while the app is open. Only the coordinates are sent, to Open-Meteo."
       }
     },
     "android": {
@@ -74,7 +74,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Bloom Planner looks up your location once, to read the weather history where you plant. Only the coordinates are sent, to Open-Meteo.",
+          "locationWhenInUsePermission": "Bloom Planner uses your location to read the weather where you plant and, with Follow Your Location on, to keep it where you are while the app is open. Only the coordinates are sent, to Open-Meteo.",
           "isAndroidBackgroundLocationEnabled": false,
           "isIosBackgroundLocationEnabled": false
         }

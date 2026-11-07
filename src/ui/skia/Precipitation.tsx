@@ -41,6 +41,23 @@ const RAIN_SLANT = 0.26;
 
 export type Fall = 'rain' | 'storm' | 'snow';
 
+/**
+ * Light, moderate and heavy (level 1 to 3): how many drops or flakes there are, how big, how fast
+ * and how bold they fall, and how much the rain leans (more in a downpour's wind).
+ */
+const LEVELS = {
+  rain: [
+    { per: 0.4, speed: 0.85, len: 0.75, alpha: 0.75, slant: 0.7 },
+    { per: 1, speed: 1, len: 1, alpha: 1, slant: 1 },
+    { per: 2, speed: 1.2, len: 1.3, alpha: 1.15, slant: 1.35 },
+  ],
+  snow: [
+    { per: 0.4, speed: 0.85, len: 0.85, alpha: 0.85, slant: 0 },
+    { per: 1, speed: 1, len: 1, alpha: 1, slant: 0 },
+    { per: 2.3, speed: 1.2, len: 1.25, alpha: 1, slant: 0 },
+  ],
+} as const;
+
 /** One sheet's drops over a w x h tile; the tile repeats top to bottom with no seam. */
 function drawSheet(kind: Fall, s: Sheet, w: number, h: number, seed: number): SkPicture {
   const rand = rng(seed);
@@ -91,12 +108,15 @@ function FallingSheet({ picture, s, h, clock, slant, phase }: { picture: SkPictu
 }
 
 /**
- * Rain, a storm's heavier rain, or snow over a `width` x `height` view, moving with `clock` (a
- * time in milliseconds; held still, the drops hang where they are, as for reduced motion).
+ * Rain, a storm's heavier rain, or snow over a `width` x `height` view, light, moderate or heavy
+ * (`level` 1 to 3), moving with `clock` (a time in milliseconds; held still, the drops hang where
+ * they are, as for reduced motion).
  */
-export function Precipitation({ kind, width, height, clock }: { kind: Fall; width: number; height: number; clock: SharedValue<number> }) {
-  const sheets = kind === 'snow' ? SNOW : kind === 'storm' ? STORM : RAIN;
-  const slant = kind === 'snow' ? 0 : RAIN_SLANT;
+export function Precipitation({ kind, level = 2, width, height, clock }: { kind: Fall; level?: number; width: number; height: number; clock: SharedValue<number> }) {
+  const how = LEVELS[kind === 'snow' ? 'snow' : 'rain'][Math.max(1, Math.min(3, level)) - 1];
+  const base = kind === 'snow' ? SNOW : kind === 'storm' ? STORM : RAIN;
+  const sheets = useMemo(() => base.map((s) => ({ ...s, per: s.per * how.per, speed: s.speed * how.speed, len: s.len * how.len, width: s.width * Math.sqrt(how.len), alpha: Math.min(0.95, s.alpha * how.alpha) })), [base, how]);
+  const slant = kind === 'snow' ? 0 : RAIN_SLANT * how.slant;
   // Wide enough that, leaning, the drops still reach both edges (and snow's drift too).
   const tileW = width + slant * height + 40;
   const pictures = useMemo(() => sheets.map((s, i) => drawSheet(kind, s, tileW, height, 7919 * (i + 1))), [kind, sheets, tileW, height]);

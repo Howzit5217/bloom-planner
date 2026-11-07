@@ -1,5 +1,5 @@
 import { Skia, type SkCanvas } from '@shopify/react-native-skia';
-import { mix, type SkyLook } from '@/engine/sky';
+import { mix, multiply, type SkyLook } from '@/engine/sky';
 import type { Palette } from '@/theme/tokens';
 import { CENTRE_COLOR, CENTRE_R, flowerPath, leafPath, mixHex, stemPath } from './shapes';
 import type { FieldLight } from './Meadow';
@@ -14,7 +14,9 @@ const isWhite = (color: string) => ['#FFFFFF', '#EDE8DF'].includes(color.toUpper
  * (or moon) takes on a little of its colour and one away from it falls a little into shade.
  */
 export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight) {
-  const night = (hex: string) => mix(hex, '#2A3466', look.night * 0.4);
+  // Lit as the field is (warm by a low sun, blue at dusk) but keeping much of their own colour, so
+  // they still show at night, tinted toward blue.
+  const night = (hex: string) => mix(mix(multiply(hex, look.light), hex, 0.45), '#2A3466', look.night * 0.25);
   const stem = Skia.Paint();
   stem.setAntiAlias(true);
   stem.setColor(Skia.Color(night(mixHex(c.leaf, '#1E4A22', c.dark ? 0.12 : 0.22))));

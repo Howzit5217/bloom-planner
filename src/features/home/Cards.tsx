@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { em, Rich } from '@/ui/Rich';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -289,30 +290,30 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
   if (dash.phase !== 'active' || dash.plan.status !== 'ok') return null;
   const tc = dash.time;
   const today = dash.target.isToday;
-  const walk = tc.walkHours > 0.01 ? (tc.walkWhere === 'indoor' ? t('{time} walking indoors', { time: fmtHours(tc.walkHours) }) : t('{time} walking outside', { time: fmtHours(tc.walkHours) })) : null;
+  const walk = tc.walkHours > 0.01 ? (tc.walkWhere === 'indoor' ? t('{time} walking indoors', { time: em(fmtHours(tc.walkHours)) }) : t('{time} walking outside', { time: em(fmtHours(tc.walkHours)) })) : null;
   // A ride plants flowers but earns no steps, so the walking is the same either way.
   const ride =
     tc.bikeHours > 0.01
       ? walk
-        ? t('About {bike} biking for the flowers, plus {walk} for the steps.', { bike: fmtHours(tc.bikeHours), walk })
-        : t('About {bike} biking for the flowers.', { bike: fmtHours(tc.bikeHours) })
+        ? t('About {bike} biking for the flowers, plus {walk} for the steps.', { bike: em(fmtHours(tc.bikeHours)), walk })
+        : t('About {bike} biking for the flowers.', { bike: em(fmtHours(tc.bikeHours)) })
       : walk
         ? t('About {walk}.', { walk })
         : t('Nothing left to do.');
   // On foot (no bike, or not riding): only walking outside plants the flowers, and it counts steps
   // too; whatever steps are still to go after that come on top, indoors with a treadmill.
   const foot = tc.footDay;
-  const outside = foot.outside > 0.01 ? t('{time} walking outside', { time: fmtHours(foot.outside) }) : null;
+  const outside = foot.outside > 0.01 ? t('{time} walking outside', { time: em(fmtHours(foot.outside)) }) : null;
   const onFoot =
     foot.total <= 0.01
       ? t('Nothing left to do.')
       : !outside
-        ? t('About {walk}.', { walk: walk ?? fmtHours(foot.total) })
+        ? t('About {walk}.', { walk: walk ?? em(fmtHours(foot.total)) })
         : foot.moreSteps <= 0.01
           ? t('About {walk}, for the steps and the flowers together.', { walk: outside })
           : tc.walkWhere === 'indoor'
-            ? t('About {walk} for the flowers, plus {more} for the steps.', { walk: outside, more: t('{time} walking indoors', { time: fmtHours(foot.moreSteps) }) })
-            : t('About {walk} for the flowers, plus {more} more for the steps.', { walk: outside, more: fmtHours(foot.moreSteps) });
+            ? t('About {walk} for the flowers, plus {more} for the steps.', { walk: outside, more: t('{time} walking indoors', { time: em(fmtHours(foot.moreSteps)) }) })
+            : t('About {walk} for the flowers, plus {more} more for the steps.', { walk: outside, more: em(fmtHours(foot.moreSteps)) });
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -329,7 +330,7 @@ export function TimeCard({ dash }: { dash: Dashboard }) {
       )}
       {tc.implausible ? (
         <View style={{ marginTop: 8, backgroundColor: c.alertPale, borderRadius: 14, padding: 12 }}>
-          <T v="small">{t("That's more than 6 hours of movement. A later goal date would make this a lot kinder.")}</T>
+          <T v="small">{t("That's more than 6 hours of moving. A later date would be a lot kinder.")}</T>
         </View>
       ) : null}
     </Card>
@@ -342,9 +343,9 @@ function Row({ icon, title, text }: { icon: IconName; title: string; text: strin
       <IconChip name={icon} size="sm" />
       <View style={{ flex: 1 }}>
         <T v="smallBold">{title}</T>
-        <T v="small" soft>
+        <Rich v="small" soft>
           {text}
-        </T>
+        </Rich>
       </View>
     </View>
   );
@@ -393,6 +394,7 @@ export function StreakCard({ dash }: { dash: Dashboard }) {
 /** The forecast's look for a day: what matters most for the plan first. */
 function dayIcon(d: Dashboard['week'][number], bikes: boolean): IconName {
   const v = d.walk === 'good' && bikes && d.ride && d.ride !== 'good' ? d.ride : d.walk;
+  if (v === 'severe') return 'alert';
   if (v === 'hot') return 'thermometer-high';
   if (v === 'storm') return 'weather-lightning-rainy';
   if (v === 'snow') return 'weather-snowy';
@@ -502,7 +504,7 @@ export function MilestoneCard({ dash }: { dash: Dashboard }) {
   } else if (dash.nextMilestone && dash.plan.status === 'ok') {
     const days = Math.max(0, daysBetween(dash.today, dash.nextMilestone.date));
     text = days === 0 ? t('Level {level} could land today.', { level: next }) : tn(days, 'Level {level} in about {n} day.', 'Level {level} in about {n} days.', { level: next });
-    sub = t('Around {date}, at the planned pace.', { date: fmtDate(dash.nextMilestone.date) });
+    sub = t('Around {date}, at the planned pace.', { date: em(fmtDate(dash.nextMilestone.date)) });
   } else return null;
   return (
     <Card>
@@ -511,9 +513,9 @@ export function MilestoneCard({ dash }: { dash: Dashboard }) {
         <View style={{ flex: 1 }}>
           <T v="h3">{text}</T>
           {sub ? (
-            <T v="small" soft>
+            <Rich v="small" soft>
               {sub}
-            </T>
+            </Rich>
           ) : null}
         </View>
       </View>

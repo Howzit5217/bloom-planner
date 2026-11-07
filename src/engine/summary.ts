@@ -1,3 +1,4 @@
+import { severeOf, type SevereKind } from './severe';
 import { addDaysKey, daysBetween, type DayKey } from './dates';
 import { makeReq } from './levels';
 import {
@@ -67,7 +68,7 @@ export interface Dashboard {
   /** At the top level: progress toward the user's own steps-and-flowers goal, when one is set. */
   custom: CustomProgress | null;
   /** The next 7 days: what the plan asks of each, and the forecast for it when there is one. */
-  week: Array<{ date: DayKey; steps: number; flowers: number; logged: boolean; walk: DayVerdict | null; ride: DayVerdict | null; feels: number | null; code: number | null }>;
+  week: Array<{ date: DayKey; steps: number; flowers: number; logged: boolean; walk: DayVerdict | null; ride: DayVerdict | null; feels: number | null; code: number | null; severe: SevereKind[] }>;
   /** What the forecast says about today, and how many of the next 7 days are good (null without a forecast). */
   weather: { today: { walk: DayVerdict; ride: DayVerdict } | null; walkGood: number; rideGood: number; days: number } | null;
   goal: { level: number; date: DayKey; levelsToGo: number; daysLeft: number };
@@ -218,9 +219,10 @@ export function computeDashboard({ table, overrides, profile, entries, seasonRat
             const date = addDaysKey(today, i);
             const f = forecast?.day[date] ?? null;
             const why = forecast?.why[date] ?? null;
-            if (date === today && todayEntry) return { date, steps: todayEntry.steps, flowers: todayEntry.flowers, logged: true, walk: why?.walk ?? null, ride: why?.ride ?? null, feels: f?.feelsMax ?? null, code: f?.code ?? null };
+            const severe = f ? severeOf(f) : [];
+            if (date === today && todayEntry) return { date, steps: todayEntry.steps, flowers: todayEntry.flowers, logged: true, walk: why?.walk ?? null, ride: why?.ride ?? null, feels: f?.feelsMax ?? null, code: f?.code ?? null, severe };
             const p = plannedForDay(plan, daysBetween(planStart, date));
-            return { date, steps: p.steps, flowers: p.expectedFlowers, logged: false, walk: why?.walk ?? null, ride: why?.ride ?? null, feels: f?.feelsMax ?? null, code: f?.code ?? null };
+            return { date, steps: p.steps, flowers: p.expectedFlowers, logged: false, walk: why?.walk ?? null, ride: why?.ride ?? null, feels: f?.feelsMax ?? null, code: f?.code ?? null, severe };
           })
         : [],
     weather: (() => {

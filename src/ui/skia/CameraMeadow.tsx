@@ -1,9 +1,11 @@
-import { Canvas, createPicture, Group, Image, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkImage, type SkPicture, type SkRect } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useState } from 'react';
+import { Canvas, createPicture, Group, Image, LinearGradient, Mask, PaintStyle, Picture, Rect, Skia, StrokeCap, TileMode, vec, type SkImage, type SkPicture, type SkRect } from '@shopify/react-native-skia';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
-import { useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+import { LAPSE_STEP_MS } from '@/engine/skyClock';
 import { lookKey, type SkyLook } from '@/engine/sky';
-import { useSkyLook } from '@/store/sky';
+import { useSkyClock, useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
 import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudShade, cloudsOf, color, drawBlade, drawHaze, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, shineOf } from './Meadow';
@@ -31,9 +33,12 @@ interface Scene {
 }
 
 interface Drifter {
-  picture: SkPicture;
-  /** The same, drawn once into an image: soft-edged clouds cost too much to draw afresh each frame. */
-  image: SkImage | null;
+  /**
+   * Its look on its `round`th time across: a cloud of its own each time round, so no cloud is ever
+   * seen twice. A picture, and the same drawn once into an image (soft-edged clouds cost too much
+   * to draw afresh each frame). Made when first needed and kept.
+   */
+  design: (round: number) => { picture: SkPicture; image: SkImage | null };
   x: number;
   y: number;
   s: number;
@@ -136,7 +141,7 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       picture: createPicture((cv) => paintSprig(cv, { ...sp, x: 0, y: 0 }), Skia.XYWHRect(-sp.r * 6 - sp.len, -sp.len - sp.r * 3, (sp.r * 6 + sp.len) * 2, sp.len + sp.r * 4)),
     }));
 
-    drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.1), look.fog ? 400 : 60), look.fog ? 0.85 : 0.55, look);
+    drawHaze(canvas, f.picW, hz, Math.min(rest * (look.fog ? 0.45 : 0.22), look.fog ? 400 : 110), look.fog ? 0.9 : 1, look, f.pad + look.glow.x * f.W);
     // Rain and snow fall live over the top (Precipitation), not frozen into this picture.
     drawWeather(canvas, rand, f.picW, f.picH, hz, look, c, { falling: false });
     // The sun last, bright over everything that dims the scene.
@@ -145,15 +150,27 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
   // The clouds, from their own sequence so the field stays as it was.
   const cloudRand = rng(seed ^ 0x2545f491);
   const shade = cloudShade(look);
+  // The clouds lit from the sun's side (from above when it's down or hidden).
+  const lean = look.sun && look.veil < 0.5 ? Math.max(-1, Math.min(1, (look.sun.x - 0.5) * 2.2)) : 0;
   const wind = look.weather === 'storm' ? 2.2 : look.rain ? 1.5 : 1;
-  const clouds = cloudsOf(look, cloudRand, f.cy, f.picW, f.W).map((k): Drifter => {
+  const clouds = cloudsOf(look, cloudRand, f.cy, f.picW, f.W).map((k, index): Drifter => {
     const paint = Skia.Paint();
     paint.setAntiAlias(true);
     const bounds = Skia.XYWHRect(CLOUD_BOUNDS.left * k.s, CLOUD_BOUNDS.top * k.s, CLOUD_BOUNDS.width * k.s, CLOUD_BOUNDS.height * k.s);
-    const picture = createPicture((cv) => cloud(cv, 0, 0, k.s, look.cloudColor, shade, paint, cloudRand), bounds);
+    const made = new Map<number, { picture: SkPicture; image: SkImage | null }>();
+    // Each cloud, each time round, from its own numbers: the same one on both canvases and after a
+    // redraw of the sky (in the sky's new colours), a different one from every other.
+    const design = (round: number) => {
+      const got = made.get(round);
+      if (got) return got;
+      const own = rng(Math.abs((seed ^ 0x9e3779b9) + index * 7919 + round * 104729) + 1);
+      const picture = createPicture((cv) => cloud(cv, 0, 0, k.s, look.cloudColor, shade, paint, own, lean), bounds);
+      const out = { picture, image: pictureImage(picture, bounds) };
+      made.set(round, out);
+      return out;
+    };
     return {
-      picture,
-      image: pictureImage(picture, bounds),
+      design,
       x: k.x,
       y: k.y,
       s: k.s,
@@ -195,13 +212,26 @@ function SwaySprig({ s, picture, clock, matrix }: { s: Sprig; picture: SkPicture
 function DriftCloud({ k, clock, span }: { k: Drifter; clock: SharedValue<number>; span: number }) {
   const reach = -CLOUD_BOUNDS.left * k.s;
   const lap = span + CLOUD_BOUNDS.width * k.s;
+  const roundAt = (t: number) => {
+    'worklet';
+    return Math.floor((k.x + reach + (t / 1000) * k.speed) / lap);
+  };
   const transform = useDerivedValue(() => {
     const at = (((k.x + reach + (clock.value / 1000) * k.speed) % lap) + lap) % lap;
     return [{ translateX: at - reach }, { translateY: k.y }];
   });
+  // Off past the far side it comes round again as another cloud (the change is out of sight).
+  const [round, setRound] = useState(() => roundAt(clock.get()));
+  useAnimatedReaction(
+    () => roundAt(clock.value),
+    (now, before) => {
+      if (before != null && now !== before) scheduleOnRN(setRound, now);
+    },
+  );
+  const { picture, image } = k.design(round);
   return (
     <Group transform={transform}>
-      {k.image ? <Image image={k.image} x={CLOUD_BOUNDS.left * k.s} y={CLOUD_BOUNDS.top * k.s} width={CLOUD_BOUNDS.width * k.s} height={CLOUD_BOUNDS.height * k.s} fit="fill" /> : <Picture picture={k.picture} />}
+      {image ? <Image image={image} x={CLOUD_BOUNDS.left * k.s} y={CLOUD_BOUNDS.top * k.s} width={CLOUD_BOUNDS.width * k.s} height={CLOUD_BOUNDS.height * k.s} fit="fill" /> : <Picture picture={picture} />}
     </Group>
   );
 }
@@ -227,11 +257,13 @@ function pictureImage(picture: SkPicture, r: SkRect): SkImage | null {
 
 /**
  * The scene as one image, so tilting it each frame is a single draw rather than a thousand flowers.
- * Sharp to two device pixels per point, within what a GPU texture (and a sensible amount of memory) holds.
+ * Sharp to two device pixels per point, within what a GPU texture (and a sensible amount of memory)
+ * holds; or to `most` pixels per point (the frames of the sky's run-through, made quickly one after
+ * another and each on screen for a moment).
  */
-function snapshot(picture: SkPicture, f: CameraFrame): SkImage | null {
+function snapshot(picture: SkPicture, f: CameraFrame, most = 2): SkImage | null {
   // A computer window's scene is big: kept within a texture's sides and about 8 megapixels.
-  const scale = Math.min(PixelRatio.get(), 2, 4096 / Math.max(f.picW, f.picH), Math.sqrt(8e6 / (f.picW * f.picH)));
+  const scale = Math.min(PixelRatio.get(), most, 4096 / Math.max(f.picW, f.picH), Math.sqrt(8e6 / (f.picW * f.picH)));
   try {
     const w = Math.ceil(f.picW * scale);
     const h = Math.ceil(f.picH * scale);
@@ -250,12 +282,32 @@ function snapshot(picture: SkPicture, f: CameraFrame): SkImage | null {
   }
 }
 
+/** Steps along the top fade's eased curve: enough that it reads as smooth, not banded. */
+const FADE_STEPS = 8;
+
+/** The top fade's mask: solid for `solid` points, then easing off (gently at both ends) to nothing at `height`. */
+function fadeStops(height: number, solid: number) {
+  const s = Math.min(0.9, solid / height);
+  const colors = ['#000000FF'];
+  const positions = [0];
+  for (let k = 0; k <= FADE_STEPS; k++) {
+    const t = k / FADE_STEPS;
+    const a = Math.round((1 - t * t * (3 - 2 * t)) * 255);
+    colors.push(`#000000${a.toString(16).padStart(2, '0')}`);
+    positions.push(s + (1 - s) * t);
+  }
+  return { colors, positions };
+}
+
 /**
  * Home's sky and field, through the camera; `tilt` is how far down it looks, 0 (level) to 1. The
  * near flowers sway while `animate` is on (the page in view), at about 30 frames a second, and not
- * at all with reduced motion.
+ * at all with reduced motion. `children` (the page) go over it; with `topFade`, the scene is drawn
+ * once more over the page along the top, fading out downward, so cards scrolling up go behind the
+ * sky itself (its colours, the sun's light, the clouds drifting by) rather than under a flat band.
+ * It shows as much as `topFade.shown` (0..1).
  */
-export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFrame; tilt: SharedValue<number>; animate?: boolean }) {
+export function CameraMeadow({ frame, tilt, animate = true, children, topFade }: { frame: CameraFrame; tilt: SharedValue<number>; animate?: boolean; children?: ReactNode; topFade?: { height: number; solid: number; shown: SharedValue<number> } }) {
   const { c, reduceMotion } = useTheme();
   const look = useSkyLook();
   const bloom = useBloomFactor();
@@ -265,7 +317,28 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
   const sky = lookKey(look);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const scene = useMemo(() => drawCameraScene(frame, look, c, seed, bloom), [frame, sky, c, seed, bloom]);
-  const image = useMemo(() => snapshot(scene.picture, frame), [scene, frame]);
+  // Running through the time away, each frame is made at a point a pixel: four times quicker, and it
+  // sharpens again at the end.
+  const lapsing = useSkyClock((s) => s.lapsing);
+  const image = useMemo(() => snapshot(scene.picture, frame, lapsing ? 1 : 2), [scene, frame, lapsing]);
+  // When the sky is drawn again (the clock moving on, or running through the time away), the new
+  // scene fades in over the one before instead of replacing it at once, so the sky changes smoothly.
+  const [layers, setLayers] = useState<{ cur: SkImage | null; prev: SkImage | null }>({ cur: image, prev: null });
+  if (layers.cur !== image) setLayers({ cur: image, prev: reduceMotion ? null : layers.cur });
+  const blend = useSharedValue(1);
+  useEffect(() => {
+    if (!layers.prev) {
+      blend.set(1);
+      return;
+    }
+    const done = () => setLayers((l) => (l.cur === layers.cur ? { cur: l.cur, prev: null } : l));
+    blend.set(0);
+    blend.set(
+      withTiming(1, { duration: LAPSE_STEP_MS * 1.2, easing: Easing.linear }, (finished) => {
+        if (finished) scheduleOnRN(done);
+      }),
+    );
+  }, [layers, blend]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
   // The scene's own time: how long it has been moving, so it carries on from where it was. (The
   // phone's clock instead made every flower, cloud and raindrop jump the moment it started.)
@@ -284,20 +357,55 @@ export function CameraMeadow({ frame, tilt, animate = true }: { frame: CameraFra
   useEffect(() => {
     ticker.setActive(moving);
   }, [moving, ticker]);
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.viewH }}>
-      <Canvas style={{ width: frame.W, height: frame.viewH }}>
-        <Group matrix={matrix}>
-          {image ? <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : <Picture picture={scene.picture} />}
-          {scene.clouds.map((k, i) => (
-            <DriftCloud key={i} k={k} clock={clock} span={frame.picW} />
-          ))}
+  const scenery = (
+    <Group matrix={matrix}>
+      {layers.prev ? <Image image={layers.prev} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" /> : null}
+      {image ? (
+        <Group opacity={blend}>
+          <Image image={image} x={0} y={0} width={frame.picW} height={frame.picH} fit="fill" />
         </Group>
-        {scene.live.map(({ s, picture }, i) => (
-          <SwaySprig key={i} s={s} picture={picture} clock={clock} matrix={matrix} />
-        ))}
-        {fall ? <Precipitation kind={fall} width={frame.W} height={frame.H} clock={clock} /> : null}
-      </Canvas>
-    </View>
+      ) : (
+        <Picture picture={scene.picture} />
+      )}
+      {scene.clouds.map((k, i) => (
+        <DriftCloud key={i} k={k} clock={clock} span={frame.picW} />
+      ))}
+    </Group>
+  );
+  const fadeH = (topFade?.height ?? 0) + 1;
+  const fadeSolid = topFade?.solid ?? 0;
+  const stops = useMemo(() => fadeStops(fadeH, fadeSolid), [fadeH, fadeSolid]);
+  const fadeShown = topFade?.shown;
+  const shown = useAnimatedStyle(() => ({ opacity: fadeShown ? fadeShown.value : 0 }));
+  return (
+    <>
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: frame.W, height: frame.viewH }}>
+        <Canvas style={{ width: frame.W, height: frame.viewH }}>
+          {scenery}
+          {scene.live.map(({ s, picture }, i) => (
+            <SwaySprig key={i} s={s} picture={picture} clock={clock} matrix={matrix} />
+          ))}
+          {fall ? <Precipitation kind={fall} level={look.fall} width={frame.W} height={frame.H} clock={clock} /> : null}
+        </Canvas>
+      </View>
+      {children}
+      {topFade ? (
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, width: frame.W, height: fadeH }, shown]}>
+          <Canvas style={{ width: frame.W, height: fadeH }}>
+            <Mask
+              mode="alpha"
+              mask={
+                <Rect x={0} y={0} width={frame.W} height={fadeH}>
+                  <LinearGradient start={vec(0, 0)} end={vec(0, fadeH)} colors={stops.colors} positions={stops.positions} />
+                </Rect>
+              }
+            >
+              {scenery}
+              {fall ? <Precipitation kind={fall} level={look.fall} width={frame.W} height={frame.H} clock={clock} /> : null}
+            </Mask>
+          </Canvas>
+        </Animated.View>
+      ) : null}
+    </>
   );
 }

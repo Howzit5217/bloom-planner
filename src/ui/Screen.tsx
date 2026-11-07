@@ -99,7 +99,8 @@ export function PaperSheet({ children }: { children: ReactNode }) {
       <SkyStatusBar />
       {wide ? null : (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-          <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} />
+          {/* The sun and moon keep to the strip of sky under the status bar, on their paths. */}
+          <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} skyTop={insets.top + 15} />
         </View>
       )}
       <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>
@@ -379,26 +380,40 @@ export function Screen({ children, backdrop = 'paper', onRefresh, header, bottom
   // Out of sight on the web, nothing at all (see PaperSheet): not its fades either.
   if (!live) return <View style={{ flex: 1 }} />;
 
-  return (
-    <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
-      <SkyStatusBar />
-      {wide ? null : <CameraMeadow frame={frame} tilt={tilt} animate={inView} />}
+  const layered = (
+    <>
       {onRefresh ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 2, left: 0, right: 0, alignItems: 'center', zIndex: 2 }, sprout]}>
           <Seedling growth={growth} size={70} />
         </Animated.View>
       ) : null}
       {scroller}
-      {/* Once the page moves, cards scroll up under a tall, eased fade into the sky (or the field),
-          solid behind the clock and battery so they never sit on a card. */}
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, fieldFade]}>
-          <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
-        </Animated.View>
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, skyFade]}>
-          <EdgeFade edge="top" color={look.top} height={insets.top + TOP_FADE} solid={insets.top + 4} />
-        </Animated.View>
-      </Animated.View>
+    </>
+  );
+  return (
+    <View style={{ flex: 1, backgroundColor: wide ? 'transparent' : look.groundNear }}>
+      <SkyStatusBar />
+      {wide ? (
+        <>
+          {layered}
+          {/* On a wide screen the meadow is behind the whole window: the column's fade is a gradient
+              in the sky's colour (or the field's, once the camera looks down). */}
+          <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, scrolled]}>
+            <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, fieldFade]}>
+              <EdgeFade edge="top" color={look.groundFar} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+            </Animated.View>
+            <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + TOP_FADE + 1 }, skyFade]}>
+              <EdgeFade edge="top" color={look.top} height={insets.top + TOP_FADE} solid={insets.top + 4} />
+            </Animated.View>
+          </Animated.View>
+        </>
+      ) : (
+        // Once the page moves, cards scroll up under a tall, eased fade into the scene itself (the
+        // sky, or the field once the camera looks down), solid behind the clock and battery.
+        <CameraMeadow frame={frame} tilt={tilt} animate={inView} topFade={{ height: insets.top + TOP_FADE, solid: insets.top + 4, shown: fadeIn }}>
+          {layered}
+        </CameraMeadow>
+      )}
       {bottomExtra}
     </View>
   );

@@ -7,7 +7,7 @@ import { t } from '@/i18n';
 const CHANNEL = 'daily';
 /** The weather alerts have their own channel, so Android can quieten them apart from the check-in. */
 const WEATHER_CHANNEL = 'weather';
-const WEATHER_KINDS = new Set(['forecast', 'uv', 'rain', 'storm', 'snow', 'heat', 'cold']);
+const WEATHER_KINDS = new Set(['forecast', 'uv', 'rain', 'severe', 'storm', 'snow', 'heat', 'cold']);
 
 
 /** The phone app can always show notifications (once allowed). */

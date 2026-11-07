@@ -184,12 +184,13 @@ export async function fetchAlertForecast(latitude: number, longitude: number, ti
 }
 
 /** The weather right now, for the backdrop's sky. Two decimals (about 1 km) is plenty for a sky. */
-export async function fetchCurrentWeather(latitude: number, longitude: number): Promise<{ code: number; cloudCover: number | null }> {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}&current=weather_code,cloud_cover&timezone=auto`;
+export async function fetchCurrentWeather(latitude: number, longitude: number): Promise<{ code: number; cloudCover: number | null; snowDepth: number | null }> {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}&current=weather_code,cloud_cover,snow_depth&timezone=auto`;
   const json = await getJson(url, 10000);
   const cur = json?.current;
   if (!cur || typeof cur.weather_code !== 'number') throw new ClimateError('No current weather');
-  return { code: cur.weather_code, cloudCover: typeof cur.cloud_cover === 'number' ? cur.cloud_cover : null };
+  // Snow lying on the ground, in metres.
+  return { code: cur.weather_code, cloudCover: typeof cur.cloud_cover === 'number' ? cur.cloud_cover : null, snowDepth: typeof cur.snow_depth === 'number' ? cur.snow_depth : null };
 }
 
 /**

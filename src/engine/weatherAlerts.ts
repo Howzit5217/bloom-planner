@@ -2,6 +2,7 @@
 // gets high (wear sunscreen), a heads-up an hour before rain, and the evening before a stormy, snowy,
 // too hot or too cold day. Pure: the caller fetches the forecast, schedules the result, and says how
 // temperatures and times read.
+import { severeName, severeOf } from './severe';
 import { addDaysKey, type DayKey } from './dates';
 import type { TempLimits } from './climate';
 
@@ -52,7 +53,7 @@ export interface WeatherAlertPrefs {
 
 export const DEFAULT_WEATHER_ALERTS: WeatherAlertPrefs = { enabled: false, forecast: true, hour: 7, minute: 30, uv: true, rain: true, severe: true };
 
-export type WeatherAlertKind = 'forecast' | 'uv' | 'rain' | 'storm' | 'snow' | 'heat' | 'cold';
+export type WeatherAlertKind = 'forecast' | 'uv' | 'rain' | 'severe' | 'storm' | 'snow' | 'heat' | 'cold';
 
 export interface WeatherAlert {
   date: DayKey;
@@ -178,7 +179,9 @@ export function planWeatherAlerts(args: { prefs: WeatherAlertPrefs; forecast: Al
       const heat = day.feelsMax != null && day.feelsMax > limits.hot;
       const cold = day.feelsMax != null && day.feelsMax < limits.cold;
       const alert = (kind: WeatherAlertKind, title: string, body: string) => push({ date: evening, hour: EVENING_HOUR, minute: 0, kind, title, body });
-      if (storm) alert('storm', t('Storms Tomorrow'), t('Storms are forecast tomorrow. The plan already asks for less, so take it easy.'));
+      const severe = severeOf(day);
+      if (severe.length) alert('severe', t('Severe Weather Tomorrow'), t('{what} in the forecast for tomorrow. Stay safe: the plan asks for very little that day.', { what: severeName(severe[0], t) }));
+      else if (storm) alert('storm', t('Storms Tomorrow'), t('Storms are forecast tomorrow. The plan already asks for less, so take it easy.'));
       else if (snow) alert('snow', t('Snow Tomorrow'), t('Snow is forecast tomorrow. Dress warm and watch your step.'));
       else if (heat) alert('heat', t('Hot Day Tomorrow'), t('Tomorrow feels like {temp}. Walk early or late, and bring water.', { temp: temp(day.feelsMax!) }));
       else if (cold) alert('cold', t('Cold Day Tomorrow'), t('Tomorrow feels like {temp}. Wrap up warm for your walk.', { temp: temp(day.feelsMax!) }));

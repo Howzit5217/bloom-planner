@@ -86,7 +86,7 @@ export async function checkForAppUpdate(betaUpdates = true): Promise<AppUpdateIn
     version: shownVersion(build, release.prerelease === true),
     url: typeof release.html_url === 'string' ? release.html_url : RELEASES_URL,
     apkUrl: typeof apk?.browser_download_url === 'string' ? apk.browser_download_url : null,
-    notes: typeof release.body === 'string' ? release.body.slice(0, 600) : '',
+    notes: typeof release.body === 'string' ? release.body.slice(0, 1500) : '',
   };
 }
 

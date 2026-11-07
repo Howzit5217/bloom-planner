@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
+import { releaseNews } from '@/engine/releaseNotes';
 import { useUpdateInstall, type UpdateStep } from '@/services/installUpdate';
 import { isNewerThanThisBuild } from '@/services/updates';
 import { useApp } from '@/store/app';
@@ -22,15 +23,6 @@ export function updateLabel(step: UpdateStep, share: number | null, t: (key: str
 /** "Later" puts the popup away for this long; after that it comes back with the next update check. */
 const LATER = 12 * 3600 * 1000;
 
-/** What's new, from the release notes' "- " lines. */
-const newsOf = (notes: string) =>
-  notes
-    .split('\n')
-    .filter((l) => /^\s*[-*]\s+/.test(l))
-    .map((l) => l.replace(/^\s*[-*]\s+/, '').trim())
-    .filter(Boolean)
-    .slice(0, 4);
-
 /**
  * On Android, a popup as soon as an update check finds a new version, over whichever page is open:
  * what's new, and Update Now, which downloads it in the app and opens Android's installer (one tap on
@@ -49,7 +41,7 @@ export function UpdatePrompt() {
   const putAway = !!later && !!latest && later.version === latest.version && checkedAt - later.at < LATER;
   const open = Platform.OS === 'android' && !!latest && isNewerThanThisBuild(latest.version) && !putAway;
   if (!latest) return null;
-  const news = newsOf(latest.notes);
+  const news = releaseNews(latest.notes);
 
   const close = () => setLater({ version: latest.version, at: Date.now() });
   // The download shows its progress here; once it's in, the button opens Android's installer again.
@@ -73,10 +65,18 @@ export function UpdatePrompt() {
     <Sheet visible={open} onClose={close} title={t('Version {version} Is Ready', { version: latest.version })}>
       <View style={{ gap: 12 }}>
         {news.length ? (
-          news.map((line) => (
-            <View key={line} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-              <Icon name="flower" size={18} color={c.leaf} />
-              <T style={{ flex: 1 }}>{line}</T>
+          // Each change: its name in bold, what it does under it.
+          news.map((n) => (
+            <View key={`${n.title}|${n.text}`} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+              <View style={{ paddingTop: 2 }}>
+                <Icon name="flower" size={18} color={c.leaf} />
+              </View>
+              <View style={{ flex: 1, gap: 1 }}>
+                {n.title ? <T v="bodyBold">{n.title}</T> : null}
+                <T v={n.title ? 'small' : 'body'} soft={!!n.title}>
+                  {n.text}
+                </T>
+              </View>
             </View>
           ))
         ) : (

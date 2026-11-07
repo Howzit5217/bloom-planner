@@ -146,8 +146,15 @@ try {
     # 4. The release (when CI didn't publish it already).
     if (-not $published) {
         $lines = if ($NotesFile) { [System.IO.File]::ReadAllLines((Resolve-Path $NotesFile), [System.Text.Encoding]::UTF8) | ForEach-Object { $_.Trim() } | Where-Object { $_ } } else { @('A test build.') }
+        # One change a line, "Title: what it does" (a leading "- " is allowed): each goes in as
+        # "- **Title:** what it does", which the app shows as a bold name over its line.
         $body = @()
-        foreach ($l in $lines) { $body += "- $l" }
+        foreach ($l in $lines) {
+            $l = $l -replace '^(?:[-*]\s+)+', ''
+            if ($l -match '^\*\*') { $body += "- $l" }
+            elseif ($l -match '^([^:]{2,32}):\s+(.+)$') { $body += "- **$($Matches[1]):** $($Matches[2])" }
+            else { $body += "- $l" }
+        }
         $body += ''
         $body += 'Unofficial fan-made planner, not affiliated with Scopely or Nintendo.'
         $body += ''

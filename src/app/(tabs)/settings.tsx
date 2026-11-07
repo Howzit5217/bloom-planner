@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { FollowLocationToggle } from '@/features/shared/FollowLocation';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, useColorScheme, View } from 'react-native';
@@ -318,12 +319,13 @@ export default function Settings() {
           {bikes ? ` ${st.seasonRates.some((r) => r.source === 'manual') ? t('Months set by hand.') : st.seasonRates.every((r) => r.source === 'default') ? t('Every day counts as rideable.') : t('Months from the climate record.')}` : ''}
         </T>
         <LinkRow label={st.location ? t('Change place') : t('Find your place')} onPress={() => router.push('/location')} />
+        {st.location ? <FollowLocationToggle /> : null}
         {bikes && st.location && st.climate ? <LinkRow label={t('Climate details')} onPress={() => router.push('/climate')} /> : null}
         {/* Temperatures (the phone's way, or always °C or °F), and too hot and too cold: feels-like
             highs, for walking and riding alike. */}
         <WeatherLimits unit={st.settings.temp} onUnit={(temp) => void st.updateSettings({ temp })} limits={st.settings.limits} onLimits={(l) => void st.setLimits(l)} />
         <T v="caption" soft>
-          {t('Feels-like temperatures, so humidity and wind count too. Days hotter or colder than these, and rain, snow or storms in the forecast, get less walking and riding in the plan; the good days get more.')}
+          {t('Feels-like temperatures, so humidity and wind count too. Hotter or colder days, and rain, snow or storms, get less in the plan; good days get more.')}
         </T>
         {dash.weather ? (
           <T v="smallBold">
