@@ -123,6 +123,12 @@ function useLive(): boolean {
  * The paper pages' look: a strip of sky and field along the top and a cream sheet over it that
  * holds the page. Everything scrolls inside the sheet, so nothing slides over the sky or the status bar.
  */
+/**
+ * The strip's one field for the time the app is open: every paper page draws the same clouds and
+ * flowers, so going from one to another leaves the strip as it was.
+ */
+const STRIP_SEED = 1 + Math.floor(Math.random() * 2147483000);
+
 export function PaperSheet({ children }: { children: ReactNode }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -140,7 +146,7 @@ export function PaperSheet({ children }: { children: ReactNode }) {
         {wide ? null : (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
             {/* The sun and moon keep to the strip of sky under the status bar, on their paths. */}
-            <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} skyTop={insets.top + 15} />
+            <Meadow height={insets.top + SHEET_TOP + 26} horizon={insets.top + SHEET_TOP - 24} density={1.4} skyTop={insets.top + 15} seed={STRIP_SEED} />
           </View>
         )}
         <View style={{ flex: 1, marginTop: insets.top + SHEET_TOP, backgroundColor: c.canvas, borderTopLeftRadius: 26, borderTopRightRadius: 26, overflow: 'hidden' }}>

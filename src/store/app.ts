@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import bundledJson from '@/data/bloom-levels.json';
 import { PRESETS, seasonRatesFromClimate, walkRatesFromClimate, type ClimateCache } from '@/engine/climate';
 import { DEFAULT_WEATHER_ALERTS, type WeatherAlertPrefs } from '@/engine/weatherAlerts';
-import { DEFAULT_LIMITS, forecastWeights, walkFallback, type TempLimits } from '@/engine/weatherPlan';
+import { DEFAULT_LIMITS, forecastWeights, walkFallback, type ForecastWeatherDay, type TempLimits } from '@/engine/weatherPlan';
 import { useForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
 import { makeReq, overridesKey, parseLevelTable } from '@/engine/levels';
@@ -387,20 +387,39 @@ export function useDashboard(): Dashboard | null {
   const wKey = `${limits.hot}|${limits.cold}|${preset}|${rhythmPrefs.vary}|${rhythmPrefs.easyDays.join('')}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
   const key = [pKey, entriesRev, oKey, sKey, table.version, today, wKey].join('\u0000');
   return useMemo(
-    () => rememberDashboard(key, workOut),
+    () => rememberDashboard(key, () => workOutDashboard({ profile, entries, overrides, seasonRates, table, today, climate, limits, preset, plan: rhythmPrefs }, forecast)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key],
   );
-  function workOut(): Dashboard | null {
-    if (!profile) return null;
-    const indoor = profile.rates.treadmillAvailable;
-    // The weather's say: walking days from the history, the next fortnight from the forecast.
-    const walkRates = climate ? walkRatesFromClimate(climate, limits, walkFallback(indoor)) : undefined;
-    // Flowers on foot are planted out of doors, whatever indoor walking there is.
-    const flowerWalkRates = climate ? walkRatesFromClimate(climate, limits, walkFallback(false)) : undefined;
-    const weights = forecast?.length ? forecastWeights(forecast, PRESETS[preset], limits, indoor, today) : null;
-    return computeDashboard({ table, overrides, profile, entries, seasonRates: seasonRates.map((r) => r.rideable), today, walkRates, flowerWalkRates, forecast: weights, rhythm: makeRhythm(rhythmPrefs) });
-  }
+}
+
+type DashboardSource = Pick<AppState, 'profile' | 'entries' | 'overrides' | 'seasonRates' | 'table' | 'today' | 'climate'> & Pick<Settings, 'limits' | 'preset' | 'plan'>;
+
+/**
+ * The dashboard from the app's state and the plan's forecast. Home and the notifications both work it
+ * out here, so a reminder's target is the one the Today card shows (easy days and the weather included).
+ */
+export function workOutDashboard(s: DashboardSource, forecast: ForecastWeatherDay[] | null): Dashboard | null {
+  const { profile, climate, limits, preset, today } = s;
+  if (!profile) return null;
+  const indoor = profile.rates.treadmillAvailable;
+  // The weather's say: walking days from the history, the next fortnight from the forecast.
+  const walkRates = climate ? walkRatesFromClimate(climate, limits, walkFallback(indoor)) : undefined;
+  // Flowers on foot are planted out of doors, whatever indoor walking there is.
+  const flowerWalkRates = climate ? walkRatesFromClimate(climate, limits, walkFallback(false)) : undefined;
+  const weights = forecast?.length ? forecastWeights(forecast, PRESETS[preset], limits, indoor, today) : null;
+  return computeDashboard({
+    table: s.table,
+    overrides: s.overrides,
+    profile,
+    entries: s.entries,
+    seasonRates: s.seasonRates.map((r) => r.rideable),
+    today,
+    walkRates,
+    flowerWalkRates,
+    forecast: weights,
+    rhythm: makeRhythm(s.plan),
+  });
 }
 
 /** Whether temperatures show in °F: the player's setting, or the phone's region. */

@@ -1,6 +1,7 @@
-import { BlendMode, Canvas, ClipOp, createPicture, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkCanvas, type SkPaint } from '@shopify/react-native-skia';
+import { BlendMode, Canvas, ClipOp, createPicture, PaintStyle, Picture, Skia, StrokeCap, TileMode, vec, type SkCanvas, type SkPaint, type SkPicture } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { PixelRatio, View } from 'react-native';
+import { useDerivedValue } from 'react-native-reanimated';
 import { lookKey, mix, multiply, type SkyLook } from '@/engine/sky';
 import { cartoonCloud, cloudLight, type CloudLight } from './clouds';
 import { milkyWay, seenStars, type StarSky } from '@/engine/stars';
@@ -13,6 +14,8 @@ import { sprigPainter } from './sprigPainter';
 import { useBloomFactor } from '@/ui/bloom';
 import { useAppWidth } from '@/ui/layout';
 import { STILL } from './still';
+import { nearAtlas, type Near } from './flowerAtlas';
+import { useIdleTime, usePageFocused } from '@/ui/idle';
 
 export const color = (paint: SkPaint, hex: string, alpha = 1) => {
   paint.setColor(Skia.Color(hex));
@@ -517,15 +520,51 @@ export function drawWeather(canvas: SkCanvas, rand: () => number, w: number, h: 
   }
 }
 
-function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Palette, density: number, seed: number, skyTop?: number) {
-  return createPicture((canvas) => {
+/** The strip in three layers: the sky and the ground, its flowers (swaying, or still), and what goes over them. */
+interface Strip {
+  under: SkPicture;
+  /** The flowers in one image, swayed each frame; null where they're drawn still (`still`). */
+  near: Near | null;
+  still: SkPicture | null;
+  over: SkPicture;
+}
+
+/** Where the strip's flowers sway in the wind: not on the web, where a page's drawing is made once and let go. */
+const SWAY = !STILL;
+
+function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Palette, density: number, seed: number, skyTop?: number): Strip {
+  const bounds = Skia.XYWHRect(0, 0, w, h);
+  // The sky, the ground and the flowers draw from separate sequences: how many clouds the weather
+  // brings doesn't shuffle the flowers below.
+  const skyRand = rng(seed);
+  const rand = rng(seed + 7919);
+  const flowerRand = rng(seed + 15485863);
+  const hz = Math.max(0, Math.min(h, horizon));
+  const groundH = Math.max(1, h - hz);
+  // Lit from the sun (or moon) where it is in the sky above.
+  const lightX = (look.sun ?? look.moon)?.x != null ? (look.sun ?? look.moon)!.x * w : w / 2;
+  // Haze where the ground meets the sky (and a thicker one in fog), over the grass and under the
+  // flowers, which fade into it a little instead (a band lying over them looked like a line drawn
+  // across them). A field drawn on its own (its horizon at the top edge) meets a separately drawn
+  // sky there, so its haze is fuller.
+  const own = horizon <= 0;
+  const hazeDepth = Math.min(groundH * (look.fog ? 0.45 : own ? 0.14 : 0.2), look.fog ? 400 : own ? 110 : 90);
+  const hazeAlpha = look.fog ? 0.9 : own ? 0.8 : 1;
+  // A few of the setup screens' stemmed flowers across the field, back to front.
+  const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
+  const n = Math.round(((w * groundH) / 1700) * density * 0.4);
+  const sprigs = Array.from({ length: n }, () => {
+    const t = Math.pow(flowerRand(), 0.9);
+    return fieldSprig(flowerRand() * w, hz + 6 + t * (groundH - 6), (6 + flowerRand() * 6) * (0.5 + 0.7 * t), colors[Math.floor(flowerRand() * colors.length)], flowerRand);
+  });
+  sprigs.sort((a, b) => a.y - b.y);
+  const light = fieldLight(look, w, lightX);
+  const paintSprig = sprigPainter(c, look, light, hazeFade(hz, hazeDepth, hazeAlpha));
+
+  const under = createPicture((canvas) => {
     const paint = Skia.Paint();
     paint.setAntiAlias(true);
-    const rand = rng(seed);
-    const hz = Math.max(0, Math.min(h, horizon));
-    const groundH = Math.max(1, h - hz);
-
-    if (hz > 0) drawSky(canvas, rand, hz, w, 0, w, look, { top: skyTop });
+    if (hz > 0) drawSky(canvas, skyRand, hz, w, 0, w, look, { top: skyTop });
 
     // ── The ground ──
     paint.setAlphaf(1);
@@ -534,8 +573,6 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
     );
     canvas.drawRect(Skia.XYWHRect(0, hz, w, groundH), paint);
     paint.setShader(null);
-    // Lit from the sun (or moon) where it is in the sky above.
-    const lightX = (look.sun ?? look.moon)?.x != null ? (look.sun ?? look.moon)!.x * w : w / 2;
     drawSunlight(canvas, w, hz, groundH, lightX, look);
     // Soft lighter patches, flatter toward the horizon, catching the light.
     for (let i = 0; i < 6; i++) {
@@ -560,56 +597,80 @@ function drawScene(w: number, h: number, horizon: number, look: SkyLook, c: Pale
       const k = 0.35 + 0.75 * t;
       drawBlade(canvas, blade, x, y, (5 + rand() * 7) * k, (rand() - 0.5) * 6 * k, 2 * k);
     }
-    // Haze where the ground meets the sky (and a thicker one in fog), over the grass and under the
-    // flowers, which fade into it a little instead (a band lying over them looked like a line drawn
-    // across them). A field drawn on its own (its horizon at the top edge) meets a separately drawn
-    // sky there, so its haze is fuller.
-    const own = horizon <= 0;
-    const hazeDepth = Math.min(groundH * (look.fog ? 0.45 : own ? 0.14 : 0.2), look.fog ? 400 : own ? 110 : 90);
-    const hazeAlpha = look.fog ? 0.9 : own ? 0.8 : 1;
     drawHaze(canvas, w, hz, hazeDepth, hazeAlpha, look, look.glow.x * w);
-    // A few of the setup screens' stemmed flowers across the field, back to front.
-    const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
-    const n = Math.round(((w * groundH) / 1700) * density * 0.4);
-    const sprigs = Array.from({ length: n }, () => {
-      const t = Math.pow(rand(), 0.9);
-      return fieldSprig(rand() * w, hz + 6 + t * (groundH - 6), (6 + rand() * 6) * (0.5 + 0.7 * t), colors[Math.floor(rand() * colors.length)], rand);
-    });
-    sprigs.sort((a, b) => a.y - b.y);
-    const light = fieldLight(look, w, lightX);
+    // The flowers' shadows stay on the ground as they sway.
     drawShadows(canvas, light, sprigs);
-    const paintSprig = sprigPainter(c, look, light, hazeFade(hz, hazeDepth, hazeAlpha));
-    for (const sp of sprigs) paintSprig(canvas, sp);
+  }, bounds);
+  // Each flower drawn once into one image, as sharp as the screen shows it, to sway as it's drawn.
+  const near = SWAY ? nearAtlas(sprigs, paintSprig, Math.min(3, PixelRatio.get())) : null;
+  const still = near ? null : createPicture((canvas) => sprigs.forEach((sp) => paintSprig(canvas, sp)), bounds);
+  const over = createPicture((canvas) => {
     // This is a still strip above a page: rain or snow would only hang in it (Home has it falling).
     drawWeather(canvas, rand, w, h, hz, look, c, { falling: false });
     if (hz > 0) drawSunDisc(canvas, hz, 0, w, look, skyTop);
-  }, Skia.XYWHRect(0, 0, w, h));
+  }, bounds);
+  return { under, near, still, over };
 }
 
 /**
  * The backdrop: a sky (the real time of day and weather where you play) above a field of grass and
- * flowers. Drawn once into a picture, so scrolling over it is cheap; redrawn when the sky changes.
+ * flowers. Drawn once into pictures, so scrolling over it is cheap; redrawn when the sky changes.
+ * The flowers sway in the wind (more in a stronger one) while the page is in view, as Home's do.
  * `horizon` is where the ground starts, in points from the top: at the bottom edge it's only sky, at
  * the top edge only field. `skyTop` is the highest the sun and moon go (for a strip of sky under the
  * status bar, so they stay in sight). (Home draws its own, through a camera: CameraMeadow.)
  */
 export function Meadow({ height, horizon, density = 1, seed: fixedSeed, width, skyTop }: { height: number; horizon: number; density?: number; seed?: number; width?: number; skyTop?: number }) {
   const { c } = useTheme();
-  const look = useSkyLook();
+  const now = useSkyLook();
+  // Out of sight, a strip keeps the sky it last showed and catches up when its page is back: every
+  // page's strip drawn afresh at each step of a run-through held Home's own back.
+  const focused = usePageFocused();
+  const [seen, setSeen] = useState(now);
+  if (focused && seen !== now) setSeen(now);
+  const look = focused ? now : seen;
   const appWidth = useAppWidth();
   const w = width ?? appWidth;
   const bloom = useBloomFactor();
-  // A fresh field every visit unless a seed pins it.
+  // A fresh field for each one shown unless a seed pins it.
   const [randomSeed] = useState(() => 1 + Math.floor(Math.random() * 2147483000));
   const seed = fixedSeed ?? randomSeed;
   // Drawn again only when the sky visibly changes (lookKey), not at every few minutes' tick.
   const sky = lookKey(look);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const picture = useMemo(() => drawScene(w, height, horizon, look, c, density * bloom, seed, skyTop), [w, height, horizon, sky, c, density, bloom, seed, skyTop]);
+  const strip = useMemo(() => drawScene(w, height, horizon, look, c, density * bloom, seed, skyTop), [w, height, horizon, sky, c, density, bloom, seed, skyTop]);
+  const near = strip.near;
+  // As Home's near flowers: each on its own slow beat, quicker and further in a wind.
+  const gust = Math.min(2, look.wind / 20);
+  const quick = 1 + Math.min(1, gust / 2);
+  const reach = 0.05 * (1 + gust);
+  const time = useIdleTime({ on: !!near });
+  const empty = useMemo(() => createPicture(() => {}), []);
+  const flowers = useDerivedValue(() => {
+    if (!near) return empty;
+    const t = time.value;
+    const { spots, xforms, scale } = near;
+    const k = 1 / scale;
+    for (let i = 0; i < xforms.length; i++) {
+      const x = spots[i * 5];
+      const y = spots[i * 5 + 1];
+      const phase = spots[i * 5 + 2];
+      const ox = spots[i * 5 + 3];
+      const oy = spots[i * 5 + 4];
+      const a = Math.sin((t / ((4200 + phase * 2600) / quick) + phase) * Math.PI * 2) * reach;
+      const sc = k * Math.cos(a);
+      const ss = k * Math.sin(a);
+      // Turned about its base, which stays where it stands.
+      xforms[i].set(sc, ss, x - (sc * ox - ss * oy), y - (ss * ox + sc * oy));
+    }
+    return createPicture((cv) => cv.drawAtlas(near.atlas, near.sprites, xforms, Skia.Paint()));
+  });
   return (
     <View pointerEvents="none" style={{ width: w, height }}>
       <Canvas __destroyWebGLContextAfterRender={STILL} style={{ width: w, height }}>
-        <Picture picture={picture} />
+        <Picture picture={strip.under} />
+        {strip.still ? <Picture picture={strip.still} /> : <Picture picture={flowers} />}
+        <Picture picture={strip.over} />
       </Canvas>
     </View>
   );

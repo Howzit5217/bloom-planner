@@ -23,6 +23,9 @@ interface ForecastState {
   refresh: (place: { latitude: number; longitude: number; timezone: string } | null) => Promise<void>;
 }
 
+/** Counts the forecasts asked for, so only the latest one's answer is kept. */
+let asked = 0;
+
 const near = (s: Saved | null, p: { latitude: number; longitude: number }) => !!s && Math.abs(s.latitude - p.latitude) < 0.05 && Math.abs(s.longitude - p.longitude) < 0.05;
 
 export const useForecast = create<ForecastState>((set, get) => ({
@@ -34,6 +37,7 @@ export const useForecast = create<ForecastState>((set, get) => ({
       const saved = await db.kvGet<Saved>('forecast').catch(() => null);
       set({ loaded: true, saved });
     }
+    const ask = ++asked;
     if (!place) {
       set({ days: null });
       return;
@@ -44,6 +48,8 @@ export const useForecast = create<ForecastState>((set, get) => ({
     if (usable && Date.now() - saved!.at < FRESH) return;
     try {
       const days = await fetchPlanForecast(place.latitude, place.longitude, place.timezone);
+      // A newer ask (the place moved meanwhile) wins, even if this answer came back last.
+      if (ask !== asked) return;
       const next: Saved = { days, at: Date.now(), latitude: place.latitude, longitude: place.longitude };
       set({ days, saved: next });
       await db.kvSet('forecast', next).catch(() => {});

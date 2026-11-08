@@ -58,3 +58,28 @@ export function useIdleClock(period: number, { delay = 0, on = true }: { delay?:
   }, [run, delay, tick]);
   return phase;
 }
+
+/**
+ * A decoration's idle time in milliseconds, for motions that never come round to where they began
+ * (each flower swaying on its own beat). Like useIdleClock it moves on about 30 times a second, only
+ * while its page is in view and `on`, and not at all with reduced motion.
+ */
+export function useIdleTime({ on = true }: { on?: boolean } = {}): SharedValue<number> {
+  const { reduceMotion } = useTheme();
+  const focused = usePageFocused();
+  const time = useSharedValue(0);
+  const since = useSharedValue(0);
+  const tick = useFrameCallback((info) => {
+    since.value += Math.min(100, info.timeSincePreviousFrame ?? 0);
+    if (since.value >= STEP_MS) {
+      time.value += since.value;
+      since.value = 0;
+    }
+  }, false);
+  const run = on && focused && !reduceMotion;
+  useEffect(() => {
+    tick.setActive(run);
+    return () => tick.setActive(false);
+  }, [run, tick]);
+  return time;
+}

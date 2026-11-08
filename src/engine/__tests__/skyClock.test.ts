@@ -1,4 +1,4 @@
-import { LAPSE_FROM, LAPSE_STEP_MS, lapseSteps } from '../skyClock';
+import { LAPSE_FROM, LAPSE_STEP_MS, lapseMs, lapseSteps } from '../skyClock';
 
 const H = 3600_000;
 
@@ -30,9 +30,18 @@ describe("the sky's run-through on coming back", () => {
     const short = lapseSteps(0, H);
     const long = lapseSteps(0, 12 * H);
     expect(long.length).toBeGreaterThan(short.length);
-    expect(long.length * LAPSE_STEP_MS).toBeLessThanOrEqual(4000 + LAPSE_STEP_MS);
+    expect(long.length * LAPSE_STEP_MS).toBeLessThanOrEqual(8000 + LAPSE_STEP_MS);
     const peak = (s: number[]) => Math.max(...s.map((t, i) => t - (i ? s[i - 1] : 0)));
     expect(peak(long)).toBeGreaterThan(peak(short) * 3);
+  });
+
+  it('runs slowly: a few minutes over seconds, an hour over longer', () => {
+    const five = lapseSteps(0, 5 * 60_000);
+    expect(five.length).toBeGreaterThan(1);
+    expect(five.length * LAPSE_STEP_MS).toBeGreaterThanOrEqual(2200);
+    expect(lapseMs(H)).toBeGreaterThanOrEqual(4500);
+    expect(lapseMs(5 * 60_000)).toBeLessThan(lapseMs(H));
+    expect(lapseMs(48 * H)).toBe(8000);
   });
 
   it('runs through at most half a day', () => {

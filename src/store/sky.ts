@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
 import { create } from 'zustand';
 import { defaultPlace, fallLevelFromCode, skyLook, weatherFromCode, type SkyLook } from '@/engine/sky';
-import { LAPSE_STEP_MS, lapseSteps } from '@/engine/skyClock';
+import { LAPSE_STEP_MS, lapseRun } from '@/engine/skyClock';
 import { fetchCurrentWeather } from '@/services/climateApi';
 import * as db from '@/storage/db';
 import { useApp } from './app';
@@ -64,29 +64,33 @@ export const useWeather = create<WeatherState>((set, get) => ({
  */
 export const useSkyClock = create<{ shown: number; lapsing: boolean }>(() => ({ shown: Date.now(), lapsing: false }));
 
-let lapse: ReturnType<typeof setInterval> | null = null;
+let lapse: ReturnType<typeof setTimeout> | null = null;
 let clockStarted = false;
 let still = false;
 
-/** Move the sky's clock on to `to`: straight there after a short time away, through the time between after a long one. */
+/**
+ * Move the sky's clock on to `to`: straight there after a short time away, through the time between
+ * after a long one. The run keeps to its own length whatever the phone: each step shows the time due
+ * by then and the next follows once it's been drawn (on a fixed beat, a phone slow to draw each sky
+ * fell behind and the run dragged on in jumps).
+ */
 function catchUp(to: number) {
-  if (lapse) clearInterval(lapse);
+  if (lapse) clearTimeout(lapse);
   lapse = null;
-  const steps = still ? [to] : lapseSteps(useSkyClock.getState().shown, to);
-  if (steps.length === 1) {
+  const run = still ? null : lapseRun(useSkyClock.getState().shown, to);
+  if (!run) {
     useSkyClock.setState({ shown: to, lapsing: false });
     return;
   }
-  let i = 0;
+  const began = Date.now();
   useSkyClock.setState({ lapsing: true });
-  lapse = setInterval(() => {
-    const last = i === steps.length - 1;
-    useSkyClock.setState({ shown: steps[i++], lapsing: !last });
-    if (last && lapse) {
-      clearInterval(lapse);
-      lapse = null;
-    }
-  }, LAPSE_STEP_MS);
+  const step = () => {
+    const k = (Date.now() - began) / run.ms;
+    const last = k >= 1;
+    useSkyClock.setState({ shown: run.at(k), lapsing: !last });
+    lapse = last ? null : setTimeout(step, LAPSE_STEP_MS);
+  };
+  lapse = setTimeout(step, LAPSE_STEP_MS);
 }
 
 /** Starts the sky's clock (once for the app): every five minutes, and on coming back. */

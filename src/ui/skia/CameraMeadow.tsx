@@ -1,9 +1,9 @@
-import { BlendMode, BlurStyle, Canvas, ClipOp, createPicture, FilterMode, Group, LinearGradient, MipmapMode, PaintStyle, Picture, Rect, Skia, StrokeCap, StrokeJoin, TileMode, vec, type SkCanvas, type SkImage, type SkPath, type SkPicture, type SkRect, type SkRSXform, type SkSurface } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { BlendMode, BlurStyle, Canvas, createPicture, FilterMode, Group, LinearGradient, MipmapMode, PaintStyle, Picture, Rect, Skia, StrokeCap, StrokeJoin, TileMode, vec, type SkImage, type SkPath, type SkPicture, type SkRect, type SkRSXform, type SkSurface } from '@shopify/react-native-skia';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
-import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { LAPSE_STEP_MS } from '@/engine/skyClock';
+import { LAPSE_STEP_MS, SKY_FADE_MS } from '@/engine/skyClock';
 import { lookKey, mix, multiply, type SkyLook } from '@/engine/sky';
 import { useSkyClock, useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
@@ -11,7 +11,8 @@ import type { Palette } from '@/theme/tokens';
 import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudsOf, color, drawBlade, drawHaze, drawMistBank, drawShadows, drawSky, drawSunDisc, drawSunlight, drawWeather, fieldLight, hazeFade, mistBanks, shineOf, type MistBank } from './Meadow';
 import { cloudLight } from './clouds';
 import { fallOf, useFalling, type Fall } from './Precipitation';
-import { fieldSprig, geometry, headOf, type Sprig } from './sprigLayout';
+import { fieldSprig, geometry, type Sprig } from './sprigLayout';
+import { nearAtlas, type Near } from './flowerAtlas';
 import { sprigPainter } from './sprigPainter';
 import { leafPath, rng } from './shapes';
 import { useBloomFactor } from '../bloom';
@@ -82,22 +83,6 @@ interface Mist {
   /** The whole image, and where it goes (about the bank's middle, before it drifts). */
   src: SkRect | null;
   dst: SkRect;
-}
-
-/**
- * The near flowers in one image (an atlas), so a frame is one draw of it that places, tilts and
- * sways every flower: drawing them as pictures took hundreds of shapes a frame, all at new angles.
- */
-interface Near {
-  atlas: SkImage;
-  /** Each flower's spot in the image, in pixels. */
-  sprites: SkRect[];
-  /** Five numbers a flower: its base on the ground (scene points), its sway's phase, and its base in its spot (pixels). */
-  spots: number[];
-  /** Where each flower goes this frame: set afresh each frame on the UI thread (drawing copies them). */
-  xforms: SkRSXform[];
-  /** Image pixels a point. */
-  scale: number;
 }
 
 interface Drifter {
@@ -384,79 +369,6 @@ function softImage(image: SkImage, f: CameraFrame): SkImage | null {
     const out = surface.makeImageSnapshot().makeNonTextureImage();
     surface.dispose();
     return out;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The near flowers drawn once into one image, each in its own spot (`scale` pixels a point), packed
- * in rows tallest first. Each is lit where it stands; its sway and the camera's tilt come later, as
- * it's drawn. Null if it can't be made (the flowers are then drawn still, in place).
- */
-function nearAtlas(sprigs: Sprig[], paint: (cv: SkCanvas, s: Sprig) => void, scale: number): Near | null {
-  if (!sprigs.length) return null;
-  const ROW = 2048;
-  const GAP = 2;
-  // Each flower's box about its base: the head at the top of the stem, the leaves out to the sides.
-  const boxes = sprigs.map((s) => {
-    const g = geometry(s);
-    const head = headOf(s) * 1.25 + 1;
-    const side = Math.max(head, s.r * 2.4) + 1;
-    const x0 = Math.min(0, g.ctrl.x, g.top.x) - side;
-    const x1 = Math.max(0, g.ctrl.x, g.top.x) + side;
-    const y0 = Math.min(g.ctrl.y, g.top.y) - head;
-    const y1 = s.r * 0.6 + 1;
-    return { x0, y0, w: Math.ceil((x1 - x0) * scale), h: Math.ceil((y1 - y0) * scale) };
-  });
-  const order = boxes.map((_, i) => i).sort((a, b) => boxes[b].h - boxes[a].h);
-  const at: Array<{ x: number; y: number }> = [];
-  let x = 0;
-  let y = 0;
-  let row = 0;
-  let width = 0;
-  for (const i of order) {
-    const b = boxes[i];
-    if (x > 0 && x + b.w > ROW) {
-      x = 0;
-      y += row + GAP;
-      row = 0;
-    }
-    at[i] = { x, y };
-    x += b.w + GAP;
-    width = Math.max(width, x);
-    row = Math.max(row, b.h);
-  }
-  const height = y + row;
-  if (width > 4096 || height > 4096) return null;
-  try {
-    const surface = Platform.OS === 'web' ? Skia.Surface.Make(width, height) : Skia.Surface.MakeOffscreen(width, height);
-    if (!surface) return null;
-    const canvas = surface.getCanvas();
-    const sprites = sprigs.map((s, i) => {
-      const b = boxes[i];
-      const spot = Skia.XYWHRect(at[i].x, at[i].y, b.w, b.h);
-      canvas.save();
-      canvas.clipRect(spot, ClipOp.Intersect, true);
-      canvas.translate(at[i].x - b.x0 * scale, at[i].y - b.y0 * scale);
-      canvas.scale(scale, scale);
-      // Drawn where it stands, so it's lit as it is there.
-      canvas.translate(-s.x, -s.y);
-      paint(canvas, s);
-      canvas.restore();
-      return spot;
-    });
-    surface.flush();
-    const atlas = surface.makeImageSnapshot().makeNonTextureImage();
-    surface.dispose();
-    if (!atlas) return null;
-    return {
-      atlas,
-      sprites,
-      spots: sprigs.flatMap((s, i) => [s.x, s.y, s.phase, -boxes[i].x0 * scale, -boxes[i].y0 * scale]),
-      xforms: sprigs.map(() => Skia.RSXform(1, 0, 0, 0)),
-      scale,
-    };
   } catch {
     return null;
   }
@@ -877,22 +789,52 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   const image = useMemo(() => keptSnapshot(scene, frame, scene.placeholder ? 0.25 : lapsing ? 1 : 2), [scene, frame, lapsing]);
   // When the sky is drawn again (the clock moving on, or running through the time away), the new
   // scene fades in over the one before instead of replacing it at once, so the sky changes smoothly.
-  const [layers, setLayers] = useState<{ cur: SkImage | null; prev: SkImage | null }>({ cur: image, prev: null });
-  if (layers.cur !== image) setLayers({ cur: image, prev: reduceMotion ? null : layers.cur });
+  // Each new sky fades in over the one before. Running through the time away, each fades in over
+  // about as long as the next takes to come (so the run never stands still between them, nor cuts a
+  // fade short); any other change of sky fades in slowly, eased; the web's first stand-in gives way
+  // to the real scene quickly. The fade moves on with the frames actually drawn, a held-up frame
+  // counting as two at most: timed by the clock, it was over while the phone was busy making the
+  // next sky, and each change showed all at once.
+  const [layers, setLayers] = useState<{ cur: SkImage | null; prev: SkImage | null; quick: boolean; stand: boolean }>({ cur: image, prev: null, quick: true, stand: !!scene.placeholder });
+  if (layers.cur !== image) setLayers({ cur: image, prev: reduceMotion ? null : layers.cur, quick: lapsing || layers.stand, stand: !!scene.placeholder });
   const blend = useSharedValue(1);
+  const through = useSharedValue(1);
+  const fadeMs = useSharedValue(SKY_FADE_MS);
+  const eased = useSharedValue(0);
+  const fading = useRef<SkImage | null>(null);
+  const lastSky = useRef(0);
+  const [faded, setFaded] = useState(0);
+  const fadedIn = useCallback(() => setFaded((n) => n + 1), []);
+  const fader = useFrameCallback((info) => {
+    if (through.value >= 1) return;
+    const k = Math.min(1, through.value + Math.min(34, info.timeSincePreviousFrame ?? 16) / fadeMs.value);
+    through.value = k;
+    blend.value = eased.value ? k * k * (3 - 2 * k) : k;
+    if (k >= 1) scheduleOnRN(fadedIn);
+  }, false);
   useEffect(() => {
+    const now = performance.now();
+    const since = now - lastSky.current;
+    lastSky.current = now;
     if (!layers.prev) {
+      through.set(1);
       blend.set(1);
+      fader.setActive(false);
       return;
     }
-    const done = () => setLayers((l) => (l.cur === layers.cur ? { cur: l.cur, prev: null } : l));
+    fading.current = layers.cur;
+    fadeMs.set(layers.quick ? Math.min(450, Math.max(LAPSE_STEP_MS, since < 1000 ? since : LAPSE_STEP_MS)) : SKY_FADE_MS);
+    eased.set(layers.quick ? 0 : 1);
+    through.set(0);
     blend.set(0);
-    blend.set(
-      withTiming(1, { duration: LAPSE_STEP_MS * 1.2, easing: Easing.linear }, (finished) => {
-        if (finished) scheduleOnRN(done);
-      }),
-    );
-  }, [layers, blend]);
+    fader.setActive(true);
+  }, [layers, blend, through, fadeMs, eased, fader]);
+  // Faded in: the sky before is let go.
+  useEffect(() => {
+    if (!faded) return;
+    fader.setActive(false);
+    setLayers((l) => (l.cur === fading.current && l.prev ? { ...l, prev: null } : l));
+  }, [faded, fader]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
   // The scene's own time: how long it has been moving, so it carries on from where it was. (The
   // phone's clock instead made every flower, cloud and raindrop jump the moment it started.)
