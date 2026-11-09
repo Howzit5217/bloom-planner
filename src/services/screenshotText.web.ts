@@ -110,18 +110,30 @@ async function cleanCopies(uri: string): Promise<string[]> {
   return out;
 }
 
-/** Pick a screenshot and read its text in the browser. The picture never leaves the device. */
-export async function pickScreenshotText(): Promise<ScreenshotText> {
+/** How far a reading has got, 0 to 1. */
+export type ReadProgress = (k: number) => void;
+
+/**
+ * Pick a screenshot and read its text in the browser. The picture never leaves the device.
+ * `onProgress` hears 0 once one is picked, then how far the reading is (1 when done).
+ */
+export async function pickScreenshotText(onProgress?: ReadProgress): Promise<ScreenshotText> {
   const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
   const uri = picked.canceled ? null : picked.assets?.[0]?.uri;
   if (!uri) return { error: 'canceled' };
+  onProgress?.(0);
   try {
     const [T, copies] = await Promise.all([loadTesseract(), cleanCopies(uri)]);
+    onProgress?.(0.15);
     const worker = await T.createWorker('eng');
     // Sparse text: a game screen, not a page.
     await worker.setParameters({ tessedit_pageseg_mode: '11' });
+    onProgress?.(0.25);
     const lines: string[] = [];
-    for (const copy of copies) lines.push(...(await worker.recognize(copy)).data.text.split(/\r?\n/));
+    for (let i = 0; i < copies.length; i++) {
+      lines.push(...(await worker.recognize(copies[i])).data.text.split(/\r?\n/));
+      onProgress?.(0.25 + (0.75 * (i + 1)) / copies.length);
+    }
     await worker.terminate();
     return { lines };
   } catch {
@@ -130,6 +142,6 @@ export async function pickScreenshotText(): Promise<ScreenshotText> {
 }
 
 /** The web version only reads a screenshot picked on the spot (pickScreenshotText). */
-export async function readScreenshotText(_uri: string): Promise<ScreenshotText> {
+export async function readScreenshotText(_uri: string, _onProgress?: ReadProgress): Promise<ScreenshotText> {
   return { error: 'unsupported' };
 }

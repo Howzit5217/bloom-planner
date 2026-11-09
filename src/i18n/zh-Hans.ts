@@ -335,7 +335,7 @@ export const zhHans: Dict = {
   "Read a Screenshot": "读取屏幕截图",
   "Reading screenshots works in the installed app.": "读取屏幕截图需要使用已安装的 App。",
   "Reading the weather history for {place}…": "正在读取 {place} 的天气记录…",
-  "Reading…": "读取中…",
+  "Reading the screenshot…": "正在读取屏幕截图…",
   "Recalculate": "重新计算",
   "Recalculating…": "重新计算中…",
   "Refresh": "刷新",

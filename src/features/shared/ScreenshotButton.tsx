@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { fmt } from '@/engine/format';
 import { finishShot, nameOnShot, readProfileShot, sameName, type ProfileShot } from '@/engine/profileShot';
 import type { ReqFn } from '@/engine/types';
@@ -8,6 +9,7 @@ import { pickScreenshotText, readScreenshotText, type ScreenshotText } from '@/s
 import { useTheme } from '@/theme/theme';
 import { Icon } from '@/ui/Icon';
 import { PillButton } from '@/ui/PillButton';
+import { BloomLoader } from '@/ui/skia/BloomLoader';
 import { T } from '@/ui/T';
 import { useT } from '@/i18n';
 
@@ -25,6 +27,12 @@ type Note = { ok: boolean; text: string } | null;
 
 /** How long after opening the game a screenshot is still looked for on coming back. */
 const WAIT_MS = 20 * 60_000;
+/** A quick read still shows its flower this long, so it doesn't just flash. */
+const LEAST_SHOWN_MS = 1100;
+/** The finished flower stays a moment before the result. */
+const DONE_HOLD_MS = 450;
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * "Read a Screenshot": pick a screenshot of the Pikmin Bloom profile and fill in the level and
@@ -37,8 +45,29 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
   const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note>(null);
+  // How far the screenshot's reading has got (the flower's petals), or null when nothing is being read.
+  const [reading, setReading] = useState<number | null>(null);
+  const readFrom = useRef(0);
   // When the game was opened from here: a screenshot saved since then is the one to read.
   const openedAt = useRef<number | null>(null);
+  const latest = useRef<(r: ScreenshotText) => void>(() => {});
+
+  const progress = (k: number) => {
+    if (k === 0) readFrom.current = Date.now();
+    setReading(k);
+  };
+
+  /** Read: the full flower a moment (and long enough to be seen at all), then what it found. */
+  const finish = async (r: ScreenshotText) => {
+    if (readFrom.current && !('error' in r)) {
+      setReading(1);
+      await wait(Math.max(DONE_HOLD_MS, LEAST_SHOWN_MS - (Date.now() - readFrom.current)));
+    }
+    readFrom.current = 0;
+    setReading(null);
+    setBusy(false);
+    latest.current(r);
+  };
 
   const apply = (r: ScreenshotText) => {
     if ('error' in r) {
@@ -74,9 +103,8 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
     if (busy) return;
     setNote(null);
     setBusy(true);
-    const r = await pickScreenshotText().catch(() => ({ error: 'failed' as const }));
-    setBusy(false);
-    apply(r);
+    const r = await pickScreenshotText(progress).catch(() => ({ error: 'failed' as const }));
+    await finish(r);
   };
 
   const openGame = async () => {
@@ -102,8 +130,8 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
     setNote({ ok: true, text: t('Take a screenshot of your profile in Pikmin Bloom, then come back here.') });
   };
 
-  // The latest `apply` (its props as they are now) for the listener below, set up once.
-  const latest = useRef(apply);
+  // The latest `apply` (its props as they are now), for a reading that ends after a re-render and for
+  // the listener below, set up once.
   useEffect(() => {
     latest.current = apply;
   });
@@ -126,10 +154,10 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
         }
         openedAt.current = null;
         setBusy(true);
-        const r = await readScreenshotText(uri).catch(() => ({ error: 'failed' as const }));
+        progress(0);
+        const r = await readScreenshotText(uri, progress).catch(() => ({ error: 'failed' as const }));
         forgetPicture(uri);
-        setBusy(false);
-        latest.current(r);
+        await finish(r);
       })();
     });
     return () => sub.remove();
@@ -141,13 +169,20 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
     <View style={{ gap: 8 }}>
       {canOpenPikmin ? (
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          <PillButton label={t('Open Pikmin Bloom')} icon="open-in-new" variant="secondary" size="md" onPress={() => void openGame()} style={{ flexGrow: 1 }} />
-          <PillButton label={busy ? t('Reading…') : t('Pick a Screenshot')} icon="image-search-outline" variant="secondary" size="md" onPress={() => void read()} style={{ flexGrow: 1 }} />
+          <PillButton label={t('Open Pikmin Bloom')} icon="open-in-new" variant="secondary" size="md" onPress={() => void openGame()} disabled={reading != null} style={{ flexGrow: 1 }} />
+          <PillButton label={t('Pick a Screenshot')} icon="image-search-outline" variant="secondary" size="md" onPress={() => void read()} disabled={reading != null} style={{ flexGrow: 1 }} />
         </View>
       ) : (
-        <PillButton label={busy ? t('Reading…') : t('Read a Screenshot')} icon="image-search-outline" variant="secondary" size="md" onPress={() => void read()} />
+        <PillButton label={t('Read a Screenshot')} icon="image-search-outline" variant="secondary" size="md" onPress={() => void read()} disabled={reading != null} />
       )}
-      {note ? (
+      {reading != null ? (
+        <Animated.View entering={FadeIn.duration(200)} accessibilityRole="progressbar" accessibilityLabel={t('Reading the screenshot…')} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <BloomLoader progress={reading} size={44} />
+          <T v="small" soft style={{ flex: 1 }}>
+            {t('Reading the screenshot…')}
+          </T>
+        </Animated.View>
+      ) : note ? (
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
           <Icon name={note.ok ? 'check-circle' : 'alert-circle'} size={18} color={note.ok ? c.leaf : c.alert} />
           <T v="small" soft style={{ flex: 1 }}>

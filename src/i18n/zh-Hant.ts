@@ -335,7 +335,7 @@ export const zhHant: Dict = {
   "Read a Screenshot": "讀取螢幕截圖",
   "Reading screenshots works in the installed app.": "讀取螢幕截圖需要使用已安裝的 App。",
   "Reading the weather history for {place}…": "正在讀取 {place} 的天氣紀錄…",
-  "Reading…": "讀取中…",
+  "Reading the screenshot…": "正在讀取螢幕截圖…",
   "Recalculate": "重新計算",
   "Recalculating…": "重新計算中…",
   "Refresh": "重新整理",

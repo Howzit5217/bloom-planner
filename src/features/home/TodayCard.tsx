@@ -98,7 +98,8 @@ function DayCard({ dash, date, levelUpRequest, onPickDay, bare, onSaved }: Props
   }, [editing, date, steps, flowers, leveled, newLevel, minutes, mode, syncSteps, syncFlowers, questLeft, note]);
   const [askLevelUp, setAskLevelUp] = useState(false);
   const [burst, setBurst] = useState(0);
-  const [size, setSize] = useState({ w: 0, h: 0, bx: 0, by: 0 });
+  // Where the burst comes from: the log button's middle and upper part (bx, by) in the form, and the form's top (fy).
+  const [at, setAt] = useState({ fy: 0, bx: 0, by: 0 });
 
   // 'Yes, leveled up' from the Home prompt: open the editor with the toggle on.
   const [seenRequest, setSeenRequest] = useState(levelUpRequest);
@@ -210,7 +211,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay, bare, onSaved }: Props
   const questBox = existing?.gameTaskToGo != null && shownQuest && shownQuest.kind !== 'seedling' ? <Logged icon={QUEST_ICON[shownQuest.kind]} value={existing.gameTaskToGo} label={questToGoLabel(shownQuest.kind)} color={c.leafDeep} /> : null;
 
   const body = (
-    <View onLayout={(e) => setSize((s) => ({ ...s, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }))}>
+    <View>
       {bare ? null : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
           <T v="h2" accessibilityRole="header" style={{ flexShrink: 1 }}>
@@ -251,7 +252,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay, bare, onSaved }: Props
           <PillButton label={isToday ? t('Edit today') : t('Edit this day')} variant="secondary" icon="pencil" size="md" onPress={() => setEditing(true)} />
         </View>
       ) : (
-        <View style={{ gap: 14 }}>
+        <View style={{ gap: 14 }} onLayout={(e) => setAt((s) => ({ ...s, fy: e.nativeEvent.layout.y }))}>
           {/* A profile screenshot fills in what's left, and a level-up if the game is past the log. */}
           <ScreenshotButton
             name={profile?.playerName ?? null}
@@ -403,7 +404,7 @@ function DayCard({ dash, date, levelUpRequest, onPickDay, bare, onSaved }: Props
               <PillButton label={t('No, save as is')} variant="ghost" size="md" onPress={() => void submit({ check: false })} />
             </Card>
           ) : (
-            <View onLayout={(e) => setSize((s) => ({ ...s, bx: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, by: e.nativeEvent.layout.y + 20 }))}>
+            <View onLayout={(e) => setAt((s) => ({ ...s, bx: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, by: e.nativeEvent.layout.y + 20 }))}>
               <PillButton label={existing ? t('Save changes') : isToday ? t('Log today') : t('Log this day')} icon="sprout" onPress={() => void submit()} disabled={!canLog} haptic={false} />
             </View>
           )}
@@ -430,7 +431,9 @@ function DayCard({ dash, date, levelUpRequest, onPickDay, bare, onSaved }: Props
       ) : null}
     </View>
   );
-  const burstAt = <PetalBurst trigger={burst} width={size.w + 36} height={size.h + 36} originX={size.bx + 18} originY={size.by + 18} />;
+  // The card's padding is round the body; a bare one has none.
+  const pad = bare ? 0 : 18;
+  const burstAt = <PetalBurst trigger={burst} originX={pad + at.bx} originY={pad + at.fy + at.by} />;
   return bare ? (
     <View>
       {body}

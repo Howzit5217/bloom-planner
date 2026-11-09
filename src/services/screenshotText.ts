@@ -79,20 +79,28 @@ function dropCopies(uris: string[]) {
   }
 }
 
-/** Pick a screenshot and read it (readScreenshotText). */
-export async function pickScreenshotText(): Promise<ScreenshotText> {
+/** How far a reading has got, 0 to 1. */
+export type ReadProgress = (k: number) => void;
+
+/**
+ * Pick a screenshot and read it (readScreenshotText). `onProgress` hears 0 once one is picked
+ * (nothing while the picker is open, or if it's closed with none), then how far the reading is.
+ */
+export async function pickScreenshotText(onProgress?: ReadProgress): Promise<ScreenshotText> {
   const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
   const uri = picked.canceled ? null : picked.assets?.[0]?.uri;
   if (!uri) return { error: 'canceled' };
-  return readScreenshotText(uri);
+  onProgress?.(0);
+  return readScreenshotText(uri, onProgress);
 }
 
 /**
  * Read a screenshot's text on the phone (Google ML Kit on Android, Apple Vision on iOS): the
  * screenshot as it is, then the cleaned-up copies of the name's part of it. The picture never
- * leaves the phone. Expo Go has no text reader, so it says so there.
+ * leaves the phone. Expo Go has no text reader, so it says so there. `onProgress` hears how far it
+ * has got after each step (1 when done).
  */
-export async function readScreenshotText(uri: string): Promise<ScreenshotText> {
+export async function readScreenshotText(uri: string, onProgress?: ReadProgress): Promise<ScreenshotText> {
   let reader: typeof import('expo-text-extractor');
   try {
     reader = await import('expo-text-extractor');
@@ -107,16 +115,20 @@ export async function readScreenshotText(uri: string): Promise<ScreenshotText> {
   } catch {
     return { error: 'failed' };
   }
+  onProgress?.(0.3);
   // The copies only add to what the screenshot itself gave.
   const copies = await nameCopies(uri).catch(() => [] as string[]);
-  for (const copy of copies) {
+  onProgress?.(0.4);
+  for (let i = 0; i < copies.length; i++) {
     try {
-      const blocks = await reader.extractTextFromImage(copy);
+      const blocks = await reader.extractTextFromImage(copies[i]);
       lines.push(...blocks.flatMap((b) => b.split(/\r?\n/)));
     } catch {
       // Skip that copy.
     }
+    onProgress?.(0.4 + (0.6 * (i + 1)) / copies.length);
   }
   dropCopies(copies);
+  onProgress?.(1);
   return { lines };
 }

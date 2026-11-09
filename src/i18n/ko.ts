@@ -335,7 +335,7 @@ export const ko: Dict = {
   "Read a Screenshot": "스크린샷 읽기",
   "Reading screenshots works in the installed app.": "스크린샷 읽기는 설치한 앱에서 돼요.",
   "Reading the weather history for {place}…": "{place}의 날씨 기록을 읽는 중…",
-  "Reading…": "읽는 중…",
+  "Reading the screenshot…": "스크린샷을 읽는 중…",
   "Recalculate": "다시 계산",
   "Recalculating…": "다시 계산 중…",
   "Refresh": "새로고침",

@@ -757,7 +757,7 @@ function Done({ level, goalLevel, goalDate, blocked, difficulty }: { level: numb
       <View>
         {/* Your plan's flower: white when it's easy, then yellow, red, and blue for the hardest. */}
         <BloomFlower key={difficulty?.level ?? 'none'} size={200} delay={50} color={difficulty ? difficultyColor(c, difficulty.level) : undefined} />
-        <PetalBurst trigger={1} width={200} height={200} originX={100} originY={110} />
+        <PetalBurst trigger={1} originX={100} originY={110} reach={110} />
       </View>
       <Animated.View entering={FadeInUp.delay(700).duration(420)} style={{ gap: 6 }}>
         <T v="h1" center>

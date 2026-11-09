@@ -335,7 +335,7 @@ export const it: Dict = {
   "Read a Screenshot": "Leggi uno screenshot",
   "Reading screenshots works in the installed app.": "La lettura degli screenshot funziona nell'app installata.",
   "Reading the weather history for {place}…": "Leggo lo storico meteo di {place}…",
-  "Reading…": "Lettura…",
+  "Reading the screenshot…": "Lettura dello screenshot…",
   "Recalculate": "Ricalcola",
   "Recalculating…": "Ricalcolo…",
   "Refresh": "Aggiorna",

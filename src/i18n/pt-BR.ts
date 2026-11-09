@@ -335,7 +335,7 @@ export const ptBR: Dict = {
   "Read a Screenshot": "Ler uma captura de tela",
   "Reading screenshots works in the installed app.": "A leitura de capturas funciona no app instalado.",
   "Reading the weather history for {place}…": "Lendo o histórico do clima de {place}…",
-  "Reading…": "Lendo…",
+  "Reading the screenshot…": "Lendo a captura de tela…",
   "Recalculate": "Recalcular",
   "Recalculating…": "Recalculando…",
   "Refresh": "Atualizar",

@@ -335,7 +335,7 @@ export const ja: Dict = {
   "Read a Screenshot": "スクリーンショットを読み取る",
   "Reading screenshots works in the installed app.": "スクリーンショットの読み取りはインストールしたアプリで使えます。",
   "Reading the weather history for {place}…": "{place}の天気の履歴を読み込んでいます…",
-  "Reading…": "読み取り中…",
+  "Reading the screenshot…": "スクリーンショットを読み取り中…",
   "Recalculate": "再計算",
   "Recalculating…": "再計算中…",
   "Refresh": "更新",
