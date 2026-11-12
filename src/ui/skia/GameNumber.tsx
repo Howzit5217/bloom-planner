@@ -1,13 +1,13 @@
-import { Canvas, Group, Path, rect, Skia, Text, type SkFont, type SkPath } from '@shopify/react-native-skia';
+import { Canvas, createPicture, Group, Path, Picture, rect, Skia, StrokeJoin, PaintStyle, Text, type SkCanvas, type SkFont, type SkPath } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Text as RNText, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useDerivedValue, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
+import { useDerivedValue, useSharedValue, withDelay, withSpring, type SharedValue } from 'react-native-reanimated';
 import { fmt } from '@/engine/format';
 import { useTheme } from '@/theme/theme';
 import { font as fonts } from '@/theme/tokens';
 import { nextOnLoop, turnsOff } from './digitLoop';
 import { useGameFont } from './gameFont';
-import { inkRun } from './inkLayout';
+import { glyphInk, inkRun } from './inkLayout';
 
 interface Props {
   value: number;
@@ -282,5 +282,123 @@ export function GameNumber({ value, size, format = fmt, fill, stroke, rollIn = f
         </Group>
       </Canvas>
     </View>
+  );
+}
+
+/** The characters a live number can show. */
+const LIVE_CHARS = '0123456789-';
+
+/** One glyph's outline (its soft drop, then the brown edge) drawn at (x, y), as GlyphOutline draws it. */
+function drawOutline(cv: SkCanvas, ch: string, x: number, y: number, font: SkFont, sw: number, stroke: string) {
+  const solid = solidGlyph(ch, font);
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  paint.setStrokeJoin(StrokeJoin.Round);
+  paint.setStrokeWidth(sw * 2);
+  const layer = (dy: number, color: string) => {
+    paint.setColor(Skia.Color(color));
+    if (solid) {
+      cv.save();
+      cv.translate(x, y + dy);
+      paint.setStyle(PaintStyle.Fill);
+      cv.drawPath(solid, paint);
+      paint.setStyle(PaintStyle.Stroke);
+      cv.drawPath(solid, paint);
+      cv.restore();
+    } else {
+      // Where the glyph's shape can't be had as a path (the web), from the glyph itself.
+      paint.setStyle(PaintStyle.Stroke);
+      cv.drawText(ch, x, y + dy, paint, font);
+    }
+  };
+  layer(sw * 0.55, 'rgba(0,0,0,0.18)');
+  layer(0, stroke);
+}
+
+/**
+ * The game number on a ruler: drawn on the UI thread from `value`, a shared value the ruler sets as
+ * it moves, so it keeps up however busy the app's JS is. (Drawn from the JS side, it stood still
+ * through a whole slide while the page was still working out the plan for the number before.) Laid
+ * out like `roll={false}`: each digit only as wide as its ink, centred where the number looks
+ * centred, in a canvas as wide as `room`. `fallback` shows until the drawn face has loaded.
+ */
+export function LiveGameNumber({ value, fallback, size, room, fill, stroke, style }: { value: SharedValue<number>; fallback: number; size: number; room: string; fill?: string; stroke?: string; style?: StyleProp<ViewStyle> }) {
+  const { c } = useTheme();
+  const font = useGameFont(size);
+  const f = fill ?? c.gameYellow;
+  const s = stroke ?? c.gameOutline;
+  // Each character drawn once (its outline, and its fill) with its ink, for the UI thread to place.
+  const kit = useMemo(() => {
+    if (!font) return null;
+    const l = layout(font, room, size);
+    const gap = l.sw * 0.35;
+    const glyphs = LIVE_CHARS.split('').map((ch) => {
+      const ink = glyphInk(font, ch);
+      const outline = createPicture((cv) => drawOutline(cv, ch, 0, l.baseline, font, l.sw, s));
+      const face = createPicture((cv) => {
+        const paint = Skia.Paint();
+        paint.setAntiAlias(true);
+        paint.setColor(Skia.Color(f));
+        cv.drawText(ch, 0, l.baseline, paint, font);
+      });
+      return { left: ink.left, width: ink.width, mass: ink.mass ?? -1, known: ink.mass != null, area: ink.area, outline, face };
+    });
+    // Room for the widest number, its outline and drop either side, and its shift to where it looks centred.
+    const width = inkRun(room, font, gap).width + (l.sw * 1.6 + size * 0.12) * 2;
+    return { glyphs, gap, width, height: l.height };
+  }, [font, room, size, f, s]);
+  const empty = useMemo(() => createPicture(() => {}), []);
+  const picture = useDerivedValue(() => {
+    if (!kit) return empty;
+    const text = String(Math.round(value.value));
+    const at: number[] = [];
+    const which: number[] = [];
+    let cursor = 0;
+    let weight = 0;
+    let moment = 0;
+    let known = true;
+    for (let i = 0; i < text.length; i++) {
+      const k = LIVE_CHARS.indexOf(text[i]);
+      if (k < 0) continue;
+      const g = kit.glyphs[k];
+      const x = cursor - g.left;
+      at.push(x);
+      which.push(k);
+      if (!g.known) known = false;
+      else {
+        weight += g.area;
+        moment += g.area * (x + g.mass);
+      }
+      cursor += g.width + kit.gap;
+    }
+    const width = Math.max(0, cursor - kit.gap);
+    const centre = known && weight > 0 ? (width / 2 + moment / weight) / 2 : width / 2;
+    const x0 = kit.width / 2 - centre;
+    return createPicture((cv) => {
+      // Every outline before any fill, so they run together behind the digits.
+      for (let i = 0; i < at.length; i++) {
+        cv.save();
+        cv.translate(x0 + at[i], 0);
+        cv.drawPicture(kit.glyphs[which[i]].outline);
+        cv.restore();
+      }
+      for (let i = 0; i < at.length; i++) {
+        cv.save();
+        cv.translate(x0 + at[i], 0);
+        cv.drawPicture(kit.glyphs[which[i]].face);
+        cv.restore();
+      }
+    });
+  });
+  if (!kit)
+    return (
+      <View style={[{ height: size * 1.25, minWidth: size * 0.6 * room.length, justifyContent: 'center', alignItems: 'center' }, style]}>
+        <RNText style={{ fontFamily: fonts.heading, fontSize: size, lineHeight: size * 1.2, color: f, textShadowColor: s, textShadowRadius: Math.max(2, size * 0.06), textShadowOffset: { width: 0, height: Math.max(1, size * 0.04) } }}>{String(fallback)}</RNText>
+      </View>
+    );
+  return (
+    <Canvas style={[{ width: kit.width, height: kit.height }, style]}>
+      <Picture picture={picture} />
+    </Canvas>
   );
 }

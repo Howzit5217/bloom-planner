@@ -52,7 +52,7 @@ function contours(font: SkFont, ch: string): number[][][] | null {
   return out;
 }
 
-function glyphInk(font: SkFont, ch: string): GlyphInk {
+export function glyphInk(font: SkFont, ch: string): GlyphInk {
   let byChar = inkCache.get(font);
   if (!byChar) {
     byChar = new Map();

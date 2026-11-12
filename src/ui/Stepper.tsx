@@ -1,12 +1,13 @@
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 // The gesture handler's own text box: a touch starting on it still pulls the page down to refresh
 // (Android's own box stopped that) and scrolls the page; a tap focuses it.
 import { TextInput } from 'react-native-gesture-handler';
 
 import { useTheme } from '@/theme/theme';
 import { font } from '@/theme/tokens';
-import { GameNumber } from './skia/GameNumber';
+import { LiveGameNumber } from './skia/GameNumber';
 import { LevelRuler } from './LevelRuler';
 import { T } from './T';
 import { t } from '@/i18n';
@@ -45,6 +46,10 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
   // The number follows the ruler as it slides, and only the number: the page's own work on it
   // (checking a plan, saving) waits until the ruler stops, so nothing slows the number down.
   const [live, setLive] = useState(value);
+  // The same number for the screen, set by the ruler on the UI thread as it moves: the page's work
+  // on a number (checking a plan, saving) can keep the JS side busy for a while, and the number shown
+  // froze through the next slide while it did.
+  const shown = useSharedValue(value);
   const [seen, setSeen] = useState(value);
   // Numbers sent to the page that it hasn't shown back yet.
   const [sent, setSent] = useState<number[]>([]);
@@ -128,11 +133,11 @@ export function Stepper({ label, value, min, max, onChange, size = 72, hint = tr
           />
         ) : (
           // Changes as the ruler moves, with no roll to catch up on afterwards.
-          <GameNumber value={live} size={size} format={(n) => String(n)} roll={false} room={room} />
+          <LiveGameNumber value={shown} fallback={live} size={size} room={room} />
         )}
       </Pressable>
       {/* Remount when the range moves, so its positions always match the levels. */}
-      <LevelRuler key={`${min}-${max}`} value={live} min={min} max={max} onChange={slide} onSettle={settle} />
+      <LevelRuler key={`${min}-${max}`} value={live} min={min} max={max} onChange={slide} onSettle={settle} shown={shown} />
       {hint ? (
         <T v="caption" soft center>
           {t('Slide the ruler, or tap the number to type it.')}
