@@ -1,4 +1,4 @@
-import { Skia, type SkPath } from '@shopify/react-native-skia';
+import { Skia, type SkPath, type SkPathBuilder } from '@shopify/react-native-skia';
 
 export { rng } from './random';
 
@@ -11,6 +11,17 @@ export const CENTRE_R = 0.33;
 export const CENTRE_COLOR = '#FFB400';
 
 const K = 0.5523; // cubic Bezier circle constant
+
+/**
+ * The path a builder has made, the builder let go of at once. A field draws thousands of these
+ * every time the sky changes, and the garbage collector, told each is tiny, left them all lying
+ * about (hundreds of megabytes after the sky ran through a night).
+ */
+export function built(b: SkPathBuilder): SkPath {
+  const p = b.build();
+  b.dispose();
+  return p;
+}
 
 function addCircle(b: ReturnType<typeof Skia.PathBuilder.Make>, x: number, y: number, r: number) {
   // Four cubics from the top, clockwise: the same command structure for every circle, so paths
@@ -39,14 +50,14 @@ export function flowerPath(cx: number, cy: number, r: number, open: number, peta
     const pr = r * (0.2 + (PETAL_R * spread + (1 - spread) * 0.3 - 0.2) * o);
     addCircle(b, cx + Math.sin(a) * d, cy - Math.cos(a) * d, pr);
   }
-  return b.build();
+  return built(b);
 }
 
 /** One round petal of a flower of radius `len` centred at (0,0), pointing up. */
 export function petalShape(len: number): SkPath {
   const b = Skia.PathBuilder.Make();
   addCircle(b, 0, -len * PETAL_D, len * PETAL_R);
-  return b.build();
+  return built(b);
 }
 
 /** A single round petal centred on (0,0), `size` across: for drifting particles. */
@@ -59,17 +70,18 @@ export function petalPath(size: number): SkPath {
   b.cubicTo(rx, ry * K, rx * K, ry, 0, ry);
   b.cubicTo(-rx * K, ry, -rx, ry * K, -rx, 0);
   b.cubicTo(-rx, -ry * K, -rx * K, -ry, 0, -ry);
-  return b.close().build();
+  return built(b.close());
 }
 
 /** A plump leaf pointing right from (0,0), rounder on its upper side, with a soft point. */
 export function leafPath(len: number, wid: number): SkPath {
-  return Skia.PathBuilder.Make()
-    .moveTo(0, 0)
-    .cubicTo(len * 0.18, -wid * 1.25, len * 0.72, -wid * 1.2, len, 0)
-    .cubicTo(len * 0.72, wid * 0.85, len * 0.2, wid * 0.85, 0, 0)
-    .close()
-    .build();
+  return built(
+    Skia.PathBuilder.Make()
+      .moveTo(0, 0)
+      .cubicTo(len * 0.18, -wid * 1.25, len * 0.72, -wid * 1.2, len, 0)
+      .cubicTo(len * 0.72, wid * 0.85, len * 0.2, wid * 0.85, 0, 0)
+      .close(),
+  );
 }
 
 /**
@@ -100,7 +112,7 @@ export function stemPath(x0: number, y0: number, cx: number, cy: number, x1: num
   // Round top.
   b.arcToTangent(x1 + tan(1)[0] * w1 * 0.5, y1 + tan(1)[1] * w1 * 0.5, right[N][0], right[N][1], w1 / 2);
   for (let i = N; i >= 0; i--) b.lineTo(right[i][0], right[i][1]);
-  return b.close().build();
+  return built(b.close());
 }
 
 /** Regular hexagon, pointy top. */
@@ -113,7 +125,7 @@ export function hexPath(cx: number, cy: number, r: number, round = 0): SkPath {
   if (round <= 0) {
     b.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < 6; i++) b.lineTo(pts[i].x, pts[i].y);
-    return b.close().build();
+    return built(b.close());
   }
   const mid = (p: { x: number; y: number }, q: { x: number; y: number }) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
   const start = mid(pts[5], pts[0]);
@@ -124,7 +136,7 @@ export function hexPath(cx: number, cy: number, r: number, round = 0): SkPath {
     const m = mid(p, q);
     b.arcToTangent(p.x, p.y, m.x, m.y, round);
   }
-  return b.close().build();
+  return built(b.close());
 }
 
 /** Mix two #RRGGBB colours: t = 0 is a, t = 1 is b. */

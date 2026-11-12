@@ -49,7 +49,10 @@ export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight, fade
     const g = geometry(s);
     canvas.save();
     canvas.translate(s.x, s.y);
-    canvas.drawPath(stemPath(0, 0, g.ctrl.x, g.ctrl.y, g.top.x, g.top.y, Math.max(1, s.r * s.stemW), Math.max(0.8, s.r * s.stemW * 0.62)), stem);
+    // Each shape is let go of once drawn (the picture keeps its own copy): see built().
+    const stemShape = stemPath(0, 0, g.ctrl.x, g.ctrl.y, g.top.x, g.top.y, Math.max(1, s.r * s.stemW), Math.max(0.8, s.r * s.stemW * 0.62));
+    canvas.drawPath(stemShape, stem);
+    stemShape.dispose();
     // Small flowers skip their leaves: too little to see, and a lot to draw.
     if (s.r >= 5) {
       const shape = leafPath(s.r * s.leafLen, s.r * s.leafLen * s.leafWid);
@@ -62,14 +65,18 @@ export function sprigPainter(c: Palette, look: SkyLook, light?: FieldLight, fade
         canvas.drawPath(shape, leaf);
         canvas.restore();
       }
+      shape.dispose();
     }
     const head = flowerPath(g.top.x, g.top.y, s.r, 1, 5, s.rot);
     if (isWhite(s.color)) {
       petal.setColor(Skia.Color(tone(lightAt(night(mixHex(s.color, '#8A7A5C', 0.35)), lit))));
-      canvas.drawPath(flowerPath(g.top.x, g.top.y + Math.max(0.8, s.r * 0.07), s.r, 1, 5, s.rot), petal);
+      const under = flowerPath(g.top.x, g.top.y + Math.max(0.8, s.r * 0.07), s.r, 1, 5, s.rot);
+      canvas.drawPath(under, petal);
+      under.dispose();
     }
     petal.setColor(Skia.Color(tone(lightAt(night(s.color), lit))));
     canvas.drawPath(head, petal);
+    head.dispose();
     canvas.drawCircle(g.top.x, g.top.y, s.r * CENTRE_R, centre);
     canvas.restore();
   };

@@ -1,4 +1,4 @@
-import { BlendMode, BlurStyle, Canvas, createPicture, FilterMode, Group, LinearGradient, MipmapMode, PaintStyle, Picture, Rect, Skia, StrokeCap, StrokeJoin, TileMode, vec, type SkImage, type SkPath, type SkPicture, type SkRect, type SkRSXform, type SkSurface } from '@shopify/react-native-skia';
+import { BlendMode, BlurStyle, Canvas, createPicture, FilterMode, Group, LinearGradient, MipmapMode, PaintStyle, Picture, Rect, Skia, StrokeCap, StrokeJoin, TileMode, vec, type SkCanvas, type SkImage, type SkPath, type SkPicture, type SkRect, type SkRSXform, type SkSurface } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PixelRatio, Platform, View } from 'react-native';
 import Animated, { useAnimatedReaction, useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
@@ -12,6 +12,7 @@ import { bladeColorOf, CLOUD_BOUNDS, cloud, cloudsOf, color, drawBlade, drawHaze
 import { cloudLight } from './clouds';
 import { fallOf, useFalling, type Fall } from './Precipitation';
 import { fieldSprig, geometry, type Sprig } from './sprigLayout';
+import { drawImage } from './drawImage';
 import { nearAtlas, type Near } from './flowerAtlas';
 import { sprigPainter } from './sprigPainter';
 import { leafPath, rng } from './shapes';
@@ -92,6 +93,8 @@ interface Drifter {
    * afresh each frame). Made when first needed; only the one showing and the next are kept.
    */
   design: (round: number) => { picture: SkPicture; image: SkImage | null };
+  /** Lets go of every look made so far (the scene is done with). */
+  forget: () => void;
   x: number;
   y: number;
   s: number;
@@ -136,7 +139,7 @@ function plant(f: CameraFrame, rand: () => number, colors: string[], many: (y0: 
 }
 
 /** `bloom`: how full of flowers, for the player's level (useBloomFactor). */
-function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number, bloom: number): Scene {
+function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number, bloom: number, still = false): Scene {
   const colors = [c.petalRed, c.petalYellow, c.petalWhite, c.petalBlue];
   // Lit from the sun (or moon) where it shows in the sky above the screen.
   const sky = look.sun ?? look.moon;
@@ -212,7 +215,9 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
   // The near flowers' image, as sharp as the nearest of them is drawn on screen, the camera tilted or not.
   const tilts = [0, 0.5, 1].map((p) => cameraMatrix(f, tiltAt(f, p)));
   const nearest = live.reduce((most, sp) => Math.max(most, ...tilts.map((m) => 1 / Math.max(0.2, m[7] * sp.y + m[8]))), 1);
-  const near = nearAtlas(live, paintNear, Math.min(3, CANVAS_DENSITY * nearest));
+  // Running through the time away each scene is up for a moment, too short to see a sway: the near
+  // flowers are drawn still then, without their image (28 MB on a phone, made afresh every 140 ms).
+  const near = still ? null : nearAtlas(live, paintNear, Math.min(3, CANVAS_DENSITY * nearest));
   const nearStill = near || !live.length ? null : createPicture((cv) => live.forEach((sp) => paintNear(cv, sp)), Skia.XYWHRect(0, 0, f.picW, f.picH));
   // The clouds, from their own sequence so the field stays as it was.
   const cloudRand = rng(seed ^ 0x2545f491);
@@ -235,8 +240,16 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       for (const r of made.keys()) if (r < round - 1 || r > round + 1) made.delete(r);
       return out;
     };
+    const forget = () => {
+      for (const d of made.values()) {
+        d.picture.dispose();
+        d.image?.dispose();
+      }
+      made.clear();
+    };
     return {
       design,
+      forget,
       x: k.x,
       y: k.y,
       s: k.s,
@@ -277,39 +290,34 @@ function makeMotes(look: SkyLook, c: Palette, f: CameraFrame, rand: () => number
   const cell = MOTE_SIZE * MOTE_PX;
   let atlas: SkImage | null = null;
   try {
-    const w = cell * colors.length;
-    const surface = Platform.OS === 'web' ? Skia.Surface.Make(w, cell) : Skia.Surface.MakeOffscreen(w, cell);
-    if (!surface) return null;
-    const canvas = surface.getCanvas();
-    const paint = Skia.Paint();
-    paint.setAntiAlias(true);
-    colors.forEach((col, i) => {
-      canvas.save();
-      canvas.translate(i * cell + cell / 2, cell / 2);
-      canvas.scale(MOTE_PX, MOTE_PX);
-      if (kind === 'firefly') {
-        // A warm point of light in a soft glow.
-        paint.setShader(Skia.Shader.MakeRadialGradient(vec(0, 0), MOTE_SIZE / 2, [Skia.Color('#FFFBD8'), Skia.Color('#F6D66EB0'), Skia.Color('#F6D66E30'), Skia.Color('#F6D66E00')], [0, 0.14, 0.42, 1], TileMode.Clamp));
-        canvas.drawCircle(0, 0, MOTE_SIZE / 2, paint);
-        paint.setShader(null);
-      } else if (kind === 'petal') {
-        // A petal: rounder at its tip, a touch deeper at its base.
-        paint.setColor(Skia.Color(col));
-        canvas.drawOval(Skia.XYWHRect(-4, -2.5, 8, 5), paint);
-        paint.setColor(Skia.Color(mix(col, '#6A5038', 0.22)));
-        paint.setAlphaf(0.55);
-        canvas.drawOval(Skia.XYWHRect(-4, -1.4, 3.4, 2.8), paint);
-        paint.setAlphaf(1);
-      } else {
-        paint.setColor(Skia.Color(col));
-        canvas.translate(-4.5, 0);
-        canvas.drawPath(leafPath(9, 3.2), paint);
-      }
-      canvas.restore();
+    atlas = drawImage(cell * colors.length, cell, (canvas) => {
+      const paint = Skia.Paint();
+      paint.setAntiAlias(true);
+      colors.forEach((col, i) => {
+        canvas.save();
+        canvas.translate(i * cell + cell / 2, cell / 2);
+        canvas.scale(MOTE_PX, MOTE_PX);
+        if (kind === 'firefly') {
+          // A warm point of light in a soft glow.
+          paint.setShader(Skia.Shader.MakeRadialGradient(vec(0, 0), MOTE_SIZE / 2, [Skia.Color('#FFFBD8'), Skia.Color('#F6D66EB0'), Skia.Color('#F6D66E30'), Skia.Color('#F6D66E00')], [0, 0.14, 0.42, 1], TileMode.Clamp));
+          canvas.drawCircle(0, 0, MOTE_SIZE / 2, paint);
+          paint.setShader(null);
+        } else if (kind === 'petal') {
+          // A petal: rounder at its tip, a touch deeper at its base.
+          paint.setColor(Skia.Color(col));
+          canvas.drawOval(Skia.XYWHRect(-4, -2.5, 8, 5), paint);
+          paint.setColor(Skia.Color(mix(col, '#6A5038', 0.22)));
+          paint.setAlphaf(0.55);
+          canvas.drawOval(Skia.XYWHRect(-4, -1.4, 3.4, 2.8), paint);
+          paint.setAlphaf(1);
+        } else {
+          paint.setColor(Skia.Color(col));
+          canvas.translate(-4.5, 0);
+          canvas.drawPath(leafPath(9, 3.2), paint);
+        }
+        canvas.restore();
+      });
     });
-    surface.flush();
-    atlas = surface.makeImageSnapshot().makeNonTextureImage();
-    surface.dispose();
   } catch {
     return null;
   }
@@ -352,23 +360,18 @@ function softImage(image: SkImage, f: CameraFrame): SkImage | null {
   const w = Math.ceil(f.picW * scale);
   const h = Math.ceil(f.picH * scale);
   try {
-    const surface = Platform.OS === 'web' ? Skia.Surface.Make(w, h) : Skia.Surface.MakeOffscreen(w, h);
-    if (!surface) return null;
-    const canvas = surface.getCanvas();
-    const blur = Skia.Paint();
-    blur.setImageFilter(Skia.ImageFilter.MakeBlur(3.5, 3.5, TileMode.Clamp, null));
-    canvas.drawImageRectOptions(image, Skia.XYWHRect(0, 0, image.width(), image.height()), Skia.XYWHRect(0, 0, w, h), FilterMode.Linear, MipmapMode.None, blur);
-    // Kept far off only: none of it from half way down the field on.
-    const keep = Skia.Paint();
-    keep.setBlendMode(BlendMode.DstIn);
-    const hz = f.cy * scale;
-    const half = (f.cy + (f.picH - f.cy) * 0.55) * scale;
-    keep.setShader(Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, half), [Skia.Color('#000000FF'), Skia.Color('#00000000')], [0, 1], TileMode.Clamp));
-    canvas.drawRect(Skia.XYWHRect(0, 0, w, h), keep);
-    surface.flush();
-    const out = surface.makeImageSnapshot().makeNonTextureImage();
-    surface.dispose();
-    return out;
+    return drawImage(w, h, (canvas) => {
+      const blur = Skia.Paint();
+      blur.setImageFilter(Skia.ImageFilter.MakeBlur(3.5, 3.5, TileMode.Clamp, null));
+      canvas.drawImageRectOptions(image, Skia.XYWHRect(0, 0, image.width(), image.height()), Skia.XYWHRect(0, 0, w, h), FilterMode.Linear, MipmapMode.None, blur);
+      // Kept far off only: none of it from half way down the field on.
+      const keep = Skia.Paint();
+      keep.setBlendMode(BlendMode.DstIn);
+      const hz = f.cy * scale;
+      const half = (f.cy + (f.picH - f.cy) * 0.55) * scale;
+      keep.setShader(Skia.Shader.MakeLinearGradient(vec(0, hz), vec(0, half), [Skia.Color('#000000FF'), Skia.Color('#00000000')], [0, 1], TileMode.Clamp));
+      canvas.drawRect(Skia.XYWHRect(0, 0, w, h), keep);
+    });
   } catch {
     return null;
   }
@@ -442,20 +445,21 @@ function pictureImage(picture: SkPicture, r: SkRect, scale: number): SkImage | n
   const w = Math.ceil(r.width * scale);
   const h = Math.ceil(r.height * scale);
   try {
+    const draw = (canvas: SkCanvas) => {
+      canvas.scale(scale, scale);
+      canvas.translate(-r.x, -r.y);
+      canvas.drawPicture(picture);
+    };
     const web = Platform.OS === 'web' ? webSurface() : null;
-    const surface = web ?? (Platform.OS === 'web' ? Skia.Surface.Make(w, h) : Skia.Surface.MakeOffscreen(w, h));
-    if (!surface) return null;
-    const canvas = surface.getCanvas();
-    if (web) canvas.clear(Skia.Color('transparent'));
+    if (!web) return drawImage(w, h, draw);
+    // The web's one GPU surface is drawn over for the next cloud: its image is copied off it first.
+    const canvas = web.getCanvas();
+    canvas.clear(Skia.Color('transparent'));
     canvas.save();
-    canvas.scale(scale, scale);
-    canvas.translate(-r.x, -r.y);
-    canvas.drawPicture(picture);
+    draw(canvas);
     canvas.restore();
-    surface.flush();
-    const image = surface.makeImageSnapshot(web ? Skia.XYWHRect(0, 0, w, h) : undefined).makeNonTextureImage();
-    if (!web) surface.dispose();
-    return image;
+    web.flush();
+    return web.makeImageSnapshot(Skia.XYWHRect(0, 0, w, h)).makeNonTextureImage();
   } catch {
     return null;
   }
@@ -471,18 +475,10 @@ function snapshot(picture: SkPicture, f: CameraFrame, most = 2): SkImage | null 
   // A computer window's scene is big: kept within a texture's sides and about 8 megapixels.
   const scale = Math.min(PixelRatio.get(), most, 4096 / Math.max(f.picW, f.picH), Math.sqrt(8e6 / (f.picW * f.picH)));
   try {
-    const w = Math.ceil(f.picW * scale);
-    const h = Math.ceil(f.picH * scale);
-    // On the web a plain raster surface: an offscreen GPU one would take up a browser graphics context.
-    const surface = Platform.OS === 'web' ? Skia.Surface.Make(w, h) : Skia.Surface.MakeOffscreen(w, h);
-    if (!surface) return null;
-    const canvas = surface.getCanvas();
-    canvas.scale(scale, scale);
-    canvas.drawPicture(picture);
-    surface.flush();
-    const image = surface.makeImageSnapshot().makeNonTextureImage();
-    surface.dispose();
-    return image;
+    return drawImage(f.picW * scale, f.picH * scale, (canvas) => {
+      canvas.scale(scale, scale);
+      canvas.drawPicture(picture);
+    });
   } catch {
     return null;
   }
@@ -710,8 +706,59 @@ const FIELD_SEED = 1 + Math.floor(Math.random() * 2147483000);
 let kept: { key: string; scene: Scene; images: Map<number, SkImage | null>; soft?: SkImage | null } | null = null;
 
 function keep(key: string, scene: Scene): Scene {
+  if (kept) {
+    retireScene(kept.scene);
+    for (const image of kept.images.values()) retire(image);
+    retire(kept.soft);
+  }
   kept = { key, scene, images: new Map() };
   return scene;
+}
+
+/*
+ * Letting go. Each new sky is a new scene: the field's picture, the near flowers' image, the clouds',
+ * the mists' and its own snapshot, tens of megabytes. Running through the time away made one every
+ * 140 ms, and left to the garbage collector they piled up, past a gigabyte on a phone. So a scene and its
+ * images done with are let go of a few seconds on (the UI thread has long stopped drawing them by
+ * then), or once they're off the screen if they're still on it (a sky fading out); never while
+ * they're kept for Home's return. Let go of too soon, a frame would try to draw them, and fail.
+ */
+const RETIRE_MS = 3000;
+/** What each meadow on screen shows now: its scene, and the images up and fading out. */
+const showing = new Map<object, { scene: Scene; images: Array<SkImage | null> }>();
+const imageOnShow = (image: SkImage) => [...showing.values()].some((s) => s.images.includes(image));
+const sceneOnShow = (scene: Scene) => [...showing.values()].some((s) => s.scene === scene);
+const imageKept = (image: SkImage) => !!kept && (kept.soft === image || [...kept.images.values()].includes(image));
+
+/** Calls `free` a few seconds on, or once `busy` stops, unless `keep` says it's still wanted. */
+function freeLater(keepIt: () => boolean, busy: () => boolean, free: () => void) {
+  setTimeout(() => {
+    if (keepIt()) return;
+    if (busy()) freeLater(keepIt, busy, free);
+    else free();
+  }, RETIRE_MS);
+}
+
+function retire(image: SkImage | null | undefined) {
+  if (image) freeLater(() => imageKept(image), () => imageOnShow(image), () => image.dispose());
+}
+
+function retireScene(scene: Scene) {
+  freeLater(
+    () => kept?.scene === scene,
+    () => sceneOnShow(scene),
+    () => {
+      scene.picture.dispose();
+      scene.nearStill?.dispose();
+      scene.near?.atlas.dispose();
+      for (const k of scene.clouds) k.forget();
+      for (const m of scene.mists) {
+        m.picture.dispose();
+        m.image?.dispose();
+      }
+      scene.motes?.atlas.dispose();
+    },
+  );
 }
 
 /** The scene as an image (snapshot), kept with the scene. */
@@ -763,28 +810,28 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   // Drawn again only when the sky visibly changes (lookKey), not at every few minutes' tick, and
   // kept for when Home comes back to the same sky.
   const sky = lookKey(look);
-  const sceneKey = `${frame.W}|${frame.H}|${frame.viewH}|${frame.cy}|${c.dark ? 1 : 0}|${bloom}|${sky}`;
+  // Running through the time away, each frame is made at a point a pixel (four times quicker, and it
+  // sharpens again at the end), its near flowers still.
+  const lapsing = useSkyClock((s) => s.lapsing);
+  const sceneKey = `${frame.W}|${frame.H}|${frame.viewH}|${frame.cy}|${c.dark ? 1 : 0}|${bloom}|${sky}|${lapsing ? 'still' : ''}`;
   // On the web the page shows first, with just the sky's and field's colours, and the scene fades
   // in a moment later: drawn there on the CPU, it held the whole page back while it was.
   const later = Platform.OS === 'web';
   const [drawn, setDrawn] = useState(0);
   const scene = useMemo(
-    () => (kept?.key === sceneKey ? kept.scene : later ? placeholderScene(frame, look) : keep(sceneKey, drawCameraScene(frame, look, c, FIELD_SEED, bloom))),
+    () => (kept?.key === sceneKey ? kept.scene : later ? placeholderScene(frame, look) : keep(sceneKey, drawCameraScene(frame, look, c, FIELD_SEED, bloom, lapsing))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sceneKey, drawn],
   );
   useEffect(() => {
     if (!later || kept?.key === sceneKey) return;
     const id = setTimeout(() => {
-      keep(sceneKey, drawCameraScene(frame, look, c, FIELD_SEED, bloom));
+      keep(sceneKey, drawCameraScene(frame, look, c, FIELD_SEED, bloom, lapsing));
       setDrawn((n) => n + 1);
     }, 30);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sceneKey, later]);
-  // Running through the time away, each frame is made at a point a pixel: four times quicker, and it
-  // sharpens again at the end.
-  const lapsing = useSkyClock((s) => s.lapsing);
   // (The placeholder as a small image too, so the scene fades in over it.)
   const image = useMemo(() => keptSnapshot(scene, frame, scene.placeholder ? 0.25 : lapsing ? 1 : 2), [scene, frame, lapsing]);
   // When the sky is drawn again (the clock moving on, or running through the time away), the new
@@ -835,6 +882,12 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
     fader.setActive(false);
     setLayers((l) => (l.cur === fading.current && l.prev ? { ...l, prev: null } : l));
   }, [faded, fader]);
+  // What's on show here, so none of it is let go of while it still is (retire).
+  const [owner] = useState(() => ({}));
+  useEffect(() => {
+    showing.set(owner, { scene, images: [layers.cur, layers.prev] });
+  }, [owner, scene, layers]);
+  useEffect(() => () => void showing.delete(owner), [owner]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
   // The scene's own time: how long it has been moving, so it carries on from where it was. (The
   // phone's clock instead made every flower, cloud and raindrop jump the moment it started.)

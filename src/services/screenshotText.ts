@@ -1,6 +1,7 @@
 import { ImageFormat, Skia, type SkImage } from '@shopify/react-native-skia';
 import * as ImagePicker from 'expo-image-picker';
 import { File, Paths } from 'expo-file-system';
+import { drawImage, forgetSize } from '@/ui/skia/drawImage';
 
 export type ScreenshotText = { lines: string[] } | { error: 'canceled' | 'unsupported' | 'failed' };
 
@@ -42,19 +43,20 @@ async function nameCopies(uri: string): Promise<string[]> {
     { weights: [0, 1, 0], gain: 1.6, invert: true },
     { weights: [0, 0, 1], gain: 1.6, invert: true },
   ];
+  const cw = Math.round(w * scale);
+  const ch = Math.round(h * scale);
   for (let i = 0; i < variants.length; i++) {
     try {
       const v = variants[i];
-      const surface = Skia.Surface.MakeOffscreen(Math.round(w * scale), Math.round(h * scale));
-      if (!surface) continue;
-      const canvas = surface.getCanvas();
-      canvas.scale(scale, scale);
-      const paint = Skia.Paint();
-      paint.setColorFilter(Skia.ColorFilter.MakeMatrix(toneMatrix(v.weights, v.gain, v.invert)));
-      canvas.drawImage(image, 0, 0, paint);
-      surface.flush();
-      const bytes = surface.makeImageSnapshot().encodeToBytes(ImageFormat.PNG, 100);
-      surface.dispose();
+      const copy = drawImage(cw, ch, (canvas) => {
+        canvas.scale(scale, scale);
+        const paint = Skia.Paint();
+        paint.setColorFilter(Skia.ColorFilter.MakeMatrix(toneMatrix(v.weights, v.gain, v.invert)));
+        canvas.drawImage(image!, 0, 0, paint);
+      });
+      if (!copy) continue;
+      const bytes = copy.encodeToBytes(ImageFormat.PNG, 100);
+      copy.dispose();
       const file = new File(Paths.cache, `screenshot-read-${i}.png`);
       if (file.exists) file.delete();
       file.create();
@@ -64,6 +66,9 @@ async function nameCopies(uri: string): Promise<string[]> {
       // That copy is left out; the others still help.
     }
   }
+  // A screenshot's size is seldom needed again: its surface goes.
+  forgetSize(cw, ch);
+  image.dispose();
   return out;
 }
 

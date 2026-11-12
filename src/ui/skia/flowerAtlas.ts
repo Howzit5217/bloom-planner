@@ -1,5 +1,5 @@
 import { ClipOp, Skia, type SkCanvas, type SkImage, type SkRect, type SkRSXform } from '@shopify/react-native-skia';
-import { Platform } from 'react-native';
+import { drawImage } from './drawImage';
 import { geometry, headOf, type Sprig } from './sprigLayout';
 
 /**
@@ -59,25 +59,20 @@ export function nearAtlas(sprigs: Sprig[], paint: (cv: SkCanvas, s: Sprig) => vo
   const height = y + row;
   if (width > 4096 || height > 4096) return null;
   try {
-    const surface = Platform.OS === 'web' ? Skia.Surface.Make(width, height) : Skia.Surface.MakeOffscreen(width, height);
-    if (!surface) return null;
-    const canvas = surface.getCanvas();
-    const sprites = sprigs.map((s, i) => {
-      const b = boxes[i];
-      const spot = Skia.XYWHRect(at[i].x, at[i].y, b.w, b.h);
-      canvas.save();
-      canvas.clipRect(spot, ClipOp.Intersect, true);
-      canvas.translate(at[i].x - b.x0 * scale, at[i].y - b.y0 * scale);
-      canvas.scale(scale, scale);
-      // Drawn where it stands, so it's lit as it is there.
-      canvas.translate(-s.x, -s.y);
-      paint(canvas, s);
-      canvas.restore();
-      return spot;
+    const sprites = sprigs.map((_, i) => Skia.XYWHRect(at[i].x, at[i].y, boxes[i].w, boxes[i].h));
+    const atlas = drawImage(width, height, (canvas) => {
+      sprigs.forEach((s, i) => {
+        const b = boxes[i];
+        canvas.save();
+        canvas.clipRect(sprites[i], ClipOp.Intersect, true);
+        canvas.translate(at[i].x - b.x0 * scale, at[i].y - b.y0 * scale);
+        canvas.scale(scale, scale);
+        // Drawn where it stands, so it's lit as it is there.
+        canvas.translate(-s.x, -s.y);
+        paint(canvas, s);
+        canvas.restore();
+      });
     });
-    surface.flush();
-    const atlas = surface.makeImageSnapshot().makeNonTextureImage();
-    surface.dispose();
     if (!atlas) return null;
     return {
       atlas,

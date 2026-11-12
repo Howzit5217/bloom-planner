@@ -8,7 +8,7 @@ import { milkyWay, seenStars, type StarSky } from '@/engine/stars';
 import { useSkyLook } from '@/store/sky';
 import { useTheme } from '@/theme/theme';
 import type { Palette } from '@/theme/tokens';
-import { rng } from './shapes';
+import { built, rng } from './shapes';
 import { fieldSprig } from './sprigLayout';
 import { sprigPainter } from './sprigPainter';
 import { useBloomFactor } from '@/ui/bloom';
@@ -376,7 +376,10 @@ export const bladeColorOf = (c: Palette, look: SkyLook) => mix(mix(multiply(c.gr
 /** A grass blade from (x, y) up, `len` long, leaning by `lean`. */
 export function drawBlade(canvas: SkCanvas, blade: SkPaint, x: number, y: number, len: number, lean: number, width: number) {
   blade.setStrokeWidth(Math.max(1, width));
-  canvas.drawPath(Skia.PathBuilder.Make().moveTo(x, y).quadTo(x + lean * 0.3, y - len * 0.6, x + lean, y - len).build(), blade);
+  // Thousands to a field: let go of once drawn (the picture keeps its own copy), see built().
+  const shape = built(Skia.PathBuilder.Make().moveTo(x, y).quadTo(x + lean * 0.3, y - len * 0.6, x + lean, y - len));
+  canvas.drawPath(shape, blade);
+  shape.dispose();
 }
 
 /** How much of the haze a flower `y` takes on, `haze` deep below the horizon `hz`: some right at the horizon, none from half way down it. */

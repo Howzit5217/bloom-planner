@@ -4,7 +4,7 @@ import bundledJson from '@/data/bloom-levels.json';
 import { PRESETS, seasonRatesFromClimate, walkRatesFromClimate, type ClimateCache } from '@/engine/climate';
 import { DEFAULT_WEATHER_ALERTS, type WeatherAlertPrefs } from '@/engine/weatherAlerts';
 import { DEFAULT_LIMITS, forecastWeights, walkFallback, type ForecastWeatherDay, type TempLimits } from '@/engine/weatherPlan';
-import { useForecast } from './forecast';
+import { useForecast, type SavedForecast } from './forecast';
 import { todayKey, type DayKey } from '@/engine/dates';
 import { makeReq, overridesKey, parseLevelTable } from '@/engine/levels';
 import { replayLog } from '@/engine/progress';
@@ -185,7 +185,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   hydrate: async () => {
     try {
-      const [profile, entries, seasons, location, climate, settings, remote] = await Promise.all([
+      const [profile, entries, seasons, location, climate, settings, remote, forecast] = await Promise.all([
         db.kvGet<Profile>('profile'),
         db.getEntries(),
         db.getSeasonRates(),
@@ -193,7 +193,11 @@ export const useApp = create<AppState>((set, get) => ({
         db.kvGet<ClimateCache>('climate'),
         db.kvGet<Settings>('settings'),
         db.kvGet<unknown>('remoteLevels'),
+        db.kvGet<SavedForecast>('forecast').catch(() => null),
       ]);
+      // The plan's forecast with the rest: worked out without it first, Today's target changed a
+      // moment after the app opened.
+      useForecast.getState().seed(forecast, location);
       set({
         ready: true,
         loadError: null,
