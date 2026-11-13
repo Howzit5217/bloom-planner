@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
+import type { ShotSource } from '@/services/pikmin';
 
-export type ScreenshotText = { lines: string[] } | { error: 'canceled' | 'unsupported' | 'failed' };
+export type ScreenshotText = ({ lines: string[] } | { error: 'canceled' | 'unsupported' | 'failed' }) & { source?: ShotSource };
 
 /** Tesseract (text recognition in the browser), loaded the first time it's needed. */
 const TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';

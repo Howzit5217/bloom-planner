@@ -4,7 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { fmt } from '@/engine/format';
 import { finishShot, nameOnShot, readProfileShot, sameName, type ProfileShot } from '@/engine/profileShot';
 import type { ReqFn } from '@/engine/types';
-import { allowPictures, canOpenPikmin, forgetPicture, newestPictureSince, openPikmin } from '@/services/pikmin';
+import { allowPictures, canDeleteScreenshots, canOpenPikmin, deleteScreenshot, forgetPicture, newestPictureSince, openPikmin, type ShotSource } from '@/services/pikmin';
 import { pickScreenshotText, readScreenshotText, type ScreenshotText } from '@/services/screenshotText';
 import { useTheme } from '@/theme/theme';
 import { Icon } from '@/ui/Icon';
@@ -47,6 +47,10 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
   const [note, setNote] = useState<Note>(null);
   // How far the screenshot's reading has got (the flower's petals), or null when nothing is being read.
   const [reading, setReading] = useState<number | null>(null);
+  // The screenshot just read, to delete from the phone's pictures if wanted, and how that went.
+  const [shot, setShot] = useState<ShotSource | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [gone, setGone] = useState<Note>(null);
   const readFrom = useRef(0);
   // When the game was opened from here: a screenshot saved since then is the one to read.
   const openedAt = useRef<number | null>(null);
@@ -70,6 +74,9 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
   };
 
   const apply = (r: ScreenshotText) => {
+    // Read (or tried and failed): it can be deleted now. Not picked, or no reader here: nothing to delete.
+    setShot(canDeleteScreenshots && r.source && (!('error' in r) || r.error === 'failed') ? r.source : null);
+    setGone(null);
     if ('error' in r) {
       if (r.error === 'unsupported') setNote({ ok: false, text: t('Reading screenshots works in the installed app.') });
       else if (r.error === 'failed') setNote({ ok: false, text: t("That screenshot couldn't be read. Try a clearer one.") });
@@ -99,9 +106,35 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
     setNote({ ok: true, text: `${parts.join(' · ')}.${checked}` });
   };
 
+  /** Starting again: the last screenshot's result and its delete button go. */
+  const clear = () => {
+    setNote(null);
+    setShot(null);
+    setGone(null);
+  };
+
+  const remove = async () => {
+    if (!shot || deleting) return;
+    setDeleting(true);
+    const r = await deleteScreenshot(shot).catch(() => 'failed' as const);
+    setDeleting(false);
+    // Android asked first, and the answer was no: as it was.
+    if (r === 'canceled') return;
+    if (r === 'deleted' || r === 'missing') setShot(null);
+    setGone(
+      r === 'deleted'
+        ? { ok: true, text: t('Screenshot deleted.') }
+        : r === 'missing'
+          ? { ok: false, text: t('That screenshot is no longer among your pictures.') }
+          : r === 'denied'
+            ? { ok: false, text: t('To delete it, Bloom Planner needs to see your pictures.') }
+            : { ok: false, text: t("The screenshot couldn't be deleted. Delete it in your gallery instead.") },
+    );
+  };
+
   const read = async () => {
     if (busy) return;
-    setNote(null);
+    clear();
     setBusy(true);
     const r = await pickScreenshotText(progress).catch(() => ({ error: 'failed' as const }));
     await finish(r);
@@ -109,7 +142,7 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
 
   const openGame = async () => {
     if (busy) return;
-    setNote(null);
+    clear();
     // Asked first, so the question doesn't wait on coming back.
     const access = await allowPictures();
     if (access === 'none') {
@@ -147,17 +180,17 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
         return;
       }
       void (async () => {
-        const uri = await newestPictureSince(at);
-        if (!uri) {
+        const found = await newestPictureSince(at);
+        if (!found) {
           setNote({ ok: false, text: t('No new screenshot yet. Take one of your profile in Pikmin Bloom, then come back.') });
           return;
         }
         openedAt.current = null;
         setBusy(true);
         progress(0);
-        const r = await readScreenshotText(uri, progress).catch(() => ({ error: 'failed' as const }));
-        forgetPicture(uri);
-        await finish(r);
+        const r = await readScreenshotText(found.uri, progress).catch(() => ({ error: 'failed' as const }));
+        forgetPicture(found.uri);
+        await finish({ ...r, source: found.source });
       })();
     });
     return () => sub.remove();
@@ -187,6 +220,17 @@ export function ScreenshotButton({ name, onName, onRead, req, maxLevel }: Props)
           <Icon name={note.ok ? 'check-circle' : 'alert-circle'} size={18} color={note.ok ? c.leaf : c.alert} />
           <T v="small" soft style={{ flex: 1 }}>
             {note.text}
+          </T>
+        </View>
+      ) : null}
+      {shot && reading == null ? (
+        <PillButton label={t('Delete Screenshot')} icon="trash-can-outline" variant="ghost" size="sm" onPress={() => void remove()} disabled={deleting} style={{ alignSelf: 'flex-start' }} accessibilityHint={t('Deletes the screenshot just read from your pictures.')} />
+      ) : null}
+      {gone ? (
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+          <Icon name={gone.ok ? 'check-circle' : 'alert-circle'} size={18} color={gone.ok ? c.leaf : c.alert} />
+          <T v="small" soft style={{ flex: 1 }}>
+            {gone.text}
           </T>
         </View>
       ) : null}

@@ -1,9 +1,11 @@
 import { ImageFormat, Skia, type SkImage } from '@shopify/react-native-skia';
 import * as ImagePicker from 'expo-image-picker';
 import { File, Paths } from 'expo-file-system';
+import type { ShotSource } from '@/services/pikmin';
 import { drawImage, forgetSize } from '@/ui/skia/drawImage';
 
-export type ScreenshotText = { lines: string[] } | { error: 'canceled' | 'unsupported' | 'failed' };
+/** What a screenshot said, and where it came from among the phone's pictures (to delete it afterwards). */
+export type ScreenshotText = ({ lines: string[] } | { error: 'canceled' | 'unsupported' | 'failed' }) & { source?: ShotSource };
 
 /** Grey from the three channels, as bright as the eye sees it. */
 const GREY = [0.299, 0.587, 0.114];
@@ -93,10 +95,11 @@ export type ReadProgress = (k: number) => void;
  */
 export async function pickScreenshotText(onProgress?: ReadProgress): Promise<ScreenshotText> {
   const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-  const uri = picked.canceled ? null : picked.assets?.[0]?.uri;
-  if (!uri) return { error: 'canceled' };
+  const asset = picked.canceled ? null : picked.assets?.[0];
+  if (!asset?.uri) return { error: 'canceled' };
   onProgress?.(0);
-  return readScreenshotText(uri, onProgress);
+  const source: ShotSource = { assetId: asset.assetId ?? null, fileName: asset.fileName ?? null, width: asset.width, height: asset.height };
+  return { ...(await readScreenshotText(asset.uri, onProgress)), source };
 }
 
 /**
