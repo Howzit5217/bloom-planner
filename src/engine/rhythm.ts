@@ -36,26 +36,34 @@ export const EASY_SHARE = 0.6;
 /** How far a day may wobble either way from its share, by its date. */
 const WOBBLE = 0.07;
 
-/** A steady 0..1 from a date: the same date always gives the same. */
-function dateNoise(d: Date): number {
-  let h = d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate();
+/** A steady 0..1 from a date (its year, month 0-11 and day): the same date always gives the same. */
+function dateNoise(year: number, month: number, day: number): number {
+  let h = year * 372 + month * 31 + day;
   h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
   h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
   h ^= h >>> 15;
   return (h >>> 0) / 4294967296;
 }
 
+/**
+ * A day's share from the week's rhythm, from a date, and the same from its parts (year, month 0-11,
+ * day, weekday 0 Sunday): a plan lays out thousands of days, and reading each from a Date (the
+ * phone's local time worked out afresh every time) made opening the app take seconds.
+ */
+export type Rhythm = ((d: Date) => number) & { of: (year: number, month: number, day: number, weekday: number) => number };
+
 /** How much of an even day the plan asks of this date, from the week's rhythm; undefined when it doesn't vary. */
-export function makeRhythm(prefs: RhythmPrefs | null | undefined): ((d: Date) => number) | undefined {
+export function makeRhythm(prefs: RhythmPrefs | null | undefined): Rhythm | undefined {
   const p = prefs ?? DEFAULT_RHYTHM;
   if (!p.vary) return undefined;
   const easy = new Set<number>(easyDaysOf(p));
   const varied = easy.size > 0;
   const full = varied ? (7 - easy.size * EASY_SHARE) / (7 - easy.size) : 1;
-  return (d: Date) => {
-    const share = varied ? (easy.has(d.getDay()) ? EASY_SHARE : full) : 1;
-    return share * (1 + (dateNoise(d) - 0.5) * 2 * WOBBLE);
+  const of = (year: number, month: number, day: number, weekday: number) => {
+    const share = varied ? (easy.has(weekday) ? EASY_SHARE : full) : 1;
+    return share * (1 + (dateNoise(year, month, day) - 0.5) * 2 * WOBBLE);
   };
+  return Object.assign((d: Date) => of(d.getFullYear(), d.getMonth(), d.getDate(), d.getDay()), { of });
 }
 
 /** Whether a date is one of the week's easy days. */

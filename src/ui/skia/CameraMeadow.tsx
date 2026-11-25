@@ -93,8 +93,6 @@ interface Drifter {
    * afresh each frame). Made when first needed; only the one showing and the next are kept.
    */
   design: (round: number) => { picture: SkPicture; image: SkImage | null };
-  /** Lets go of every look made so far (the scene is done with). */
-  forget: () => void;
   x: number;
   y: number;
   s: number;
@@ -240,16 +238,8 @@ function drawCameraScene(f: CameraFrame, look: SkyLook, c: Palette, seed: number
       for (const r of made.keys()) if (r < round - 1 || r > round + 1) made.delete(r);
       return out;
     };
-    const forget = () => {
-      for (const d of made.values()) {
-        d.picture.dispose();
-        d.image?.dispose();
-      }
-      made.clear();
-    };
     return {
       design,
-      forget,
       x: k.x,
       y: k.y,
       s: k.s,
@@ -706,59 +696,11 @@ const FIELD_SEED = 1 + Math.floor(Math.random() * 2147483000);
 let kept: { key: string; scene: Scene; images: Map<number, SkImage | null>; soft?: SkImage | null } | null = null;
 
 function keep(key: string, scene: Scene): Scene {
-  if (kept) {
-    retireScene(kept.scene);
-    for (const image of kept.images.values()) retire(image);
-    retire(kept.soft);
-  }
+  // The scene before is left to the garbage collector: never let go of by hand, as a frame on the
+  // UI thread can still be drawing it (1.9.4 to 1.9.6 did, a few seconds on, and the app closed
+  // when a frame drew one of its images: the soft far field, scrolling down).
   kept = { key, scene, images: new Map() };
   return scene;
-}
-
-/*
- * Letting go. Each new sky is a new scene: the field's picture, the near flowers' image, the clouds',
- * the mists' and its own snapshot, tens of megabytes. Running through the time away made one every
- * 140 ms, and left to the garbage collector they piled up, past a gigabyte on a phone. So a scene and its
- * images done with are let go of a few seconds on (the UI thread has long stopped drawing them by
- * then), or once they're off the screen if they're still on it (a sky fading out); never while
- * they're kept for Home's return. Let go of too soon, a frame would try to draw them, and fail.
- */
-const RETIRE_MS = 3000;
-/** What each meadow on screen shows now: its scene, and the images up and fading out. */
-const showing = new Map<object, { scene: Scene; images: Array<SkImage | null> }>();
-const imageOnShow = (image: SkImage) => [...showing.values()].some((s) => s.images.includes(image));
-const sceneOnShow = (scene: Scene) => [...showing.values()].some((s) => s.scene === scene);
-const imageKept = (image: SkImage) => !!kept && (kept.soft === image || [...kept.images.values()].includes(image));
-
-/** Calls `free` a few seconds on, or once `busy` stops, unless `keep` says it's still wanted. */
-function freeLater(keepIt: () => boolean, busy: () => boolean, free: () => void) {
-  setTimeout(() => {
-    if (keepIt()) return;
-    if (busy()) freeLater(keepIt, busy, free);
-    else free();
-  }, RETIRE_MS);
-}
-
-function retire(image: SkImage | null | undefined) {
-  if (image) freeLater(() => imageKept(image), () => imageOnShow(image), () => image.dispose());
-}
-
-function retireScene(scene: Scene) {
-  freeLater(
-    () => kept?.scene === scene,
-    () => sceneOnShow(scene),
-    () => {
-      scene.picture.dispose();
-      scene.nearStill?.dispose();
-      scene.near?.atlas.dispose();
-      for (const k of scene.clouds) k.forget();
-      for (const m of scene.mists) {
-        m.picture.dispose();
-        m.image?.dispose();
-      }
-      scene.motes?.atlas.dispose();
-    },
-  );
 }
 
 /** The scene as an image (snapshot), kept with the scene. */
@@ -882,12 +824,6 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
     fader.setActive(false);
     setLayers((l) => (l.cur === fading.current && l.prev ? { ...l, prev: null } : l));
   }, [faded, fader]);
-  // What's on show here, so none of it is let go of while it still is (retire).
-  const [owner] = useState(() => ({}));
-  useEffect(() => {
-    showing.set(owner, { scene, images: [layers.cur, layers.prev] });
-  }, [owner, scene, layers]);
-  useEffect(() => () => void showing.delete(owner), [owner]);
   const matrix = useDerivedValue(() => cameraMatrix(frame, tiltAt(frame, tilt.value)));
   // The scene's own time: how long it has been moving, so it carries on from where it was. (The
   // phone's clock instead made every flower, cloud and raindrop jump the moment it started.)
@@ -939,7 +875,10 @@ export function CameraMeadow({ frame, tilt, animate = true, children, topFade }:
   const empty = useMemo(() => createPicture(() => {}), []);
   // The far field out of focus, for when the camera looks down (not while running through the time
   // away, each frame of which is on screen only a moment).
-  const soft = useMemo(() => (image && !lapsing && !scene.placeholder ? keptSoft(scene, image, frame) : null), [scene, image, frame, lapsing]);
+  const soft = useMemo(() => {
+    const s1 = image && !lapsing && !scene.placeholder ? keptSoft(scene, image, frame) : null;
+    return s1;
+  }, [scene, image, frame, lapsing]);
   // Looking down, the camera squeezes the field below the screen to well under half its height: drawn
   // from the full picture, the grass and the flowers there flickered as it moved, so it's drawn from
   // smaller copies of it there (made once with the picture). Not for the run-through's frames, each on

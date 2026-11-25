@@ -11,7 +11,7 @@ import { fetchAlertForecast, fetchClimate, fetchForecast } from '@/services/clim
 import { applySchedule, cancelAll } from '@/services/notifications';
 import { clearDownloadedUpdates } from '@/services/installUpdate';
 import { checkForAppUpdate, fetchLatestLevelData } from '@/services/updates';
-import { useApp, useDashboard, workOutDashboard } from '@/store/app';
+import { dashboardFor, useApp, useDashboard } from '@/store/app';
 import { useForecast } from '@/store/forecast';
 import { fmtClock } from '@/ui/TimeWheel';
 import { setLang, t, tn } from '@/i18n';
@@ -161,7 +161,8 @@ async function scheduleOnce() {
   }
   // The plan as Home shows it (easy days, the weather and the forecast), so the reminder's target matches.
   const { limits, preset, plan: rhythm } = st.settings;
-  const dash = workOutDashboard({ ...st, today: todayKey(), limits, preset, plan: rhythm }, useForecast.getState().days);
+  // The same one Home shows, already worked out when it is (see dashboardFor).
+  const dash = dashboardFor({ ...st, today: todayKey(), limits, preset, plan: rhythm }, useForecast.getState().days);
   if (!dash) return;
   let forecast = forecastCache && Date.now() - forecastCache.at < 3 * 3600 * 1000 ? forecastCache.days : [];
   if (!forecast.length && st.location && prefs.nudges) {

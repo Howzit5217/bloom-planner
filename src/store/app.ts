@@ -371,6 +371,24 @@ function rememberDashboard(key: string, workOut: () => Dashboard | null): Dashbo
   return dash;
 }
 
+/** What a dashboard is remembered by: everything it's worked out from. */
+function dashboardKey(s: DashboardSource, forecast: ForecastWeatherDay[] | null): string {
+  const { profile, limits, preset, plan, climate } = s;
+  const oKey = overridesKey(s.overrides);
+  const sKey = s.seasonRates.map((r) => r.rideable.toFixed(4)).join(',');
+  const pKey = profile ? JSON.stringify(profile) : '';
+  const wKey = `${limits.hot}|${limits.cold}|${preset}|${plan.vary}|${plan.easyDays.join('')}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
+  return [pKey, s.entriesRev, oKey, sKey, s.table.version, s.today, wKey].join('\u0000');
+}
+
+/**
+ * The dashboard for the app's state as it is, worked out only if it isn't the one already worked
+ * out: the reminders ask for the same one Home shows (opening the app worked it out twice).
+ */
+export function dashboardFor(s: DashboardSource, forecast: ForecastWeatherDay[] | null): Dashboard | null {
+  return rememberDashboard(dashboardKey(s, forecast), () => workOutDashboard(s, forecast));
+}
+
 /** The one place the engine runs for the UI. Memoised on (profile, log revision, overrides, seasons, table, day). */
 export function useDashboard(): Dashboard | null {
   const profile = useApp((s) => s.profile);
@@ -385,19 +403,16 @@ export function useDashboard(): Dashboard | null {
   const preset = useApp((s) => s.settings.preset);
   const rhythmPrefs = useApp((s) => s.settings.plan);
   const forecast = useForecast((s) => s.days);
-  const oKey = overridesKey(overrides);
-  const sKey = seasonRates.map((r) => r.rideable.toFixed(4)).join(',');
-  const pKey = profile ? JSON.stringify(profile) : '';
-  const wKey = `${limits.hot}|${limits.cold}|${preset}|${rhythmPrefs.vary}|${rhythmPrefs.easyDays.join('')}|${climate?.sampleDays ?? 0}|${climate?.v ?? 1}|${forecast?.map((d) => d.date + (d.feelsMax ?? '') + (d.precip ?? '')).join(',') ?? ''}`;
-  const key = [pKey, entriesRev, oKey, sKey, table.version, today, wKey].join('\u0000');
+  const source: DashboardSource = { profile, entries, entriesRev, overrides, seasonRates, table, today, climate, limits, preset, plan: rhythmPrefs };
+  const key = dashboardKey(source, forecast);
   return useMemo(
-    () => rememberDashboard(key, () => workOutDashboard({ profile, entries, overrides, seasonRates, table, today, climate, limits, preset, plan: rhythmPrefs }, forecast)),
+    () => rememberDashboard(key, () => workOutDashboard(source, forecast)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key],
   );
 }
 
-type DashboardSource = Pick<AppState, 'profile' | 'entries' | 'overrides' | 'seasonRates' | 'table' | 'today' | 'climate'> & Pick<Settings, 'limits' | 'preset' | 'plan'>;
+type DashboardSource = Pick<AppState, 'profile' | 'entries' | 'entriesRev' | 'overrides' | 'seasonRates' | 'table' | 'today' | 'climate'> & Pick<Settings, 'limits' | 'preset' | 'plan'>;
 
 /**
  * The dashboard from the app's state and the plan's forecast. Home and the notifications both work it

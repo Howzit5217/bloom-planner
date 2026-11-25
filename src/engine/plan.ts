@@ -1,4 +1,5 @@
-import { addDaysKey, daysBetween, fromKey, toKey, type DayKey } from './dates';
+import { addDaysKey, daysBetween, fromKey, type DayKey } from './dates';
+import type { Rhythm } from './rhythm';
 import type { LevelState, ReqFn } from './types';
 
 /**
@@ -56,13 +57,34 @@ export function remainingWork(start: LevelState, goalLevel: number, req: ReqFn):
 /** Per-day weights for days the forecast covers, by yyyy-MM-dd (0..1). */
 export type DayWeights = Record<DayKey, number>;
 
-/** Prefix sums of daily weights (riding or walking) starting at `startKey`. */
+/** Days in a month (0-11) of a year, leap years included. */
+const daysInMonth = (year: number, month: number) => (month === 1 ? (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28) : [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month]);
+
+/**
+ * Prefix sums of daily weights (riding or walking) starting at `startKey`. The days are laid out
+ * as far as they're asked about, not all at once: a plan's calendar runs ten years past its goal for
+ * the rare projection that far, and laying out all of it, for every plan a dashboard makes, took
+ * opening the app seconds on a phone. What any day comes to is the same either way.
+ */
 export class RideCalendar {
   readonly startKey: DayKey;
-  private readonly rates: number[];
-  private readonly prefix: number[];
+  /** The days it covers; past them, the average day. */
+  private readonly n: number;
+  private readonly rates: number[] = [];
+  private readonly prefix: number[] = [0];
   /** Each day's share from the week's rhythm (1 when the days don't vary). */
-  private readonly shares: number[];
+  private readonly shares: number[] = [];
+  private readonly seasonRates: number[];
+  /** The forecast's few days, by their place in the calendar. */
+  private readonly byDay: Array<number | undefined> = [];
+  private readonly rhythm?: (d: Date) => number;
+  private readonly parts?: Rhythm['of'];
+  /** The next day to lay out: its date, by parts, and its month's length. */
+  private year: number;
+  private month: number;
+  private day: number;
+  private weekday: number;
+  private monthDays: number;
 
   /**
    * `rhythm` scales each day by the week's rhythm (easy days less, the rest a little more), on top
@@ -70,63 +92,100 @@ export class RideCalendar {
    */
   constructor(startKey: DayKey, seasonRates: number[], days: number, overrides?: DayWeights, rhythm?: (d: Date) => number) {
     this.startKey = startKey;
-    const n = Math.max(1, Math.ceil(days));
-    this.rates = new Array(n);
-    this.prefix = new Array(n + 1);
-    this.shares = new Array(n);
-    this.prefix[0] = 0;
-    const d = fromKey(startKey);
-    const has = !!overrides && Object.keys(overrides).length > 0;
-    for (let i = 0; i < n; i++) {
-      const o = has ? overrides![toKey(d)] : undefined;
-      const share = rhythm ? Math.max(0, rhythm(d)) : 1;
-      const r = Math.min(1, Math.max(0, o ?? seasonRates[d.getMonth()] ?? 1)) * share;
-      this.shares[i] = share;
-      this.rates[i] = r;
-      this.prefix[i + 1] = this.prefix[i] + r;
-      d.setDate(d.getDate() + 1);
+    this.n = Math.max(1, Math.ceil(days));
+    this.seasonRates = seasonRates;
+    this.rhythm = rhythm;
+    this.parts = (rhythm as Rhythm | undefined)?.of;
+    // The forecast's days by their place, rather than every day turned into a date string to look
+    // it up; and each day's date counted on by hand, not read from a Date (local time worked out
+    // afresh each time).
+    if (overrides) {
+      for (const k of Object.keys(overrides)) {
+        const i = daysBetween(startKey, k);
+        if (i >= 0 && i < this.n) this.byDay[i] = overrides[k];
+      }
+    }
+    const first = fromKey(startKey);
+    this.year = first.getFullYear();
+    this.month = first.getMonth();
+    this.day = first.getDate();
+    this.weekday = first.getDay();
+    this.monthDays = daysInMonth(this.year, this.month);
+  }
+
+  /** Lays the days out up to day `k` (exclusive), at most all of them. */
+  private grow(k: number) {
+    const to = Math.min(this.n, k);
+    const { rates, prefix, shares, byDay, seasonRates, rhythm, parts } = this;
+    for (let i = rates.length; i < to; i++) {
+      const share = rhythm ? Math.max(0, parts ? parts(this.year, this.month, this.day, this.weekday) : rhythm(new Date(this.year, this.month, this.day))) : 1;
+      const r = Math.min(1, Math.max(0, byDay[i] ?? seasonRates[this.month] ?? 1)) * share;
+      shares.push(share);
+      rates.push(r);
+      prefix.push(prefix[i] + r);
+      // On to the next calendar day.
+      this.weekday = this.weekday === 6 ? 0 : this.weekday + 1;
+      if (++this.day > this.monthDays) {
+        this.day = 1;
+        if (++this.month > 11) {
+          this.month = 0;
+          this.year++;
+        }
+        this.monthDays = daysInMonth(this.year, this.month);
+      }
     }
   }
 
   /** Day i's share from the week's rhythm. */
   shareOnDay(i: number): number {
-    return i >= 0 && i < this.shares.length ? this.shares[i] : 1;
+    if (i < 0 || i >= this.n) return 1;
+    this.grow(i + 1);
+    return this.shares[i];
   }
 
   get length() {
-    return this.rates.length;
+    return this.n;
   }
 
   rateOnDay(i: number): number {
-    if (i < 0) return this.rates[0];
-    if (i >= this.rates.length) return this.avgRate();
-    return this.rates[i];
+    if (i >= this.n) return this.avgRate();
+    const at = Math.max(0, i);
+    this.grow(at + 1);
+    return this.rates[at];
   }
 
   private avgRate() {
-    const n = this.rates.length;
-    return n > 0 ? this.prefix[n] / n || 1 : 1;
+    const n = this.n;
+    this.grow(n);
+    return this.prefix[n] / n || 1;
   }
 
   /** Cumulative ride days from 0 to t. */
   W(t: number): number {
     if (t <= 0) return 0;
-    const n = this.rates.length;
-    if (t >= n) return this.prefix[n] + (t - n) * this.avgRate();
+    const n = this.n;
+    if (t >= n) {
+      this.grow(n);
+      return this.prefix[n] + (t - n) * this.avgRate();
+    }
     const i = Math.floor(t);
+    this.grow(i + 1);
     return this.prefix[i] + this.rates[i] * (t - i);
   }
 
   /** Smallest t with W(t) = w. */
   Winv(w: number): number {
     if (w <= 0) return 0;
-    const n = this.rates.length;
-    if (w > this.prefix[n]) {
+    const n = this.n;
+    // Out as far as it takes to reach w (twice as far each time), or to the end.
+    while (this.rates.length < n && this.prefix[this.rates.length] < w) this.grow(Math.max(64, this.rates.length * 2));
+    const built = this.rates.length;
+    if (built === n && w > this.prefix[n]) {
       const avg = this.avgRate();
       return avg > 0 ? n + (w - this.prefix[n]) / avg : Infinity;
     }
     let lo = 1;
-    let hi = n;
+    let hi = built;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (this.prefix[mid] >= w) hi = mid;
